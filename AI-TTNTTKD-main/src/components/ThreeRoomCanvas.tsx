@@ -180,6 +180,30 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
     };
     controlsRef.current = controls;
 
+    const dispatchCameraAngle = () => {
+      if (!cameraRef.current || !controlsRef.current) return;
+      const cam = cameraRef.current;
+      const target = controlsRef.current.target;
+      const dx = cam.position.x - target.x;
+      const dz = cam.position.z - target.z;
+      const rad = Math.atan2(dx, dz);
+      const deg = Math.round(((rad * 180) / Math.PI) * 10) / 10;
+      window.dispatchEvent(new CustomEvent('three-camera-rotation', { detail: { angle: deg } }));
+    };
+
+    controls.addEventListener('change', dispatchCameraAngle);
+    // Initial dispatch after mount
+    setTimeout(dispatchCameraAngle, 50);
+
+    const handleCameraReset = () => {
+      if (!cameraRef.current || !controlsRef.current) return;
+      cameraRef.current.position.set(0.1, 7.6, 6.6);
+      controlsRef.current.target.set(0, 0.35, 0.1);
+      controlsRef.current.update();
+      dispatchCameraAngle();
+    };
+    window.addEventListener('three-camera-reset', handleCameraReset);
+
     // TransformControls for direct 3D interactive manipulation (Gizmo)
     const tControls = new TransformControls(camera, renderer.domElement);
     tControls.size = 0.85;
@@ -364,6 +388,8 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', handleResize);
+      controls.removeEventListener('change', dispatchCameraAngle);
+      window.removeEventListener('three-camera-reset', handleCameraReset);
       ro.disconnect();
       tControls.dispose();
       controls.dispose();

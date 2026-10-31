@@ -738,7 +738,14 @@ export default function App() {
 
         {/* BOTTOM-LEFT: Room Compass Widget */}
         <div className="absolute bottom-3 left-3 z-20">
-          <RoomCompassWidget roomDirection={roomConfig.direction} rotationAngle={0} />
+          <RoomCompassWidget
+            roomDirection={roomConfig.direction}
+            userProfile={userProfile}
+            onChangeRoomDirection={(newDir) => setRoomConfig((prev) => ({ ...prev, direction: newDir }))}
+            onResetCamera={() => {
+              window.dispatchEvent(new CustomEvent('three-camera-reset'));
+            }}
+          />
         </div>
 
         {/* BOTTOM DOCK: Shorter & Cleaner "Thư viện nội thất" */}
