@@ -104,7 +104,7 @@ export function generateOptimizedLayout(
     for (const cand of bedCandidates) {
       let candScore = 70;
       // Bonus if headboard or facing matches user's auspicious directions
-      const headboardSector = userProfile.directionDetails[cand.facingDirection as any];
+      const headboardSector = (userProfile.directionDetails as any)?.[cand.facingDirection];
       if (headboardSector?.isGood) {
         candScore += 25;
       }

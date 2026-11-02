@@ -5,6 +5,8 @@ import {
   ProposedAdjustment,
   RoomConfig,
   RoomObject,
+  RoomObjectType,
+  StructuredActionHistoryEntry,
   UserFengShuiProfile,
 } from '../types/fengshui';
 import { getFloorDistance } from './fengshuiRules';
@@ -19,6 +21,9 @@ import {
   RotateCommand,
   AddCommand,
 } from './sceneCommandTypes';
+import { classifyUserIntent } from './intentClassifier';
+import { findSmartPlacement } from './geometryEngine';
+import { resolveContextTargets } from './contextResolver';
 
 export interface FengShuiConsultationResult {
   replyText: string;
@@ -77,12 +82,17 @@ export async function generateFengShuiConsultation(
   objects: RoomObject[],
   evaluation: FengShuiRoomEvaluation,
   selectedObjectId: string | null,
-  chatHistory?: ChatHistoryMessage[]
+  chatHistory?: ChatHistoryMessage[],
+  actionHistory?: StructuredActionHistoryEntry[]
 ): Promise<FengShuiConsultationResult> {
-  // 1. Try sending real-time 3D context to server endpoint with full chat history
+  const classified = classifyUserIntent(prompt);
+
+  // 1. Try sending context to server endpoint with timeout
   try {
-    // Build full conversation history ending with the current user message
-    const historyMessages = (chatHistory || []).map((m) => ({
+    // Build conversation history (limit to last 4 turns for speed unless full context needed)
+    const rawHistory = chatHistory || [];
+    const slicedHistory = rawHistory.slice(-4);
+    const historyMessages = slicedHistory.map((m) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
       content: m.content,
     }));
@@ -97,19 +107,27 @@ export async function generateFengShuiConsultation(
       headers['x-gemini-api-key'] = localApiKey;
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 7500); // 7.5s hard timeout
+
     const res = await fetch('/api/gemini/chat', {
       method: 'POST',
       headers,
+      signal: controller.signal,
       body: JSON.stringify({
         messages,
-        userProfile,
+        intent: classified.intent,
+        classified,
+        actionHistory,
+        userProfile: classified.needsFengShuiEngine ? userProfile : undefined, // Omit heavy Bát Trạch if simple add/move
         roomConfig,
         objects,
-        ruleEngineResult: evaluation,
+        ruleEngineResult: classified.needsFengShuiEngine ? evaluation : undefined, // Omit full report if not needed
         selectedObjectId,
         apiKey: localApiKey || undefined,
       }),
     });
+    clearTimeout(timeoutId);
 
     if (res.ok) {
       const data = await res.json();
@@ -125,7 +143,7 @@ export async function generateFengShuiConsultation(
       }
     }
   } catch (_e) {
-    // Offline or server not responding -> proceed seamlessly with intelligent local engine
+    // Offline, timeout or server error -> proceed seamlessly with intelligent local engine
   }
 
   // 2. High-Intelligence Local AI Designer Fallback
@@ -136,7 +154,7 @@ export async function generateFengShuiConsultation(
       actions: [{ type: 'undo_action', description: 'Hoàn tác thao tác trước đó' }],
     };
   }
-  if (lowerPrompt.includes('tối ưu') || lowerPrompt.includes('optimize') || lowerPrompt.includes('sắp xếp lại')) {
+  if (classified.intent === 'OPTIMIZE_ROOM' || lowerPrompt.includes('tối ưu') || lowerPrompt.includes('optimize') || lowerPrompt.includes('sắp xếp lại')) {
     const { proposal } = generateOptimizedLayout(userProfile, roomConfig, objects, evaluation);
     return {
       replyText: `Tôi đã phân tích toàn bộ bố cục phòng ${roomConfig.width}m × ${roomConfig.length}m của gia chủ mệnh ${userProfile.guaName} (${userProfile.element}) và tạo phương án tối ưu nâng điểm phong thủy từ ${proposal.beforeScore} lên ${proposal.afterScore}/100.\n\nCác cải tiến:\n${proposal.improvements.map((imp, i) => `${i + 1}. ${imp}`).join('\n')}\n\nBạn có thể bấm Xem trước để kiểm tra bóng mờ 3D hoặc Áp dụng ngay!`,
@@ -150,6 +168,261 @@ export async function generateFengShuiConsultation(
         },
       ],
     };
+  }
+
+  // Fast path for ADD_OBJECT in offline fallback (supports multi-action commands)
+  if (classified.intent === 'ADD_OBJECT') {
+    const itemsToAdd = (classified.extractedItems && classified.extractedItems.length > 0)
+      ? classified.extractedItems
+      : [
+          {
+            type: classified.extractedObjectType || ('bed' as RoomObjectType),
+            name: classified.extractedObjectName || 'Đồ vật mới',
+            quantity: Math.max(1, Math.min(5, classified.extractedQuantity || 1)),
+            dimensions: classified.extractedDimensions || { width: 1.2, length: 1.9, height: 0.85 },
+          },
+        ];
+
+    const actions: any[] = [];
+    const currentObjects = [...objects];
+    const itemReports: Array<{ name: string; status: 'SUCCESS' | 'FAILED'; reason?: string }> = [];
+
+    for (const item of itemsToAdd) {
+      const objType = item.type;
+      const dims = item.dimensions || { width: 1.2, length: 1.9, height: 0.85 };
+      const quantity = Math.max(1, Math.min(5, item.quantity || 1));
+
+      // Architectural & Plumbing constraint check for WC / Bathroom
+      if (objType === 'wc') {
+        const hasExistingWc = currentObjects.some((o) => o.type === 'wc');
+        if (hasExistingWc) {
+          itemReports.push({
+            name: item.name,
+            status: 'FAILED',
+            reason: 'Phòng ngủ hiện đã có sẵn khu vực WC Master khép kín cố định; không thể bố trí thêm nhà vệ sinh thứ 2 trong phòng ngủ do ràng buộc kỹ thuật cấp thoát nước và công năng.',
+          });
+          continue;
+        }
+      }
+
+      let addedForItem = 0;
+      for (let i = 0; i < quantity; i++) {
+        const placement = findSmartPlacement(objType, dims, currentObjects, roomConfig);
+        if (!placement.resolved) break;
+
+        const safePos = placement.safePos;
+        const effectiveDims = {
+          width: placement.dimensions.width,
+          length: placement.dimensions.length,
+          height: placement.dimensions.height || dims.height || 0.85,
+        };
+        const itemTitle = quantity > 1 ? `${item.name} #${i + 1}` : item.name;
+        const newId = `${objType}_${Date.now()}_${actions.length}_${Math.floor(Math.random() * 1000)}`;
+
+        actions.push({
+          type: 'add_object',
+          objectId: newId,
+          objectType: objType,
+          name: itemTitle,
+          dimensions: effectiveDims,
+          position: safePos,
+          rotationY: placement.rotationY,
+          description: `Thêm ${itemTitle}`,
+        });
+
+        currentObjects.push({
+          id: newId,
+          type: objType,
+          name: itemTitle,
+          dimensions: effectiveDims,
+          position: { x: safePos.x, y: 0, z: safePos.z },
+          rotation: { x: 0, y: placement.rotationY, z: 0 },
+        });
+
+        addedForItem++;
+      }
+
+      if (addedForItem === quantity) {
+        itemReports.push({
+          name: quantity > 1 ? `${quantity} ${item.name}` : item.name,
+          status: 'SUCCESS',
+        });
+      } else if (addedForItem > 0) {
+        itemReports.push({
+          name: item.name,
+          status: 'SUCCESS',
+          reason: `Chỉ thêm được ${addedForItem}/${quantity} do không đủ không gian an toàn cho số lượng còn lại.`,
+        });
+      } else {
+        itemReports.push({
+          name: item.name,
+          status: 'FAILED',
+          reason: 'Không tìm được vị trí an toàn trong phòng ngủ mà không bị chồng lấn đồ nội thất khác hoặc chắn cửa ra vào.',
+        });
+      }
+    }
+
+    const successCount = itemReports.filter((r) => r.status === 'SUCCESS').length;
+    const totalCount = itemReports.length;
+    const reportDetails = itemReports
+      .map((r) => (r.status === 'SUCCESS' ? `• ${r.name}: ✓ SUCCESS${r.reason ? ` (${r.reason})` : ''}` : `• ${r.name}: ✕ FAILED (${r.reason})`))
+      .join('\n');
+
+    let replyText = '';
+    if (successCount === totalCount && totalCount > 0) {
+      replyText = `Đã thực thi thành công toàn bộ ${totalCount} yêu cầu của gia chủ:\n\n${reportDetails}\n\nCác đồ vật đã được bố trí an toàn trên mô hình 3D, đảm bảo khoảng thông thủy lưu thông khí trường.`;
+    } else if (successCount > 0) {
+      replyText = `Kết quả thực thi theo yêu cầu của gia chủ (${successCount}/${totalCount} thành công):\n\n${reportDetails}\n\nMô hình 3D đã được cập nhật đồng bộ các đồ vật hợp lệ.`;
+    } else {
+      replyText = `Không thể thực thi các yêu cầu:\n\n${reportDetails}\n\nGia chủ vui lòng dọn bớt đồ hoặc điều chỉnh kích thước để có đủ không gian.`;
+    }
+
+    return {
+      replyText,
+      actions: actions.length > 0 ? actions : undefined,
+    };
+  }
+
+  // Fast path for DELETE_OBJECT (supports multi-item delete & context references)
+  if (classified.intent === 'DELETE_OBJECT') {
+    // A. Context-aware deletion: "Xóa những cái vừa tạo", "Xóa chiếc giường vừa thêm", "Xóa cái thứ 2"...
+    if (classified.contextReference) {
+      const resolvedContext = resolveContextTargets(
+        classified.contextReference,
+        actionHistory,
+        objects,
+        selectedObjectId
+      );
+
+      if (resolvedContext.resolved && resolvedContext.targetObjects.length > 0) {
+        const toDeleteIds = resolvedContext.targetObjects.map((o) => o.id);
+        const toDeleteNames = resolvedContext.targetObjects.map((o) => o.name).join(', ');
+        const reports = resolvedContext.targetObjects.map((o) => `• ${o.name}: ✓ SUCCESS (Đã xóa thành công)`);
+
+        return {
+          replyText: `Đã thực thi yêu cầu xóa theo ngữ cảnh:\n\n${reports.join('\n')}\n\nĐã xóa toàn bộ ${toDeleteIds.length} đồ vật phù hợp khỏi không gian 3D.`,
+          actions: [
+            {
+              type: 'delete_object',
+              objectId: toDeleteIds[0],
+              objectIds: toDeleteIds,
+              description: `Xóa ${toDeleteNames}`,
+            },
+          ],
+        };
+      } else {
+        return {
+          replyText: `Chưa thể xóa: ${resolvedContext.reason}\n\nBạn có thể chỉ rõ tên đồ vật cần xóa (ví dụ: "Xóa giường", "Xóa bàn học").`,
+        };
+      }
+    }
+
+    // B. Multi-item lexical deletion: "Xóa giường, tủ quần áo, cây"
+    const itemsToDelete = (classified.extractedItems && classified.extractedItems.length > 0)
+      ? classified.extractedItems
+      : [
+          {
+            type: classified.extractedObjectType || ('desk' as RoomObjectType),
+            name: classified.extractedObjectName || 'đồ vật',
+            quantity: classified.extractedQuantity || 1,
+          },
+        ];
+
+    let currentObjects = [...objects];
+    const allDeletedIds: string[] = [];
+    const reports: string[] = [];
+
+    for (const item of itemsToDelete) {
+      const matching = currentObjects.filter((o) => o.type === item.type);
+      const reqQty = item.quantity || 1;
+
+      if (matching.length === 0) {
+        reports.push(`• ${item.name}: ✕ FAILED (Không tìm thấy đồ vật này trong phòng ngủ)`);
+        continue;
+      }
+
+      const qtyToDelete = itemsToDelete.length > 1 && reqQty === 1
+        ? Math.min(matching.length, 1)
+        : Math.min(matching.length, reqQty);
+
+      const targets = matching.slice(0, qtyToDelete);
+      const targetIds = targets.map((t) => t.id);
+
+      allDeletedIds.push(...targetIds);
+      currentObjects = currentObjects.filter((o) => !targetIds.includes(o.id));
+
+      reports.push(`• ${item.name}: ✓ SUCCESS (Đã xóa thành công ${targets.length}/${matching.length})`);
+    }
+
+    const successCount = reports.filter((r) => r.includes('SUCCESS')).length;
+    const totalCount = reports.length;
+
+    let replyText = '';
+    if (successCount === totalCount && totalCount > 0) {
+      replyText = `Đã thực thi xóa thành công toàn bộ ${totalCount} loại đồ vật theo yêu cầu:\n\n${reports.join('\n')}\n\nMô hình 3D đã được cập nhật đồng bộ.`;
+    } else if (successCount > 0) {
+      replyText = `Kết quả thực thi yêu cầu xóa (${successCount}/${totalCount} loại thành công):\n\n${reports.join('\n')}\n\nMô hình 3D đã cập nhật các đồ vật được xóa thành công.`;
+    } else {
+      replyText = `Không thể thực hiện yêu cầu xóa:\n\n${reports.join('\n')}\n\nVui lòng kiểm tra lại danh sách đồ vật hiện có trong phòng.`;
+    }
+
+    return {
+      replyText,
+      actions: allDeletedIds.length > 0 ? [
+        {
+          type: 'delete_object',
+          objectId: allDeletedIds[0],
+          objectIds: allDeletedIds,
+          description: `Xóa ${allDeletedIds.length} đồ vật`,
+        },
+      ] : undefined,
+    };
+  }
+
+  // Fast path for MOVE_OBJECT / ROTATE_OBJECT with context reference
+  if (classified.contextReference && (classified.intent === 'MOVE_OBJECT' || classified.intent === 'ROTATE_OBJECT')) {
+    const resolvedContext = resolveContextTargets(
+      classified.contextReference,
+      actionHistory,
+      objects,
+      selectedObjectId
+    );
+
+    if (resolvedContext.resolved && resolvedContext.targetObjects.length > 0) {
+      const target = resolvedContext.targetObjects[0];
+      if (classified.intent === 'ROTATE_OBJECT') {
+        const deg = classified.rotationDegrees || 90;
+        const rad = (deg * Math.PI) / 180;
+        return {
+          replyText: `Đã xoay ${target.name} góc ${deg}° theo yêu cầu.`,
+          actions: [
+            {
+              type: 'rotate_object',
+              objectId: target.id,
+              rotationDelta: rad,
+              description: `Xoay ${target.name} ${deg}°`,
+            },
+          ],
+        };
+      } else if (classified.intent === 'MOVE_OBJECT') {
+        const dir = classified.targetDirection || 'left';
+        const shiftAmount = 0.5;
+        const newX = dir === 'left' ? target.position.x - shiftAmount : dir === 'right' ? target.position.x + shiftAmount : target.position.x;
+        const newZ = dir === 'forward' ? target.position.z - shiftAmount : dir === 'backward' ? target.position.z + shiftAmount : target.position.z;
+
+        return {
+          replyText: `Đã di chuyển ${target.name} sang ${dir === 'left' ? 'bên trái' : dir === 'right' ? 'bên phải' : dir === 'forward' ? 'phía trên' : 'phía dưới'} theo yêu cầu.`,
+          actions: [
+            {
+              type: 'move_object',
+              objectId: target.id,
+              position: { x: Number(newX.toFixed(2)), z: Number(newZ.toFixed(2)) },
+              description: `Di chuyển ${target.name}`,
+            },
+          ],
+        };
+      }
+    }
   }
 
   // Build scene state snapshot and delegate to intent parser
@@ -166,12 +439,15 @@ export async function generateFengShuiConsultation(
   for (const cmd of intentResult.commands) {
     if (cmd.action === 'delete_object') {
       const dc = cmd as DeleteCommand;
-      dc.object_ids.forEach((id) => {
-        actions.push({ type: 'delete_object', objectId: id, description: cmd.reason });
-      });
+      // Single action with objectIds array — handled atomically by batch handler
+      actions.push({
+        type: 'delete_object',
+        objectId: dc.object_ids[0],
+        objectIds: dc.object_ids,
+        description: cmd.reason,
+      } as any);
     } else if (cmd.action === 'move_object') {
       const mc = cmd as MoveCommand;
-      // Compute actual coordinates via executor (read-only pass)
       const execOut = executeSceneCommand(cmd, objects, roomConfig);
       const moved = execOut.updatedObjects.find((o) => o.id === mc.object_id);
       if (moved) {
@@ -192,14 +468,24 @@ export async function generateFengShuiConsultation(
       });
     } else if (cmd.action === 'add_object') {
       const ac = cmd as AddCommand;
-      const execOut = executeSceneCommand(cmd, objects, roomConfig);
-      const added = execOut.updatedObjects.find((o) => !objects.some((orig) => orig.id === o.id));
+      const dims = ac.dimensions || { width: 1.2, length: 1.9, height: 0.85 };
+      const placement = findSmartPlacement(ac.object_type, dims, objects, roomConfig);
+      const safePos = placement.resolved ? placement.safePos : { x: 0, z: -1.0 };
+      const effectiveDims = {
+        width: placement.dimensions.width,
+        length: placement.dimensions.length,
+        height: placement.dimensions.height || 0.85,
+      };
+      const newId = `${ac.object_type}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
       actions.push({
         type: 'add_object',
+        objectId: newId,
         objectType: ac.object_type as any,
         name: ac.object_name,
-        dimensions: ac.dimensions,
-        position: added ? { x: added.position.x, z: added.position.z } : { x: 0, z: 0 },
+        dimensions: effectiveDims,
+        position: safePos,
+        rotationY: placement.rotationY,
         description: cmd.reason,
       });
     }

@@ -17,6 +17,7 @@ import {
   SceneObject,
   SceneState,
 } from './sceneCommandTypes';
+import { extractVietnameseQuantity, extractAllActionItems } from './intentClassifier';
 
 // ---------------------------------------------------------------------------
 // Vietnamese → English object type map
@@ -26,15 +27,15 @@ const OBJECT_TYPE_MAP: Array<{ patterns: string[]; type: string }> = [
   { patterns: ['cửa sổ', 'window'], type: 'window' },
   { patterns: ['cửa kéo', 'cửa lùa', 'kéo lùa'], type: 'door_sliding' }, // resolved later to 'door' with subType
   { patterns: ['nhà vệ sinh', 'phòng vệ sinh', 'nhà tắm', 'phòng tắm', 'wc', 'vệ sinh', 'toilet', 'bồn cầu'], type: 'wc' },
+  { patterns: ['đèn ngủ', 'đèn bàn', 'đèn học', 'đèn sàn', 'đèn cây', 'đèn', 'den', 'lamp'], type: 'lamp' },
   { patterns: ['sofa', 'ghế sofa', 'ghế dài'], type: 'sofa' },
   { patterns: ['giường'], type: 'bed' },
   { patterns: ['bàn trà', 'bàn nước', 'bàn coffee'], type: 'table' },
-  { patterns: ['bàn'], type: 'desk' },
+  { patterns: ['bàn học', 'bàn làm việc', 'bàn'], type: 'desk' },
   { patterns: ['tủ'], type: 'wardrobe' },
   { patterns: ['ghế'], type: 'chair' },
   { patterns: ['gương'], type: 'mirror' },
   { patterns: ['cây cảnh', 'cây xanh', 'chậu cây', 'chậu', 'cây'], type: 'plant' },
-  { patterns: ['đèn'], type: 'lamp' },
   { patterns: ['thảm'], type: 'rug' },
   { patterns: ['cửa'], type: 'door' },
 ];
@@ -317,6 +318,8 @@ export function parseIntent(
       }
     }
 
+    const reqQty = extractVietnameseQuantity(p);
+
     if (detectedType) {
       const candidates = findCandidates(detectedType, detectedAttrs, p, objects, selectedObjectId);
 
@@ -329,22 +332,33 @@ export function parseIntent(
         };
       }
 
-      if (candidates.length === 1) {
+      if (candidates.length < reqQty) {
+        return {
+          replyText: `Phòng hiện chỉ có ${candidates.length} ${candidates[0].name || detectedType}, không đủ ${reqQty} cái để xóa theo yêu cầu. Bạn có muốn xóa ${candidates.length} đồ vật này không?`,
+          commands: [],
+          requiresPreview: false,
+          requiresClarification: false,
+        };
+      }
+
+      if (reqQty > 1 || candidates.length === 1) {
+        const toDelete = candidates.slice(0, reqQty);
         const cmd: DeleteCommand = {
           action: 'delete_object',
-          object_ids: [candidates[0].id],
-          confidence: 0.9,
-          reason: `Xóa ${candidates[0].name} theo yêu cầu`,
+          object_ids: toDelete.map((c) => c.id),
+          confidence: 0.95,
+          reason: `Xóa ${toDelete.length} ${toDelete[0].name} theo yêu cầu`,
         };
+        const names = toDelete.map((c) => c.name).join(', ');
         return {
-          replyText: `✓ Đã xóa **${candidates[0].name}** khỏi phòng.`,
+          replyText: `✓ Đã xóa **${toDelete.length > 1 ? `${toDelete.length} ` : ''}${toDelete[0].name}** (${names}) khỏi phòng.`,
           commands: [cmd],
           requiresPreview: false,
           requiresClarification: false,
         };
       }
 
-      // Multiple candidates → clarify
+      // Multiple candidates without explicit quantity → clarify
       const clarify: ClarifyCommand = {
         action: 'clarify',
         question: `Có ${candidates.length} đồ vật loại này trong phòng. Bạn muốn xóa cái nào?`,
@@ -485,34 +499,22 @@ export function parseIntent(
     p.includes('thêm') || p.includes('đặt thêm') || p.includes('bổ sung') || p.includes('tạo');
 
   if (isAddIntent) {
-    const detected = detectObjectType(p);
-    if (!detected) {
-      const clarify: ClarifyCommand = {
-        action: 'clarify',
-        question: 'Bạn muốn thêm đồ vật gì? Ví dụ: "Thêm bàn học", "Thêm cây xanh", "Thêm cửa sổ 2 cánh".',
-        confidence: 0.3,
-        reason: 'Không xác định loại đồ vật cần thêm',
-      };
-      return { replyText: clarify.question, commands: [clarify], requiresPreview: false, requiresClarification: true };
-    }
-
-    const detectedAttrs = { ...detected.attrs, ...extractAttributes(p) };
-    const region = detectMoveRegion(p);
+    const allExtracted = extractAllActionItems(p);
 
     // Default dimensions per type
     const DEFAULT_DIMS: Record<string, { width: number; length: number; height: number }> = {
-      bed: { width: 1.6, length: 2.0, height: 0.5 },
+      bed: { width: 1.6, length: 2.0, height: 0.95 },
       desk: { width: 1.3, length: 0.65, height: 0.75 },
       wardrobe: { width: 1.8, length: 0.6, height: 2.2 },
       chair: { width: 0.55, length: 0.55, height: 0.85 },
       mirror: { width: 0.5, length: 0.05, height: 1.7 },
       plant: { width: 0.55, length: 0.55, height: 1.1 },
-      lamp: { width: 0.3, length: 0.3, height: 0.6 },
+      lamp: { width: 0.35, length: 0.35, height: 0.5 },
       rug: { width: 2.0, length: 1.4, height: 0.05 },
       sofa: { width: 1.6, length: 0.7, height: 0.8 },
       door: { width: 0.9, length: 0.1, height: 2.1 },
       window: { width: 1.2, length: 0.1, height: 1.2 },
-      wc: { width: 0.6, length: 0.7, height: 0.9 },
+      wc: { width: 1.4, length: 1.6, height: 2.1 },
       table: { width: 0.8, length: 0.8, height: 0.55 },
     };
 
@@ -526,11 +528,79 @@ export function parseIntent(
       lamp: 'Đèn ngủ',
       rug: 'Thảm trải sàn',
       sofa: 'Ghế sofa mini',
-      door: detectedAttrs.subType === 'sliding' ? 'Cửa kéo lùa' : 'Cửa mở xoay',
-      window: detectedAttrs.leafCount === 2 ? 'Cửa sổ 2 cánh' : detectedAttrs.leafCount === 4 ? 'Cửa sổ 4 cánh' : 'Cửa sổ',
-      wc: 'Nhà vệ sinh',
+      door: 'Cửa mở xoay',
+      window: 'Cửa sổ',
+      wc: 'Phòng WC khép kín',
       table: 'Bàn trà',
     };
+
+    const region = detectMoveRegion(p);
+
+    if (allExtracted.length > 0) {
+      const commands: SceneCommand[] = [];
+      const reports: string[] = [];
+
+      for (const item of allExtracted) {
+        // WC constraint check
+        if (item.type === 'wc') {
+          const hasWc = objects.some((o) => o.type === 'wc');
+          if (hasWc) {
+            reports.push(`• ${item.name}: ✕ FAILED (Phòng đã có sẵn khu vực WC Master khép kín cố định; không thể bố trí thêm nhà vệ sinh thứ 2)`);
+            continue;
+          }
+        }
+
+        const def = DEFAULT_DIMS[item.type] || { width: 1.0, length: 1.0, height: 0.8 };
+        const dims = {
+          width: item.dimensions?.width ?? def.width,
+          length: item.dimensions?.length ?? def.length,
+          height: item.dimensions?.height ?? def.height,
+        };
+        const cmd: AddCommand = {
+          action: 'add_object',
+          object_type: item.type,
+          object_name: item.name,
+          target_region: region,
+          dimensions: dims,
+          confidence: 0.9,
+          reason: `Thêm ${item.name} vào phòng`,
+        };
+        commands.push(cmd);
+        reports.push(`• ${item.name}: ✓ SUCCESS (Đã thêm vào tọa độ an toàn)`);
+      }
+
+      const successCount = commands.length;
+      const totalCount = allExtracted.length;
+      let replyText = '';
+
+      if (successCount === totalCount && totalCount > 0) {
+        replyText = `Đã thực thi thành công toàn bộ ${totalCount} yêu cầu của gia chủ:\n\n${reports.join('\n')}\n\nMô hình 3D đã được cập nhật đồng bộ các đồ vật.`;
+      } else if (successCount > 0) {
+        replyText = `Kết quả thực thi theo yêu cầu của gia chủ (${successCount}/${totalCount} thành công):\n\n${reports.join('\n')}\n\nMô hình 3D đã được cập nhật các đồ vật hợp lệ.`;
+      } else {
+        replyText = `Không thể thực thi các yêu cầu:\n\n${reports.join('\n')}`;
+      }
+
+      return {
+        replyText,
+        commands,
+        requiresPreview: false,
+        requiresClarification: false,
+      };
+    }
+
+    const detected = detectObjectType(p);
+    if (!detected) {
+      const clarify: ClarifyCommand = {
+        action: 'clarify',
+        question: 'Bạn muốn thêm đồ vật gì? Ví dụ: "Thêm bàn học", "Thêm cây xanh", "Thêm cửa sổ 2 cánh".',
+        confidence: 0.3,
+        reason: 'Không xác định loại đồ vật cần thêm',
+      };
+      return { replyText: clarify.question, commands: [clarify], requiresPreview: false, requiresClarification: true };
+    }
+
+    const detectedAttrs = { ...detected.attrs, ...extractAttributes(p) };
 
     const cmd: AddCommand = {
       action: 'add_object',

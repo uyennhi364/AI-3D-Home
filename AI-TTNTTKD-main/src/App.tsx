@@ -5,6 +5,7 @@ import {
   RoomObject,
   ProposedAdjustment,
   LayoutOptimizationProposal,
+  StructuredActionHistoryEntry,
   UserFengShuiProfile,
 } from './types/fengshui';
 import { getUserFengShuiProfile } from './engine/batTrach';
@@ -351,18 +352,172 @@ export default function App() {
     showToast(`✓ Đã đặt ${newObj.name} vào vị trí.`);
   };
 
-  // Handler: Execute AI Action Command
-  const handleExecuteAIAction = (rawAction: any) => {
+  // Handler: Execute a BATCH of AI Action Commands atomically.
+  // All add/delete operations are applied in a single setObjects call to avoid stale-state issues
+  // where a second action in the batch uses outdated objects that don't include items from action #1.
+  const handleExecuteAIActions = (
+    rawActions: any[]
+  ): { successCount: number; failCount: number; executedEntries: StructuredActionHistoryEntry[] } => {
+    if (!rawActions || rawActions.length === 0) return { successCount: 0, failCount: 0, executedEntries: [] };
+
+    // Handle undo as a special case (always first)
+    if (rawActions.some((a) => a?.type === 'undo_action' || a?.action === 'undo_action')) {
+      handleUndo();
+      return { successCount: 1, failCount: 0, executedEntries: [] };
+    }
+
+    // One snapshot for the entire batch
+    pushSnapshot(objects);
+
+    let successCount = 0;
+    let failCount = 0;
+    let lastAddedId: string | null = null;
+    const deleteIds: string[] = [];
+    const newObjects: RoomObject[] = [];
+    const moves: Array<{ id: string; x: number; z: number }> = [];
+    const rotations: Array<{ id: string; rotY: number; rotDelta?: number }> = [];
+    const executedEntries: StructuredActionHistoryEntry[] = [];
+    const batchGroupId = `batch_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+    // Use current objects + accumulated newObjects for validation of each step
+    let workingObjects = [...objects];
+
+    for (const rawAction of rawActions) {
+      if (!rawAction || typeof rawAction !== 'object') { failCount++; continue; }
+
+      const validation = validateAICommand(rawAction, roomConfig, workingObjects);
+      if (!validation.valid || !validation.sanitizedCommand) {
+        showToast(`⚠ Lệnh AI không hợp lệ: ${validation.error || 'Dữ liệu sai định dạng'}`);
+        failCount++;
+        continue;
+      }
+
+      const action = validation.sanitizedCommand;
+      if (action.type === 'add_object') {
+        const matchedLib = LIBRARY_ITEMS.find((it) => it.type === action.objectType);
+        const newId = action.objectId || `${action.objectType || 'item'}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const newObj: RoomObject = {
+          id: newId,
+          type: (action.objectType as any) || 'bed',
+          name: action.name || matchedLib?.name || 'Đồ vật mới',
+          dimensions: action.dimensions || matchedLib?.dimensions || { width: 1.2, length: 0.8, height: 0.75 },
+          position: { x: action.position?.x ?? 0, y: 0, z: action.position?.z ?? 0 },
+          rotation: { x: 0, y: action.rotationY ?? 0, z: 0 },
+        };
+        newObjects.push(newObj);
+        workingObjects = [...workingObjects, newObj]; // update working copy so next action avoids overlap
+        lastAddedId = newId;
+        successCount++;
+
+        executedEntries.push({
+          actionId: `act_add_${newId}`,
+          actionType: 'add_object',
+          objectId: newId,
+          objectType: newObj.type,
+          objectName: newObj.name,
+          quantity: 1,
+          timestamp: Date.now(),
+          batchGroupId,
+          executionStatus: 'SUCCESS',
+        });
+      } else if (action.type === 'delete_object') {
+        const ids = action.objectIds || (action.objectId ? [action.objectId] : []);
+        deleteIds.push(...ids);
+
+        for (const did of ids) {
+          const existingObj = objects.find((o) => o.id === did);
+          executedEntries.push({
+            actionId: `act_del_${did}_${Date.now()}`,
+            actionType: 'delete_object',
+            objectId: did,
+            objectType: (existingObj?.type || 'desk') as any,
+            objectName: existingObj?.name || 'Đồ vật',
+            quantity: 1,
+            timestamp: Date.now(),
+            batchGroupId,
+            executionStatus: 'SUCCESS',
+          });
+        }
+
+        workingObjects = workingObjects.filter((o) => !ids.includes(o.id));
+        successCount++;
+      } else if (action.type === 'move_object' && action.objectId && action.position) {
+        moves.push({ id: action.objectId, x: action.position.x, z: action.position.z });
+        successCount++;
+        const targetObj = objects.find((o) => o.id === action.objectId);
+        executedEntries.push({
+          actionId: `act_move_${action.objectId}_${Date.now()}`,
+          actionType: 'move_object',
+          objectId: action.objectId,
+          objectType: (targetObj?.type || 'desk') as any,
+          objectName: targetObj?.name || 'Đồ vật',
+          quantity: 1,
+          timestamp: Date.now(),
+          batchGroupId,
+          executionStatus: 'SUCCESS',
+        });
+      } else if (action.type === 'rotate_object' && action.objectId) {
+        rotations.push({ id: action.objectId, rotY: action.rotationY ?? 0, rotDelta: action.rotationDelta });
+        successCount++;
+        const targetObj = objects.find((o) => o.id === action.objectId);
+        executedEntries.push({
+          actionId: `act_rot_${action.objectId}_${Date.now()}`,
+          actionType: 'rotate_object',
+          objectId: action.objectId,
+          objectType: (targetObj?.type || 'desk') as any,
+          objectName: targetObj?.name || 'Đồ vật',
+          quantity: 1,
+          timestamp: Date.now(),
+          batchGroupId,
+          executionStatus: 'SUCCESS',
+        });
+      }
+    }
+
+    // Apply all mutations in one setObjects call
+    if (newObjects.length > 0 || deleteIds.length > 0 || moves.length > 0 || rotations.length > 0) {
+      setObjects((prev) => {
+        let updated = [...prev];
+        // Delete
+        if (deleteIds.length > 0) updated = updated.filter((o) => !deleteIds.includes(o.id));
+        // Moves
+        for (const m of moves) {
+          updated = updated.map((o) => o.id === m.id ? { ...o, position: { ...o.position, x: m.x, z: m.z } } : o);
+        }
+        // Rotations
+        for (const r of rotations) {
+          updated = updated.map((o) => {
+            if (o.id !== r.id) return o;
+            const newRotY = r.rotDelta !== undefined ? (o.rotation.y + r.rotDelta) % (Math.PI * 2) : r.rotY;
+            return { ...o, rotation: { ...o.rotation, y: newRotY } };
+          });
+        }
+        // Add new objects
+        updated = [...updated, ...newObjects];
+        return updated;
+      });
+
+      if (deleteIds.length > 0 && selectedObjectId && deleteIds.includes(selectedObjectId)) {
+        setSelectedObjectId(null);
+      }
+      if (lastAddedId) setSelectedObjectId(lastAddedId);
+    }
+
+    return { successCount, failCount, executedEntries };
+  };
+
+  // Handler: Execute AI Action Command (single — kept for backward compatibility)
+  const handleExecuteAIAction = (rawAction: any): boolean => {
     // Check if AI requested undo
     if (rawAction?.type === 'undo_action' || rawAction?.action === 'undo_action') {
       handleUndo();
-      return;
+      return true;
     }
 
     const validation = validateAICommand(rawAction, roomConfig, objects);
     if (!validation.valid || !validation.sanitizedCommand) {
       showToast(`⚠ Lệnh AI không hợp lệ: ${validation.error || 'Dữ liệu sai định dạng'}`);
-      return;
+      return false;
     }
 
     const action = validation.sanitizedCommand;
@@ -372,7 +527,7 @@ export default function App() {
 
     if (action.type === 'add_object') {
       const matchedLib = LIBRARY_ITEMS.find((it) => it.type === action.objectType);
-      const newId = `${action.objectType || 'item'}_${Date.now()}`;
+      const newId = action.objectId || `${action.objectType || 'item'}_${Date.now()}`;
       const newObj: RoomObject = {
         id: newId,
         type: (action.objectType as any) || 'bed',
@@ -392,24 +547,37 @@ export default function App() {
       setObjects((prev) => [...prev, newObj]);
       setSelectedObjectId(newId);
       showToast(`✓ AI đã thêm ${newObj.name} vào phòng.`);
+      return true;
     } else if (action.type === 'move_object' && action.objectId) {
       if (action.position) {
         handleUpdateObjectPosition(action.objectId, action.position.x, action.position.z);
         showToast(`✓ AI đã di chuyển đồ vật.`);
+        return true;
       }
     } else if (action.type === 'rotate_object' && action.objectId) {
       if (action.rotationDelta !== undefined) {
         handleRotateObject(action.objectId, action.rotationDelta);
         showToast(`✓ AI đã xoay đồ vật.`);
+        return true;
       } else if (action.rotationY !== undefined) {
         setObjects((prev) =>
           prev.map((o) => (o.id === action.objectId ? { ...o, rotation: { ...o.rotation, y: action.rotationY! } } : o))
         );
         showToast(`✓ AI đã chỉnh góc xoay.`);
+        return true;
       }
-    } else if (action.type === 'delete_object' && action.objectId) {
-      handleDeleteObject(action.objectId);
+    } else if (action.type === 'delete_object') {
+      const targetIds = action.objectIds || (action.objectId ? [action.objectId] : []);
+      if (targetIds.length > 0) {
+        setObjects((prev) => prev.filter((o) => !targetIds.includes(o.id)));
+        if (selectedObjectId && targetIds.includes(selectedObjectId)) {
+          setSelectedObjectId(null);
+        }
+        showToast(`✓ AI đã xóa ${targetIds.length} đồ vật khỏi phòng.`);
+        return true;
+      }
     }
+    return false;
   };
 
   // Handler: Preview Proposal
@@ -765,6 +933,7 @@ export default function App() {
             onApplyProposal={handleApplyProposal}
             onApplyMultipleAdjustments={handleApplyMultipleAdjustments}
             onExecuteAIAction={handleExecuteAIAction}
+            onExecuteAIActions={handleExecuteAIActions}
             onOpenOptimizationModal={(prop) => {
               setActiveOptimizationProposal(prop);
               setIsComparisonModalOpen(true);

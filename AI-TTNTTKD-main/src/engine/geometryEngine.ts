@@ -310,3 +310,115 @@ export function resolveSafePlacement(
   return { safePos: initialClamped, resolved: false, attempts };
 }
 
+/**
+ * Intelligent Smart Placement Engine.
+ * Tests multiple orientations, room strategic candidate zones, and adaptive dimensions
+ * to guarantee robust 3D placement even in tightly furnished rooms.
+ */
+export function findSmartPlacement(
+  objType: string,
+  preferredDims: { width: number; length: number; height?: number },
+  existingObjects: RoomObject[],
+  roomConfig: { width: number; length: number },
+  initialCandidatePos?: Point2D,
+  excludeObjectId?: string
+): {
+  resolved: boolean;
+  safePos: Point2D;
+  dimensions: { width: number; length: number; height?: number };
+  rotationY: number;
+  adapted: boolean;
+} {
+  const candidateRotations = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+  const halfW = roomConfig.width / 2;
+  const halfL = roomConfig.length / 2;
+
+  // Strategic starting anchor points across the room
+  const candidateOrigins: Point2D[] = [];
+  if (initialCandidatePos && (initialCandidatePos.x !== 0 || initialCandidatePos.z !== 0)) {
+    candidateOrigins.push(initialCandidatePos);
+  }
+  candidateOrigins.push(
+    { x: 0, z: -halfL * 0.4 },
+    { x: 0, z: halfL * 0.3 },
+    { x: 0, z: 0 },
+    { x: -halfW * 0.45, z: -halfL * 0.35 },
+    { x: halfW * 0.45, z: -halfL * 0.35 },
+    { x: -halfW * 0.45, z: halfL * 0.35 },
+    { x: halfW * 0.45, z: halfL * 0.35 }
+  );
+
+  // 1. Try preferred exact dimensions with all rotations & origins
+  for (const rot of candidateRotations) {
+    for (const origin of candidateOrigins) {
+      const res = resolveSafePlacement(origin, preferredDims, rot, existingObjects, roomConfig, excludeObjectId);
+      if (res.resolved) {
+        return {
+          resolved: true,
+          safePos: res.safePos,
+          dimensions: preferredDims,
+          rotationY: rot,
+          adapted: false,
+        };
+      }
+    }
+  }
+
+  // 2. If object is a bed and room is too tight for a king/queen, try adaptive single/twin bed dimensions
+  if (objType === 'bed' || objType.includes('giường')) {
+    const fallbackBedDims = [
+      { width: 1.2, length: 1.9, height: preferredDims.height || 0.85 },
+      { width: 1.0, length: 1.9, height: preferredDims.height || 0.85 },
+      { width: 0.9, length: 1.85, height: preferredDims.height || 0.8 },
+    ];
+
+    for (const fDims of fallbackBedDims) {
+      for (const rot of candidateRotations) {
+        for (const origin of candidateOrigins) {
+          const res = resolveSafePlacement(origin, fDims, rot, existingObjects, roomConfig, excludeObjectId);
+          if (res.resolved) {
+            return {
+              resolved: true,
+              safePos: res.safePos,
+              dimensions: fDims,
+              rotationY: rot,
+              adapted: true,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  // 3. If object is a desk/table/sofa and doesn't fit, try slightly streamlined dimensions
+  if (['desk', 'table', 'sofa', 'wardrobe'].includes(objType)) {
+    const streamlined = {
+      width: Math.max(0.7, preferredDims.width * 0.85),
+      length: Math.max(0.5, preferredDims.length * 0.85),
+      height: preferredDims.height,
+    };
+    for (const rot of candidateRotations) {
+      for (const origin of candidateOrigins) {
+        const res = resolveSafePlacement(origin, streamlined, rot, existingObjects, roomConfig, excludeObjectId);
+        if (res.resolved) {
+          return {
+            resolved: true,
+            safePos: res.safePos,
+            dimensions: streamlined,
+            rotationY: rot,
+            adapted: true,
+          };
+        }
+      }
+    }
+  }
+
+  return {
+    resolved: false,
+    safePos: initialCandidatePos || { x: 0, z: 0 },
+    dimensions: preferredDims,
+    rotationY: 0,
+    adapted: false,
+  };
+}
+

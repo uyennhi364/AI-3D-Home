@@ -906,12 +906,11 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
         mesh = createProceduralFurniture(obj);
         scene.add(mesh);
         objectMeshesRef.current.set(obj.id, mesh);
-      } else {
-        // Only update position/rotation if not currently being actively dragged with gizmo
-        if (!tControls?.dragging || tControls.object !== mesh) {
-          mesh.position.set(obj.position.x, obj.position.y || 0, obj.position.z);
-          mesh.rotation.y = obj.rotation.y;
-        }
+      }
+      // Always synchronize position and rotation if not currently being actively dragged
+      if (!tControls?.dragging || tControls.object !== mesh) {
+        mesh.position.set(obj.position.x, obj.position.y || 0, obj.position.z);
+        mesh.rotation.y = obj.rotation.y;
       }
     });
 

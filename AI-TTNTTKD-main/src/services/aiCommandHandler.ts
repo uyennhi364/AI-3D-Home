@@ -3,12 +3,15 @@ import {
   clampOBBInsideRoom,
   resolveSafePlacement,
   validatePlacementSafety,
+  findSmartPlacement,
 } from '../engine/geometryEngine';
 
 export interface AICommand {
   type: 'add_object' | 'move_object' | 'rotate_object' | 'delete_object' | 'update_object';
   objectId?: string;
+  objectIds?: string[];
   objectType?: RoomObjectType;
+  quantity?: number;
   name?: string;
   dimensions?: { width: number; length: number; height: number };
   position?: { x: number; y: number; z: number };
@@ -73,44 +76,95 @@ export function validateAICommand(
         nightstand: { width: 0.5, length: 0.45, height: 0.5 },
         sofa: { width: 1.6, length: 0.8, height: 0.75 },
         table: { width: 0.8, length: 0.8, height: 0.5 },
+        lamp: { width: 0.35, length: 0.35, height: 0.5 },
+        wc: { width: 1.4, length: 1.6, height: 2.1 },
+        rug: { width: 2.0, length: 1.4, height: 0.05 },
       };
+
+      // Architectural & plumbing constraint check for WC / Bathroom
+      if (objType === 'wc' && !rawAction.objectId) {
+        const hasExistingWc = objects.some((o) => o.type === 'wc');
+        if (hasExistingWc) {
+          return {
+            valid: false,
+            error: 'Phòng ngủ đã có sẵn khu vực WC Master khép kín cố định; không thể bố trí thêm nhà vệ sinh thứ 2 trong phòng ngủ do ràng buộc kỹ thuật cấp thoát nước.',
+          };
+        }
+      }
 
       const dim = rawAction.dimensions || defaultDims[objType] || { width: 0.8, length: 0.8, height: 0.75 };
       const rotY = Number(rawAction.rotationY) || 0;
+
+      // === FAST PATH: Server (Gemini/local) already computed a verified placement ===
+      // If objectId + position are already provided by the server, trust them and skip
+      // re-running findSmartPlacement (which uses stale `objects` not knowing about
+      // sibling items added in the same batch). Just clamp to room bounds and pass through.
+      if (rawAction.objectId && rawAction.position?.x !== undefined && rawAction.position?.z !== undefined) {
+        const serverPos = {
+          x: Number(rawAction.position.x),
+          y: 0,
+          z: Number(rawAction.position.z),
+        };
+        const clampedPos = clampOBBInsideRoom(serverPos, dim, rotY, rConfig);
+        const effectiveDims = {
+          width: dim.width,
+          length: dim.length,
+          height: dim.height ?? 0.85,
+        };
+        const sanitized: AICommand = {
+          type: 'add_object',
+          objectId: rawAction.objectId,
+          objectType: objType,
+          name: rawAction.name || (objType === 'desk' ? 'Bàn học/làm việc' : objType === 'chair' ? 'Ghế công thái học' : objType === 'plant' ? 'Cây xanh phong thủy' : objType === 'bed' ? 'Giường ngủ' : objType === 'lamp' ? 'Đèn ngủ' : 'Đồ vật mới'),
+          dimensions: effectiveDims,
+          position: { x: clampedPos.x, y: 0, z: clampedPos.z },
+          rotationY: rotY,
+          description: rawAction.description || `Thêm ${objType} vào phòng`,
+        };
+        return { valid: true, sanitizedCommand: sanitized };
+      }
+
+      // === SLOW PATH: No server-provided placement — compute locally ===
       const initialPos = {
         x: Number(rawAction.position?.x) || 0,
         z: Number(rawAction.position?.z) || 0,
       };
 
-      // Resolve safe placement using OBB SAT collision & spiral search
-      const resolution = resolveSafePlacement(
-        initialPos,
+      // Intelligent Placement Engine: tests orientations, anchor points & adaptive sizing
+      const placement = findSmartPlacement(
+        objType,
         dim,
-        rotY,
         objects,
-        rConfig
+        rConfig,
+        initialPos
       );
 
-      if (!resolution.resolved) {
+      if (!placement.resolved) {
         return {
           valid: false,
           error: `Không tìm được vị trí an toàn trong phòng cho ${objType} (không gian hiện tại quá chật hoặc bị chặn kín lối đi).`,
         };
       }
 
+      const effectiveDims = {
+        width: placement.dimensions.width,
+        length: placement.dimensions.length,
+        height: placement.dimensions.height ?? dim.height ?? 0.85,
+      };
       const sanitized: AICommand = {
         type: 'add_object',
+        objectId: rawAction.objectId,
         objectType: objType,
-        name: rawAction.name || (objType === 'desk' ? 'Bàn học/làm việc' : objType === 'chair' ? 'Ghế công thái học' : objType === 'plant' ? 'Cây xanh phong thủy' : 'Đồ vật mới'),
-        dimensions: dim,
-        position: { x: resolution.safePos.x, y: 0, z: resolution.safePos.z },
-        rotationY: rotY,
+        name: rawAction.name || (objType === 'desk' ? 'Bàn học/làm việc' : objType === 'chair' ? 'Ghế công thái học' : objType === 'plant' ? 'Cây xanh phong thủy' : objType === 'bed' ? 'Giường ngủ' : objType === 'lamp' ? 'Đèn ngủ' : 'Đồ vật mới'),
+        dimensions: effectiveDims,
+        position: { x: placement.safePos.x, y: 0, z: placement.safePos.z },
+        rotationY: placement.rotationY,
         description: rawAction.description || `Thêm ${objType} vào phòng`,
       };
 
       return {
         valid: true,
-        warning: resolution.attempts > 0 ? 'Vị trí đã được Geometry Engine điều chỉnh nhẹ để tránh va chạm với các đồ vật khác.' : undefined,
+        warning: placement.adapted ? 'Kích thước hoặc góc xoay đã được điều chỉnh thích ứng để vừa vặn an toàn trong phòng.' : undefined,
         sanitizedCommand: sanitized,
       };
     }
@@ -211,21 +265,43 @@ export function validateAICommand(
     }
 
     case 'delete_object': {
-      if (!rawAction.objectId) {
-        return { valid: false, error: 'Thiếu objectId cho thao tác xóa.' };
+      const targetIds: string[] = [];
+      if (Array.isArray(rawAction.objectIds) && rawAction.objectIds.length > 0) {
+        targetIds.push(...rawAction.objectIds);
+      } else if (rawAction.objectId) {
+        targetIds.push(rawAction.objectId);
+      } else if (rawAction.objectType) {
+        const qty = Math.max(1, Number(rawAction.quantity) || 1);
+        const matching = objects.filter((o) => o.type === rawAction.objectType);
+        if (matching.length === 0) {
+          return { valid: false, error: `Không tìm thấy đồ vật loại "${rawAction.objectType}" trong phòng để xóa.` };
+        }
+        if (matching.length < qty) {
+          return {
+            valid: false,
+            error: `Phòng hiện chỉ có ${matching.length} ${matching[0].name}, không đủ ${qty} cái để xóa theo yêu cầu.`,
+          };
+        }
+        targetIds.push(...matching.slice(0, qty).map((o) => o.id));
       }
 
-      const existing = objects.find((o) => o.id === rawAction.objectId);
-      if (!existing) {
-        return { valid: false, error: `Không tìm thấy đồ vật với ID: "${rawAction.objectId}".` };
+      if (targetIds.length === 0) {
+        return { valid: false, error: 'Thiếu objectId hoặc objectIds cho thao tác xóa.' };
       }
 
+      const existingObjects = objects.filter((o) => targetIds.includes(o.id));
+      if (existingObjects.length === 0) {
+        return { valid: false, error: `Không tìm thấy đồ vật nào cần xóa trong phòng.` };
+      }
+
+      const names = existingObjects.map((o) => o.name).join(', ');
       return {
         valid: true,
         sanitizedCommand: {
           type: 'delete_object',
-          objectId: rawAction.objectId,
-          description: rawAction.description || `Xóa ${existing.name}`,
+          objectId: targetIds[0],
+          objectIds: targetIds,
+          description: rawAction.description || `Xóa ${names}`,
         },
       };
     }

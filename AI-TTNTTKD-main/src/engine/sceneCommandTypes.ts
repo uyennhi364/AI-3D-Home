@@ -90,6 +90,16 @@ export type SceneCommand =
   | SelectCommand
   | ClarifyCommand;
 
+// Structured execution result returned after processing 3D command
+export interface ExecutionResult {
+  success: boolean;
+  action: string;
+  objectType?: string;
+  objectId?: string;
+  message?: string;
+  error?: string;
+}
+
 // Result returned by the 3D Engine after executing a command
 export interface CommandExecutionResult {
   success: boolean;

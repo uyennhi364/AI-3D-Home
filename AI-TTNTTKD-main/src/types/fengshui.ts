@@ -137,3 +137,16 @@ export interface LayoutOptimizationProposal {
   adjustments: ProposedAdjustment[];
   createdObjects?: RoomObject[];
 }
+
+export interface StructuredActionHistoryEntry {
+  actionId: string;
+  actionType: 'add_object' | 'move_object' | 'rotate_object' | 'delete_object';
+  objectId: string;
+  objectType: RoomObjectType;
+  objectName: string;
+  quantity: number;
+  timestamp: number;
+  batchGroupId: string;
+  executionStatus: 'SUCCESS' | 'FAILED';
+  meta?: Record<string, any>;
+}

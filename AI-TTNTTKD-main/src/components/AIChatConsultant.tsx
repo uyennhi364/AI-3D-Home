@@ -8,10 +8,11 @@ import {
   RoomObject,
   UserFengShuiProfile,
 } from '../types/fengshui';
-import { generateFengShuiConsultation, ChatHistoryMessage } from '../engine/geminiFengShuiAI';
+import { generateFengShuiConsultation, type ChatHistoryMessage } from '../engine/geminiFengShuiAI';
 import { parseIntent, buildSceneState } from '../engine/sceneIntentParser';
 import { executeSceneCommand } from '../engine/sceneCommandExecutor';
 import { SceneCommand, ClarifyCommand, AIIntentResult } from '../engine/sceneCommandTypes';
+import { classifyUserIntent } from '../engine/intentClassifier';
 
 interface ChatMessage {
   id: string;
@@ -39,7 +40,8 @@ interface AIChatConsultantProps {
   onPreviewProposal: (proposal: ProposedAdjustment | null, adjustments?: ProposedAdjustment[]) => void;
   onApplyProposal: (proposal: ProposedAdjustment) => void;
   onApplyMultipleAdjustments: (adjustments: ProposedAdjustment[]) => void;
-  onExecuteAIAction: (action: AIActionCommand) => void;
+  onExecuteAIAction: (action: AIActionCommand) => boolean | void;
+  onExecuteAIActions?: (actions: any[]) => { successCount: number; failCount: number };
   onOpenOptimizationModal?: (proposal: LayoutOptimizationProposal) => void;
   isPreviewingProposal: boolean;
   externalTriggerPrompt?: string | null;
@@ -53,8 +55,8 @@ interface AIChatConsultantProps {
 const QUICK_FEATURE_BADGES = [
   { label: 'Phân tích phong thủy', prompt: 'Phân tích phong thủy chi tiết phòng ngủ hiện tại' },
   { label: 'Sắp xếp nội thất', prompt: 'Sắp xếp lại nội thất phòng ngủ cho gọn gàng và hợp phong thủy' },
-  { label: 'Tối ưu vị trí đồ vật', prompt: 'Tối ưu phòng ngủ cho tôi' },
-  { label: 'Thay đổi layout 3D', prompt: 'Thay đổi layout phòng ngủ để hợp phong thủy hơn' },
+  { label: 'Tối ưu vị trí đồ', prompt: 'Tối ưu phòng ngủ cho tôi' },
+  { label: 'Đổi layout 3D', prompt: 'Thay đổi layout phòng ngủ để hợp phong thủy hơn' },
   { label: 'Giải thích vấn đề', prompt: 'Tại sao nên xoay giường và vị trí hiện tại có vấn đề gì?' },
   { label: 'Đề xuất thiết kế', prompt: 'Đề xuất phương án thiết kế phong thủy tốt nhất cho phòng ngủ' },
 ];
@@ -68,6 +70,7 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
   onPreviewProposal,
   onApplyMultipleAdjustments,
   onExecuteAIAction,
+  onExecuteAIActions,
   isPreviewingProposal,
   externalTriggerPrompt,
   onClearExternalTriggerPrompt,
@@ -78,6 +81,8 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isGeminiOnline, setIsGeminiOnline] = useState<boolean>(false);
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState<boolean>(false);
+  const [currentLoadingMessage, setCurrentLoadingMessage] = useState<string>('AI đang suy nghĩ...');
+  const [loadingDetails, setLoadingDetails] = useState<string[]>([]);
   const [apiKeyInput, setApiKeyInput] = useState<string>(() =>
     typeof window !== 'undefined' ? localStorage.getItem('gemini_api_key') || '' : ''
   );
@@ -123,6 +128,22 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
     const promptText = (textToSend || input).trim();
     if (!promptText || isLoading) return;
 
+    // Fast-path Intent Classification
+    const intentInfo = classifyUserIntent(promptText);
+    setCurrentLoadingMessage(intentInfo.loadingMessage);
+
+    if (intentInfo.intent === 'ADD_OBJECT') {
+      setLoadingDetails(['Xác định kích thước đồ vật', 'Kiểm tra va chạm & khoảng trống', 'Cập nhật mô hình 3D']);
+    } else if (intentInfo.intent === 'MOVE_OBJECT' || intentInfo.intent === 'ROTATE_OBJECT' || intentInfo.intent === 'DELETE_OBJECT') {
+      setLoadingDetails(['Xác định đối tượng', 'Kiểm tra tọa độ hợp lệ', 'Cập nhật hướng/vị trí 3D']);
+    } else if (intentInfo.intent === 'OPTIMIZE_ROOM') {
+      setLoadingDetails(['Đánh giá Bát Trạch', 'Tính toán hoán đổi vị trí', 'Tối ưu luồng khí & công năng']);
+    } else if (intentInfo.intent === 'FENG_SHUI_CONSULT' || intentInfo.intent === 'ANALYZE_ROOM') {
+      setLoadingDetails(['Tra cứu Quái mệnh gia chủ', 'Kiểm tra hướng cát/hung', 'Phân tích xung sát']);
+    } else {
+      setLoadingDetails([]);
+    }
+
     const userMsg: ChatMessage = {
       id: `u_${Date.now()}`,
       role: 'user',
@@ -156,12 +177,32 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
 
       let executedSummary = undefined;
       if (response.actions && response.actions.length > 0) {
-        executedSummary = {
-          changes: response.actions.map((act) => act.description || `Thực hiện ${act.type}`),
-          // No score claim here: the real "after" score is recomputed by the rule engine once the scene updates.
-        };
-        // Execute validated actions on 3D scene
-        response.actions.forEach((act: AIActionCommand) => onExecuteAIAction(act));
+        // Execute validated actions on 3D scene atomically (batch handler avoids stale-state bug)
+        const successfulChanges: string[] = [];
+
+        if (onExecuteAIActions) {
+          // Batch path: all actions applied in one setObjects call — correct for multi-item adds
+          const { successCount } = onExecuteAIActions(response.actions);
+          if (successCount > 0) {
+            response.actions.forEach((act: AIActionCommand) => {
+              successfulChanges.push(act.description || `Thực hiện ${act.type}`);
+            });
+          }
+        } else {
+          // Fallback: single-action path (may have stale-state for 2+ add actions)
+          response.actions.forEach((act: AIActionCommand) => {
+            const res = onExecuteAIAction(act);
+            if (res !== false) {
+              successfulChanges.push(act.description || `Thực hiện ${act.type}`);
+            }
+          });
+        }
+
+        if (successfulChanges.length > 0) {
+          executedSummary = {
+            changes: successfulChanges,
+          };
+        }
       }
 
       const assistantMsg: ChatMessage = {
@@ -208,52 +249,52 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
   };
 
   return (
-    <aside className="w-84 sm:w-92 h-full max-h-[calc(100vh-130px)] bg-white/95 backdrop-blur-md rounded-3xl border border-stone-200/90 shadow-2xl flex flex-col overflow-hidden text-stone-800 select-none animate-in fade-in duration-200">
+    <aside className="w-full h-full max-h-[calc(100vh-130px)] bg-white/95 backdrop-blur-md rounded-2xl border border-stone-200/90 shadow-2xl flex flex-col overflow-hidden text-stone-800 select-none animate-in fade-in duration-200">
       {/* 1. HEADER (AI Design Copilot) */}
-      <div className="px-4 py-3.5 border-b border-stone-100 flex items-center justify-between shrink-0 bg-white">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center text-lg shadow-sm">
+      <div className="px-3.5 py-2.5 border-b border-stone-100 flex items-center justify-between gap-2 shrink-0 bg-white">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center text-base shadow-sm shrink-0">
             🪷
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-stone-900 tracking-tight leading-none">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-xs font-bold text-stone-900 tracking-tight leading-none truncate">
               AI Feng Shui
             </h3>
-            <p className="text-[11px] text-stone-500 mt-1 leading-none font-medium">
+            <p className="text-[10px] text-stone-500 mt-0.5 leading-none font-medium truncate">
               Trợ lý thiết kế phòng ngủ
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0 pr-1">
           {/* Gemini AI Status Badge & Key Button */}
           {isGeminiOnline ? (
             <button
               onClick={() => setIsApiKeyModalOpen(true)}
-              className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 text-[10px] font-bold flex items-center gap-1 hover:bg-emerald-100 transition-colors shadow-2xs"
+              className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 text-[10px] font-bold flex items-center gap-1 hover:bg-emerald-100 transition-colors shadow-2xs whitespace-nowrap shrink-0"
               title="Gemini 3.8 Flash đang online và sẵn sàng trò chuyện tự do. Nhấn để xem/đổi API Key."
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
               <span>Gemini 3.8</span>
             </button>
           ) : (
             <button
               onClick={() => setIsApiKeyModalOpen(true)}
-              className="px-2 py-0.5 rounded-full bg-amber-50 border border-amber-300 text-amber-800 text-[10px] font-bold flex items-center gap-1 hover:bg-amber-100 transition-colors shadow-2xs"
+              className="px-2 py-0.5 rounded-full bg-amber-50 border border-amber-300 text-amber-800 text-[10px] font-bold flex items-center gap-1 hover:bg-amber-100 transition-colors shadow-2xs whitespace-nowrap shrink-0"
               title="Chưa kích hoạt Gemini (đang chạy Offline). Nhấn để nhập API Key và mở khóa trò chuyện tự do!"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
               <span>Offline</span>
             </button>
           )}
 
-          <div className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold">
+          <div className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold whitespace-nowrap shrink-0">
             Live 3D
           </div>
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1.5 rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+              className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors shrink-0"
               title="Đóng panel"
             >
               ✕
@@ -263,7 +304,7 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
       </div>
 
       {/* 2. QUICK FEATURE BADGES (Scrollable horizontal or grid) */}
-      <div className="px-3 py-2 bg-stone-50/70 border-b border-stone-100 flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0">
+      <div className="px-3 py-2 bg-stone-50/70 border-b border-stone-100 flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0 pr-4">
         {QUICK_FEATURE_BADGES.map((b, idx) => (
           <button
             key={idx}
@@ -273,6 +314,8 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
             <span>{b.label}</span>
           </button>
         ))}
+        {/* Fader/spacer so last chip is fully visible */}
+        <span className="shrink-0 w-2" />
       </div>
 
       {/* 3. MESSAGES & DIALOGUE BODY */}
@@ -328,11 +371,10 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
             className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}
           >
             <div
-              className={`max-w-[92%] p-3.5 rounded-2xl leading-relaxed ${
-                m.role === 'user'
+              className={`max-w-[92%] p-3.5 rounded-2xl leading-relaxed ${m.role === 'user'
                   ? 'bg-stone-900 text-white rounded-br-xs font-medium shadow-xs'
                   : 'bg-stone-50/90 border border-stone-200/90 text-stone-800 rounded-bl-xs shadow-2xs'
-              }`}
+                }`}
             >
               <div className="whitespace-pre-line text-xs">{m.content}</div>
 
@@ -361,11 +403,10 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
                   <div className="flex items-center gap-2 pt-1">
                     <button
                       onClick={() => onPreviewProposal(null, m.proposal!.adjustments)}
-                      className={`flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-2xs active:scale-95 ${
-                        isPreviewingProposal
+                      className={`flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-2xs active:scale-95 ${isPreviewingProposal
                           ? 'bg-emerald-600 text-white'
                           : 'bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-300/80'
-                      }`}
+                        }`}
                     >
                       <span>👁</span>
                       <span>{isPreviewingProposal ? 'Đang xem trước' : 'Xem trước'}</span>
@@ -406,40 +447,23 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
           </div>
         ))}
 
-        {/* STATE 1: AI ĐANG PHÂN TÍCH (Animated Checklist) */}
+        {/* DYNAMIC TASK-BASED LOADING STATE */}
         {isLoading && (
-          <div className="p-3.5 bg-stone-50/90 border border-stone-200/90 rounded-2xl space-y-2 text-stone-800 animate-in fade-in">
-            <div className="flex items-center gap-2 text-xs font-bold text-purple-900">
-              <span className="w-2.5 h-2.5 rounded-full bg-purple-600 animate-ping" />
-              <span>✨ AI đang phân tích căn phòng...</span>
+          <div className="p-3 bg-stone-50/90 border border-stone-200/90 rounded-2xl space-y-1.5 text-stone-800 animate-in fade-in">
+            <div className="flex items-center gap-2 text-xs font-bold text-emerald-900">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping shrink-0" />
+              <span>{currentLoadingMessage}</span>
             </div>
-            <div className="pl-4 space-y-1 text-[11px] text-stone-600">
-              <p className="text-[10px] font-semibold text-stone-400">Đang kiểm tra:</p>
-              <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
-                <span>✓</span>
-                <span>Hướng phòng Bát Trạch</span>
+            {loadingDetails.length > 0 && (
+              <div className="pl-4 space-y-0.5 text-[11px] text-stone-600">
+                {loadingDetails.map((detail, idx) => (
+                  <div key={idx} className="flex items-center gap-1.5 text-emerald-700 font-medium">
+                    <span>✓</span>
+                    <span>{detail}</span>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
-                <span>✓</span>
-                <span>Vị trí & hướng đầu giường</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
-                <span>✓</span>
-                <span>Vị trí bàn học & đón sáng</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
-                <span>✓</span>
-                <span>Vị trí gương soi</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
-                <span>✓</span>
-                <span>Khoảng cách cửa & lối lưu thông</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
-                <span>✓</span>
-                <span>Quan hệ phong thủy với WC</span>
-              </div>
-            </div>
+            )}
           </div>
         )}
       </div>

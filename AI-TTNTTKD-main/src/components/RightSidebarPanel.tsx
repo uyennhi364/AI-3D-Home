@@ -19,7 +19,8 @@ interface RightSidebarPanelProps {
   onPreviewProposal: (proposal: ProposedAdjustment | null, adjustments?: ProposedAdjustment[]) => void;
   onApplyProposal: (proposal: ProposedAdjustment) => void;
   onApplyMultipleAdjustments: (proposals: ProposedAdjustment[]) => void;
-  onExecuteAIAction?: (action: AIActionCommand) => void;
+  onExecuteAIAction?: (action: AIActionCommand) => boolean | void;
+  onExecuteAIActions?: (actions: any[]) => { successCount: number; failCount: number };
   onOpenOptimizationModal?: (proposal: LayoutOptimizationProposal) => void;
   isPreviewingProposal: boolean;
   externalTriggerPrompt?: string | null;
@@ -38,6 +39,7 @@ export const RightSidebarPanel: React.FC<RightSidebarPanelProps> = ({
   onApplyProposal,
   onApplyMultipleAdjustments,
   onExecuteAIAction = () => {},
+  onExecuteAIActions,
   onOpenOptimizationModal,
   isPreviewingProposal,
   externalTriggerPrompt,
@@ -100,12 +102,12 @@ export const RightSidebarPanel: React.FC<RightSidebarPanelProps> = ({
   };
 
   return (
-    <aside className="w-[360px] h-[calc(100vh-80px)] max-h-[820px] bg-white rounded-2xl shadow-2xl border border-stone-200/80 p-3.5 flex flex-col gap-2.5 select-none text-stone-900 pointer-events-auto transition-all duration-200 overflow-hidden">
+    <aside className="w-[410px] h-[calc(100vh-80px)] max-h-[820px] bg-white rounded-2xl shadow-2xl border border-stone-200/80 p-3 flex flex-col gap-2.5 select-none text-stone-900 pointer-events-auto transition-all duration-200 overflow-hidden">
       {/* 1. Header: Trợ lý Phong Thủy + Tab Switcher (Phân tích / AI Hỗ trợ) */}
-      <div className="flex items-center justify-between pb-1.5 border-b border-stone-100 shrink-0">
+      <div className="flex items-center justify-between pb-1.5 border-b border-stone-100 shrink-0 gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-7 h-7 rounded-lg bg-emerald-50 text-[#00705a] flex items-center justify-center text-sm font-bold shadow-2xs border border-emerald-200/80 shrink-0">
-            <svg className="w-4.5 h-4.5 text-[#00705a]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg className="w-4 h-4 text-[#00705a]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="9" />
               <path d="M12 3v18" />
               <path d="M3 12h18" />
@@ -113,21 +115,21 @@ export const RightSidebarPanel: React.FC<RightSidebarPanelProps> = ({
               <path d="m18.4 5.6-12.8 12.8" />
             </svg>
           </div>
-          <div>
-            <h2 className="text-sm font-bold text-stone-900 tracking-tight leading-none">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-stone-900 tracking-tight leading-none truncate">
               Trợ lý Phong Thủy
             </h2>
-            <p className="text-[10px] text-stone-500 mt-0.5 leading-none">
-              Phân tích và tối ưu phòng ngủ của bạn
+            <p className="text-[10px] text-stone-500 mt-0.5 leading-none truncate">
+              Phân tích và tối ưu phòng ngủ
             </p>
           </div>
         </div>
 
         {/* Tab Switcher: Phân tích vs Trò chuyện AI */}
-        <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-full border border-stone-200/80">
+        <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-full border border-stone-200/80 shrink-0">
           <button
             onClick={() => setActiveTab('analysis')}
-            className={`px-2 py-0.5 rounded-full text-[11px] font-bold transition-all ${
+            className={`px-2 py-0.5 rounded-full text-[11px] font-bold transition-all whitespace-nowrap shrink-0 ${
               activeTab === 'analysis'
                 ? 'bg-white text-stone-900 shadow-2xs'
                 : 'text-stone-500 hover:text-stone-900'
@@ -137,7 +139,7 @@ export const RightSidebarPanel: React.FC<RightSidebarPanelProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('ai_chat')}
-            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold transition-all flex items-center gap-1 ${
+            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold transition-all flex items-center gap-1 whitespace-nowrap shrink-0 ${
               activeTab === 'ai_chat'
                 ? 'bg-[#00705a] text-white shadow-2xs'
                 : 'text-stone-600 hover:text-stone-900'
@@ -161,7 +163,7 @@ export const RightSidebarPanel: React.FC<RightSidebarPanelProps> = ({
 
       {/* 2. Content: Analysis View OR AI Chat View */}
       {activeTab === 'ai_chat' ? (
-        <div className="flex-1 h-full min-h-0 overflow-hidden flex flex-col">
+        <div className="flex-1 h-full min-h-0 overflow-hidden flex flex-col -mx-3 -mb-3">
           <AIChatConsultant
             userProfile={userProfile}
             roomConfig={roomConfig}
@@ -172,6 +174,7 @@ export const RightSidebarPanel: React.FC<RightSidebarPanelProps> = ({
             onApplyProposal={onApplyProposal}
             onApplyMultipleAdjustments={onApplyMultipleAdjustments}
             onExecuteAIAction={onExecuteAIAction}
+            onExecuteAIActions={onExecuteAIActions}
             onOpenOptimizationModal={onOpenOptimizationModal}
             isPreviewingProposal={isPreviewingProposal}
             externalTriggerPrompt={activeExternalPrompt}
