@@ -7,6 +7,7 @@ import {
   ProposedAdjustment,
   AIActionCommand,
   LayoutOptimizationProposal,
+  StructuredActionHistoryEntry,
 } from '../types/fengshui';
 import { AIChatConsultant } from './AIChatConsultant';
 
@@ -20,7 +21,11 @@ interface RightSidebarPanelProps {
   onApplyProposal: (proposal: ProposedAdjustment) => void;
   onApplyMultipleAdjustments: (proposals: ProposedAdjustment[]) => void;
   onExecuteAIAction?: (action: AIActionCommand) => boolean | void;
-  onExecuteAIActions?: (actions: any[]) => { successCount: number; failCount: number };
+  onExecuteAIActions?: (actions: any[]) => {
+    successCount: number;
+    failCount: number;
+    executedEntries?: StructuredActionHistoryEntry[];
+  };
   onOpenOptimizationModal?: (proposal: LayoutOptimizationProposal) => void;
   isPreviewingProposal: boolean;
   externalTriggerPrompt?: string | null;

@@ -8,7 +8,9 @@ import {
   RoomObject,
   UserFengShuiProfile,
 } from '../types/fengshui';
-import { generateFengShuiConsultation, type ChatHistoryMessage } from '../engine/geminiFengShuiAI';
+import type { StructuredActionHistoryEntry } from '../types/fengshui';
+import { generateFengShuiConsultation } from '../engine/geminiFengShuiAI';
+import type { ChatHistoryMessage } from '../engine/geminiFengShuiAI';
 import { parseIntent, buildSceneState } from '../engine/sceneIntentParser';
 import { executeSceneCommand } from '../engine/sceneCommandExecutor';
 import { SceneCommand, ClarifyCommand, AIIntentResult } from '../engine/sceneCommandTypes';
@@ -41,7 +43,11 @@ interface AIChatConsultantProps {
   onApplyProposal: (proposal: ProposedAdjustment) => void;
   onApplyMultipleAdjustments: (adjustments: ProposedAdjustment[]) => void;
   onExecuteAIAction: (action: AIActionCommand) => boolean | void;
-  onExecuteAIActions?: (actions: any[]) => { successCount: number; failCount: number };
+  onExecuteAIActions?: (actions: any[]) => {
+    successCount: number;
+    failCount: number;
+    executedEntries?: StructuredActionHistoryEntry[];
+  };
   onOpenOptimizationModal?: (proposal: LayoutOptimizationProposal) => void;
   isPreviewingProposal: boolean;
   externalTriggerPrompt?: string | null;
@@ -77,6 +83,7 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
   onClose,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [actionHistory, setActionHistory] = useState<StructuredActionHistoryEntry[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGeminiOnline, setIsGeminiOnline] = useState<boolean>(false);
@@ -168,7 +175,8 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
         objects,
         evaluation,
         selectedObjectId,
-        chatHistory
+        chatHistory,
+        actionHistory
       );
 
       if (response.isGeminiOnline !== undefined) {
@@ -182,7 +190,10 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
 
         if (onExecuteAIActions) {
           // Batch path: all actions applied in one setObjects call — correct for multi-item adds
-          const { successCount } = onExecuteAIActions(response.actions);
+          const { successCount, executedEntries } = onExecuteAIActions(response.actions);
+          if (executedEntries && executedEntries.length > 0) {
+            setActionHistory((prev) => [...prev, ...executedEntries]);
+          }
           if (successCount > 0) {
             response.actions.forEach((act: AIActionCommand) => {
               successfulChanges.push(act.description || `Thực hiện ${act.type}`);

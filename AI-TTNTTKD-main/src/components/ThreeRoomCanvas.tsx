@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 // @ts-ignore
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -121,6 +121,97 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
   const selectedObject = objects.find((o) => o.id === selectedObjectId);
   const selectedEval = evaluation.items.find((i) => i.objectId === selectedObjectId);
 
+  // Floating Context Menu state & ref
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  // Helper functions for Context Menu
+  const getObjectIcon = (type: string) => {
+    switch (type) {
+      case 'bed': return '🛏';
+      case 'wardrobe': return '🚪';
+      case 'desk': return '🪑';
+      case 'plant': return '🪴';
+      case 'nightstand': return '🪞';
+      case 'mirror': return '🪞';
+      case 'rug': return '🧶';
+      case 'wc': return '🚿';
+      case 'door': return '🚪';
+      case 'window': return '🪟';
+      default: return '📦';
+    }
+  };
+
+  const getOrientationLabel = (rotYRad: number) => {
+    const deg = Math.round(((rotYRad * 180) / Math.PI) % 360);
+    const normDeg = (deg + 360) % 360;
+    if (normDeg >= 337.5 || normDeg < 22.5) return 'Bắc (0°)';
+    if (normDeg >= 22.5 && normDeg < 67.5) return 'Đông Bắc (45°)';
+    if (normDeg >= 67.5 && normDeg < 112.5) return 'Đông (90°)';
+    if (normDeg >= 112.5 && normDeg < 157.5) return 'Đông Nam (135°)';
+    if (normDeg >= 157.5 && normDeg < 202.5) return 'Nam (180°)';
+    if (normDeg >= 202.5 && normDeg < 247.5) return 'Tây Nam (225°)';
+    if (normDeg >= 247.5 && normDeg < 292.5) return 'Tây (270°)';
+    return 'Tây Bắc (315°)';
+  };
+
+  // Synchronize Context Menu Screen Position directly onto DOM element
+  const updateMenuPosition = useCallback(() => {
+    if (!selectedObjectId || !mountRef.current || !cameraRef.current) {
+      if (contextMenuRef.current) contextMenuRef.current.style.display = 'none';
+      return;
+    }
+    const mesh = objectMeshesRef.current.get(selectedObjectId);
+    if (!mesh || !contextMenuRef.current) {
+      if (contextMenuRef.current) contextMenuRef.current.style.display = 'none';
+      return;
+    }
+
+    const rect = mountRef.current.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    const targetObj = objects.find((o) => o.id === selectedObjectId);
+    const objHeight = targetObj?.dimensions?.height || 0.8;
+
+    const worldPos = new THREE.Vector3();
+    mesh.getWorldPosition(worldPos);
+    worldPos.y += objHeight + 0.25;
+
+    const screenPos = worldPos.clone().project(cameraRef.current);
+
+    contextMenuRef.current.style.display = 'block';
+
+    const menuWidth = 310;
+    const menuHeight = 280;
+
+    let px = (screenPos.x * 0.5 + 0.5) * rect.width;
+    let py = (-(screenPos.y * 0.5) + 0.5) * rect.height;
+
+    // Behind camera fallback
+    if (screenPos.z > 1) {
+      px = rect.width / 2;
+      py = 90 + menuHeight;
+    }
+
+    // Viewport boundaries: clamp so it never clips outside 3D canvas
+    const minX = Math.min(rect.width / 2, Math.max(menuWidth / 2 + 15, 360));
+    const maxX = Math.max(minX + 20, rect.width - 430);
+    const minY = menuHeight + 65;
+    const maxY = Math.max(minY + 20, rect.height - 110);
+
+    const clampedX = Math.max(minX, Math.min(maxX, px));
+    const clampedY = Math.max(minY, Math.min(maxY, py));
+
+    contextMenuRef.current.style.left = `${clampedX}px`;
+    contextMenuRef.current.style.top = `${clampedY}px`;
+  }, [selectedObjectId, objects]);
+
+  // Reset delete confirmation and update position when selection changes
+  useEffect(() => {
+    setDeleteConfirmOpen(false);
+    updateMenuPosition();
+  }, [selectedObjectId, updateMenuPosition]);
+
 
   // Initialize Scene, Renderer, Lights, OrbitControls & TransformControls
   useEffect(() => {
@@ -191,9 +282,14 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
       window.dispatchEvent(new CustomEvent('three-camera-rotation', { detail: { angle: deg } }));
     };
 
-    controls.addEventListener('change', dispatchCameraAngle);
+    const handleControlsChange = () => {
+      dispatchCameraAngle();
+      updateMenuPosition();
+    };
+
+    controls.addEventListener('change', handleControlsChange);
     // Initial dispatch after mount
-    setTimeout(dispatchCameraAngle, 50);
+    setTimeout(handleControlsChange, 50);
 
     const handleCameraReset = () => {
       if (!cameraRef.current || !controlsRef.current) return;
@@ -377,6 +473,7 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
       cameraRef.current.aspect = w / h;
       cameraRef.current.updateProjectionMatrix();
       rendererRef.current.setSize(w, h);
+      updateMenuPosition();
     };
 
     window.addEventListener('resize', handleResize);
@@ -388,7 +485,7 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', handleResize);
-      controls.removeEventListener('change', dispatchCameraAngle);
+      controls.removeEventListener('change', handleControlsChange);
       window.removeEventListener('three-camera-reset', handleCameraReset);
       ro.disconnect();
       tControls.dispose();
@@ -1108,6 +1205,7 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
         const snappedZ = Math.round(clampedZ * 20) / 20;
 
         onUpdateObjectPosition(draggedObjIdRef.current, snappedX, snappedZ);
+        updateMenuPosition();
       }
       return;
     }
@@ -1284,39 +1382,218 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
         </div>
       )}
 
-      {/* Floating In-Scene Object Action Pill Toolbar on Selected Object */}
+      {/* 3D Direct Object Context Menu */}
       {selectedObject && (
-        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-20 bg-[#1E2124]/95 backdrop-blur-md border border-stone-700/80 text-white px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2.5 text-xs animate-in fade-in slide-in-from-bottom-2 select-none pointer-events-auto">
-          <button
-            onClick={() => onChangeTransformMode('translate')}
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
-              transformMode === 'translate' ? 'bg-[#00705a] text-white shadow-xs' : 'text-stone-300 hover:text-white'
-            }`}
-            title="Di chuyển"
-          >
-            ✥
-          </button>
-          <button
-            onClick={() => onRotateObject(selectedObject.id, Math.PI / 2)}
-            className="w-7 h-7 rounded-full hover:bg-stone-700 text-stone-300 hover:text-white flex items-center justify-center transition-colors"
-            title="Xoay 90°"
-          >
-            ↻
-          </button>
-          <button
-            onClick={() => onDeleteObject(selectedObject.id)}
-            className="w-7 h-7 rounded-full hover:bg-rose-900/80 text-rose-300 flex items-center justify-center transition-colors"
-            title="Xóa đồ vật"
-          >
-            🗑
-          </button>
-          <button
-            onClick={() => onDuplicateObject(selectedObject.id)}
-            className="w-7 h-7 rounded-full hover:bg-stone-700 text-stone-300 hover:text-white flex items-center justify-center transition-colors"
-            title="Nhân bản đồ vật"
-          >
-            ⧉
-          </button>
+        <div
+          ref={contextMenuRef}
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -100%)',
+            display: 'none',
+          }}
+          className="z-30 pointer-events-auto select-none transition-transform duration-75"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="w-[310px] bg-[#1A1D20]/95 backdrop-blur-xl border border-stone-700/90 rounded-2xl shadow-2xl p-3 text-stone-200 flex flex-col gap-2.5 animate-in fade-in zoom-in-95 duration-150">
+            {/* 1. Header: Name, Dimensions, Orientation, Close Button */}
+            <div className="flex items-center justify-between pb-2 border-b border-stone-800">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 flex items-center justify-center text-sm font-bold shrink-0 shadow-xs">
+                  {getObjectIcon(selectedObject.type)}
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate leading-tight">
+                    {selectedObject.name}
+                  </h4>
+                  <p className="text-[10px] text-stone-400 leading-none mt-1 font-mono">
+                    {selectedObject.dimensions.width}m × {selectedObject.dimensions.length}m • {getOrientationLabel(selectedObject.rotation.y)}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onSelectObject(null)}
+                className="w-6 h-6 rounded-full hover:bg-stone-800 text-stone-400 hover:text-white flex items-center justify-center text-xs transition-colors shrink-0"
+                title="Đóng bảng điều khiển (Bỏ chọn)"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 2. Primary Modes: Di chuyển & Vòng xoay 3D */}
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => onChangeTransformMode('translate')}
+                className={`py-1.5 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                  transformMode === 'translate'
+                    ? 'bg-[#00705a] text-white shadow-xs border border-emerald-500/60'
+                    : 'bg-stone-800/80 hover:bg-stone-700 text-stone-300 border border-stone-700/50'
+                }`}
+                title="Bật chế độ kéo di chuyển trên mặt sàn"
+              >
+                <span>✥</span>
+                <span>Kéo di chuyển</span>
+              </button>
+
+              <button
+                onClick={() => onChangeTransformMode('rotate')}
+                className={`py-1.5 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                  transformMode === 'rotate'
+                    ? 'bg-[#00705a] text-white shadow-xs border border-emerald-500/60'
+                    : 'bg-stone-800/80 hover:bg-stone-700 text-stone-300 border border-stone-700/50'
+                }`}
+                title="Bật vòng xoay 3D trực tiếp (Gizmo)"
+              >
+                <span>↻</span>
+                <span>Vòng xoay 3D</span>
+              </button>
+            </div>
+
+            {/* 3. Fast Rotation Steps (90° & 15°) */}
+            <div className="p-2 bg-stone-900/70 rounded-xl border border-stone-800/80 flex flex-col gap-1.5">
+              <div className="flex items-center justify-between text-[10px] text-stone-400 font-medium px-0.5">
+                <span>Xoay góc chính xác:</span>
+                <span className="font-mono text-emerald-400 font-semibold">
+                  {Math.round(((selectedObject.rotation.y * 180) / Math.PI) % 360)}°
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-1">
+                <button
+                  onClick={() => onRotateObject(selectedObject.id, -Math.PI / 2)}
+                  className="py-1 px-1 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg text-[11px] font-semibold transition-colors flex items-center justify-center gap-0.5"
+                  title="Xoay ngược chiều 90°"
+                >
+                  <span>↺</span>
+                  <span>-90°</span>
+                </button>
+                <button
+                  onClick={() => onRotateObject(selectedObject.id, -Math.PI / 12)}
+                  className="py-1 px-1 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg text-[11px] font-semibold transition-colors flex items-center justify-center gap-0.5"
+                  title="Xoay ngược chiều 15°"
+                >
+                  <span>↺</span>
+                  <span>-15°</span>
+                </button>
+                <button
+                  onClick={() => onRotateObject(selectedObject.id, Math.PI / 12)}
+                  className="py-1 px-1 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg text-[11px] font-semibold transition-colors flex items-center justify-center gap-0.5"
+                  title="Xoay cùng chiều 15°"
+                >
+                  <span>+15°</span>
+                  <span>↻</span>
+                </button>
+                <button
+                  onClick={() => onRotateObject(selectedObject.id, Math.PI / 2)}
+                  className="py-1 px-1 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg text-[11px] font-semibold transition-colors flex items-center justify-center gap-0.5"
+                  title="Xoay cùng chiều 90°"
+                >
+                  <span>+90°</span>
+                  <span>↻</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 4. Fine position nudging */}
+            <div className="p-2 bg-stone-900/70 rounded-xl border border-stone-800/80 flex flex-col gap-1.5">
+              <div className="flex items-center justify-between text-[10px] text-stone-400 font-medium px-0.5">
+                <span>Dịch chuyển tinh chỉnh (0.15m):</span>
+                <span className="font-mono text-stone-400">
+                  X:{selectedObject.position.x.toFixed(2)} Z:{selectedObject.position.z.toFixed(2)}
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-1">
+                <button
+                  onClick={() => {
+                    onUpdateObjectPosition(selectedObject.id, selectedObject.position.x - 0.15, selectedObject.position.z);
+                    updateMenuPosition();
+                  }}
+                  className="py-1 px-1 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg text-[11px] font-medium transition-colors flex items-center justify-center gap-0.5"
+                  title="Dịch sang Tây / Trái 15cm"
+                >
+                  ← Trái
+                </button>
+                <button
+                  onClick={() => {
+                    onUpdateObjectPosition(selectedObject.id, selectedObject.position.x + 0.15, selectedObject.position.z);
+                    updateMenuPosition();
+                  }}
+                  className="py-1 px-1 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg text-[11px] font-medium transition-colors flex items-center justify-center gap-0.5"
+                  title="Dịch sang Đông / Phải 15cm"
+                >
+                  Phải →
+                </button>
+                <button
+                  onClick={() => {
+                    onUpdateObjectPosition(selectedObject.id, selectedObject.position.x, selectedObject.position.z - 0.15);
+                    updateMenuPosition();
+                  }}
+                  className="py-1 px-1 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg text-[11px] font-medium transition-colors flex items-center justify-center gap-0.5"
+                  title="Dịch lên Bắc 15cm"
+                >
+                  ↑ Bắc
+                </button>
+                <button
+                  onClick={() => {
+                    onUpdateObjectPosition(selectedObject.id, selectedObject.position.x, selectedObject.position.z + 0.15);
+                    updateMenuPosition();
+                  }}
+                  className="py-1 px-1 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg text-[11px] font-medium transition-colors flex items-center justify-center gap-0.5"
+                  title="Dịch xuống Nam 15cm"
+                >
+                  ↓ Nam
+                </button>
+              </div>
+            </div>
+
+            {/* 5. Footer: Duplicate & Delete */}
+            <div className="flex items-center gap-1.5 pt-1 border-t border-stone-800">
+              <button
+                onClick={() => onDuplicateObject(selectedObject.id)}
+                className="flex-1 py-1.5 px-2 bg-stone-800/90 hover:bg-stone-700 text-stone-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border border-stone-700/60"
+                title="Nhân bản đồ vật này tại vị trí hợp lệ"
+              >
+                <span>⧉</span>
+                <span>Nhân bản</span>
+              </button>
+
+              {deleteConfirmOpen ? (
+                <div className="flex items-center gap-1 flex-1">
+                  <button
+                    onClick={() => {
+                      onDeleteObject(selectedObject.id);
+                      setDeleteConfirmOpen(false);
+                      onSelectObject(null);
+                    }}
+                    className="flex-1 py-1.5 px-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all animate-pulse flex items-center justify-center gap-1 shadow-xs"
+                    title="Xác nhận xóa vĩnh viễn"
+                  >
+                    <span>✓ Xóa</span>
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirmOpen(false)}
+                    className="py-1.5 px-2 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-xl text-xs font-medium"
+                    title="Hủy xóa"
+                  >
+                    Hủy
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setDeleteConfirmOpen(true)}
+                  className="flex-1 py-1.5 px-2 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/60 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
+                  title="Xóa đồ vật đang chọn khỏi phòng"
+                >
+                  <span>🗑</span>
+                  <span>Xóa đồ vật</span>
+                </button>
+              )}
+            </div>
+
+            {/* Pointer arrow indicator pointing towards object in 3D */}
+            <div className="absolute left-1/2 -bottom-2 -translate-x-1/2 w-0 h-0 border-x-[7px] border-x-transparent border-t-[8px] border-t-[#1A1D20]/95" />
+          </div>
         </div>
       )}
     </div>

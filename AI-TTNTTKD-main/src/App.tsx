@@ -26,7 +26,7 @@ import { UserProfileModal } from './components/UserProfileModal';
 import { LayoutComparisonModal } from './components/LayoutComparisonModal';
 import { AIAnalysisReportModal } from './components/AIAnalysisReportModal';
 import { validateAICommand } from './services/aiCommandHandler';
-import { clampOBBInsideRoom, validatePlacementSafety } from './engine/geometryEngine';
+import { clampOBBInsideRoom, validatePlacementSafety, findSmartPlacement } from './engine/geometryEngine';
 
 // Objects that never take part in floor collision when the user moves them by hand.
 const FREE_MOVE_TYPES: string[] = ['rug', 'painting', 'curtain', 'door', 'window', 'lamp'];
@@ -294,19 +294,41 @@ export default function App() {
     if (!target) return;
 
     pushSnapshot(objects);
+
+    // Try finding smart non-overlapping placement
+    const candidatePlacement = findSmartPlacement(
+      target.type,
+      target.dimensions,
+      objects,
+      roomConfig,
+      { x: target.position.x + 0.6, z: target.position.z + 0.6 }
+    );
+
+    const safePos = candidatePlacement.resolved
+      ? candidatePlacement.safePos
+      : {
+          x: Math.max(-roomConfig.width / 2 + 0.4, Math.min(roomConfig.width / 2 - 0.4, target.position.x + 0.5)),
+          z: Math.max(-roomConfig.length / 2 + 0.4, Math.min(roomConfig.length / 2 - 0.4, target.position.z + 0.5)),
+        };
+
     const newObj: RoomObject = {
       ...target,
-      id: `${target.type}_${Date.now()}`,
+      id: `${target.type}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: `${target.name} (Bản sao)`,
       position: {
-        x: Math.min(roomConfig.width / 2 - 0.4, target.position.x + 0.35),
-        y: target.position.y,
-        z: Math.min(roomConfig.length / 2 - 0.4, target.position.z + 0.35),
+        x: Math.round(safePos.x * 100) / 100,
+        y: target.position.y || 0,
+        z: Math.round(safePos.z * 100) / 100,
+      },
+      rotation: {
+        ...target.rotation,
+        y: candidatePlacement.resolved ? candidatePlacement.rotationY : target.rotation.y,
       },
     };
 
     setObjects((prev) => [...prev, newObj]);
     setSelectedObjectId(newObj.id);
-    showToast(`✓ Đã nhân bản ${target.name}.`);
+    showToast(`✓ Đã nhân bản "${newObj.name}" tại vị trí hợp lệ.`);
   };
 
   // Handler: Add object from library
