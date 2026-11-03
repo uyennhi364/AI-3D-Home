@@ -917,25 +917,27 @@ export default function App() {
           </div>
         </div>
 
-        {/* LEFT COLUMN: Floating Dark Card "Hồ sơ gia chủ" */}
-        <div className="absolute top-3 left-3 z-20">
-          <LeftSidebar
-            userProfile={userProfile}
-            onEditProfile={() => setIsProfileModalOpen(true)}
-            roomDirection={roomConfig.direction}
-          />
-        </div>
+        {/* LEFT COLUMN: Floating Dark Card "Hồ sơ gia chủ" & Room Compass Widget */}
+        <div className="absolute top-3 left-3 bottom-3 z-20 flex flex-col justify-between pointer-events-none w-[280px]">
+          <div className="pointer-events-auto min-h-0 flex flex-col max-h-[calc(100%-120px)] overflow-hidden rounded-2xl shadow-2xl">
+            <LeftSidebar
+              userProfile={userProfile}
+              onEditProfile={() => setIsProfileModalOpen(true)}
+              roomDirection={roomConfig.direction}
+            />
+          </div>
 
-        {/* BOTTOM-LEFT: Room Compass Widget */}
-        <div className="absolute bottom-3 left-3 z-20">
-          <RoomCompassWidget
-            roomDirection={roomConfig.direction}
-            userProfile={userProfile}
-            onChangeRoomDirection={(newDir) => setRoomConfig((prev) => ({ ...prev, direction: newDir }))}
-            onResetCamera={() => {
-              window.dispatchEvent(new CustomEvent('three-camera-reset'));
-            }}
-          />
+          {/* Compass Widget anchored cleanly at bottom-left without collision */}
+          <div className="pointer-events-auto shrink-0 pt-1.5 flex flex-col items-center">
+            <RoomCompassWidget
+              roomDirection={roomConfig.direction}
+              userProfile={userProfile}
+              onChangeRoomDirection={(newDir) => setRoomConfig((prev) => ({ ...prev, direction: newDir }))}
+              onResetCamera={() => {
+                window.dispatchEvent(new CustomEvent('three-camera-reset'));
+              }}
+            />
+          </div>
         </div>
 
         {/* BOTTOM DOCK: Shorter & Cleaner "Thư viện nội thất" */}

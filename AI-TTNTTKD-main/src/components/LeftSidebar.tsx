@@ -29,7 +29,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   }));
 
   return (
-    <aside className="w-[280px] bg-[#16191B]/95 backdrop-blur-md rounded-2xl shadow-2xl border border-stone-800/80 p-3.5 flex flex-col gap-2.5 select-none text-white pointer-events-auto transition-all duration-200">
+    <aside className="w-[280px] max-h-full bg-[#16191B]/95 backdrop-blur-md rounded-2xl shadow-2xl border border-stone-800/80 p-3 flex flex-col gap-2 select-none text-white pointer-events-auto transition-all duration-200 overflow-y-auto scrollbar-thin">
       {/* 1. Header: Hồ sơ gia chủ + Chevron Up */}
       <div className="flex items-center justify-between pb-0.5">
         <h2 className="text-sm font-bold text-white tracking-tight">
@@ -82,7 +82,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           {/* 3. Detailed Specifications List */}
           <div className="flex flex-col divide-y divide-stone-800/80 text-xs">
             {/* Row 1: Năm sinh (Âm lịch) */}
-            <div className="flex items-center justify-between py-1.5">
+            <div className="flex items-center justify-between py-1">
               <div className="flex items-center gap-2 text-stone-400">
                 <svg className="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -96,7 +96,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             </div>
 
             {/* Row 2: Giới tính */}
-            <div className="flex items-center justify-between py-1.5">
+            <div className="flex items-center justify-between py-1">
               <div className="flex items-center gap-2 text-stone-400">
                 <svg className="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -110,7 +110,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             </div>
 
             {/* Row 3: Ngũ hành */}
-            <div className="flex items-center justify-between py-1.5">
+            <div className="flex items-center justify-between py-1">
               <div className="flex items-center gap-2 text-stone-400">
                 <svg className="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
@@ -121,7 +121,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             </div>
 
             {/* Row 4: Cung phi */}
-            <div className="flex items-center justify-between py-1.5">
+            <div className="flex items-center justify-between py-1">
               <div className="flex items-center gap-2 text-stone-400">
                 <svg className="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
@@ -133,7 +133,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             </div>
 
             {/* Row 5: Nhóm mệnh */}
-            <div className="flex items-center justify-between py-1.5">
+            <div className="flex items-center justify-between py-1">
               <div className="flex items-center gap-2 text-stone-400">
                 <svg className="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="3" />
