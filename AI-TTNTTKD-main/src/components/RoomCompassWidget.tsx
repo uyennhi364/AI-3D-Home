@@ -77,7 +77,7 @@ export const RoomCompassWidget: React.FC<RoomCompassWidgetProps> = ({
   };
 
   return (
-    <div className="relative w-[280px] bg-[#16191B]/95 backdrop-blur-md rounded-2xl shadow-2xl border border-stone-800/80 p-2.5 flex items-center justify-between gap-3 select-none pointer-events-auto" ref={dropdownRef}>
+    <div className="relative w-full bg-[#16191B]/95 backdrop-blur-md rounded-2xl shadow-2xl border border-stone-800/80 p-2.5 flex items-center justify-between gap-3 select-none pointer-events-auto" ref={dropdownRef}>
       {/* Dark Architectural Compass Dial */}
       <div
         onClick={handleCompassClick}
@@ -186,7 +186,7 @@ export const RoomCompassWidget: React.FC<RoomCompassWidgetProps> = ({
 
       {/* Floating 8-Direction Selection Popover */}
       {isDropdownOpen && (
-        <div className="absolute bottom-0 left-full ml-3 z-50 w-64 bg-[#1A1D20]/95 backdrop-blur-md border border-stone-700/90 rounded-xl shadow-2xl p-2.5 animate-in fade-in slide-in-from-left-2 text-xs">
+        <div className="absolute bottom-full left-0 mb-2 z-50 w-64 bg-[#1A1D20]/95 backdrop-blur-md border border-stone-700/90 rounded-xl shadow-2xl p-2.5 animate-in fade-in slide-in-from-bottom-2 text-xs">
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-stone-700/60">
             <span className="font-bold text-white text-[11px] tracking-wide">Chọn hướng phòng (Bát Trạch)</span>
             <button

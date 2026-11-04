@@ -900,7 +900,7 @@ export default function App() {
            ------------------------------------------------------------------- */}
         {isLeftPanelOpen && (
           <div className="w-[270px] lg:w-[280px] shrink-0 h-full flex flex-col gap-2.5 overflow-hidden animate-in fade-in slide-in-from-left-4 duration-150">
-            <div className="flex-1 min-h-0 overflow-hidden rounded-2xl shadow-2xl flex flex-col">
+            <div className="flex-1 min-h-0 overflow-auto rounded-2xl shadow-2xl flex flex-col">
               <LeftSidebar
                 userProfile={userProfile}
                 onEditProfile={() => setIsProfileModalOpen(true)}
