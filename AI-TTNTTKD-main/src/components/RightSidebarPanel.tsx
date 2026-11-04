@@ -10,6 +10,7 @@ import {
   StructuredActionHistoryEntry,
 } from '../types/fengshui';
 import { AIChatConsultant } from './AIChatConsultant';
+import { generateOptimizedLayout } from '../engine/layoutOptimizer';
 
 interface RightSidebarPanelProps {
   userProfile: UserFengShuiProfile;
@@ -65,33 +66,12 @@ export const RightSidebarPanel: React.FC<RightSidebarPanelProps> = ({
     }
   }, [externalTriggerPrompt]);
 
-  // Recommended layout adjustments based on the reference mock
-  const sampleAdjustments: ProposedAdjustment[] = [
-    {
-      objectId: 'bed_01',
-      suggestedX: -0.6,
-      suggestedZ: 0.8,
-      suggestedRotationY: Math.PI / 2,
-      estimatedScore: 88,
-      reason: 'Xoay đầu giường 90° về hướng Tây Bắc (Diên Niên)',
-    },
-    {
-      objectId: 'mirror_01',
-      suggestedX: 1.85,
-      suggestedZ: -1.2,
-      suggestedRotationY: -Math.PI / 2,
-      estimatedScore: 88,
-      reason: 'Di chuyển gương sang tường bên phải (tránh đối diện giường)',
-    },
-    {
-      objectId: 'desk_window',
-      suggestedX: -1.4,
-      suggestedZ: 1.4,
-      suggestedRotationY: Math.PI,
-      estimatedScore: 88,
-      reason: 'Đưa bàn học về khu vực Tây Nam (Thiên Y)',
-    },
-  ];
+  // Dynamically compute collision-free layout optimization via Layout Optimizer
+  const optimizationResult = React.useMemo(() => {
+    return generateOptimizedLayout(userProfile, roomConfig, objects, evaluation);
+  }, [userProfile, roomConfig, objects, evaluation]);
+
+  const dynamicAdjustments = optimizationResult.proposal.adjustments;
 
   const handleQuickSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -402,49 +382,64 @@ export const RightSidebarPanel: React.FC<RightSidebarPanelProps> = ({
             <div className="flex items-center justify-between px-3 py-1.5 bg-white rounded-lg border border-stone-200/80 text-center">
               <div>
                 <span className="text-[9px] text-stone-400 block font-medium">Hiện tại</span>
-                <span className="text-sm font-extrabold text-stone-900 leading-none">54</span>
+                <span className="text-sm font-extrabold text-stone-900 leading-none">
+                  {evaluation.overallScore}
+                </span>
                 <span className="text-[9px] text-stone-400 font-medium">/100</span>
               </div>
               <span className="text-sm text-stone-400 font-bold">→</span>
               <div>
                 <span className="text-[9px] text-emerald-700 block font-semibold">Sau tối ưu (dự kiến)</span>
-                <span className="text-sm font-extrabold text-[#00705a] leading-none">88</span>
+                <span className="text-sm font-extrabold text-[#00705a] leading-none">
+                  {optimizationResult.proposal.afterScore}
+                </span>
                 <span className="text-[9px] text-emerald-700 font-medium">/100</span>
               </div>
             </div>
 
-            {/* 5 Bullet points with emerald checkmarks */}
+            {/* Bullet points with emerald checkmarks */}
             <div className="flex flex-col gap-1 text-[10px] text-stone-700 pt-0.5">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[#00705a] font-bold">✓</span>
-                <span>Xoay giường 90° về hướng Tây Bắc (Diên Niên)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[#00705a] font-bold">✓</span>
-                <span>Di chuyển gương sang tường bên</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[#00705a] font-bold">✓</span>
-                <span>Bố trí bàn học về hướng Tây Nam (Thiên Y)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[#00705a] font-bold">✓</span>
-                <span>Tăng yếu tố Thổ và Kim trong trang trí</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[#00705a] font-bold">✓</span>
-                <span>Giữ không gian thoáng, ánh sáng tự nhiên</span>
-              </div>
+              {optimizationResult.proposal.improvements.slice(0, 5).map((imp, idx) => (
+                <div key={idx} className="flex items-center gap-1.5">
+                  <span className="text-[#00705a] font-bold">✓</span>
+                  <span className="truncate">{imp}</span>
+                </div>
+              ))}
             </div>
 
-            {/* Large Primary Action Button */}
-            <button
-              onClick={() => onApplyMultipleAdjustments(sampleAdjustments)}
-              className="mt-1 w-full py-2 bg-[#00705a] hover:bg-[#005c4a] text-white font-bold rounded-lg text-xs transition-all active:scale-98 shadow-sm flex items-center justify-center gap-1.5"
-            >
-              <span>✦</span>
-              <span>Áp dụng đề xuất</span>
-            </button>
+            {/* Action Buttons: Xem trước + Áp dụng */}
+            <div className="flex items-center gap-1.5 mt-1">
+              {dynamicAdjustments.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onPreviewProposal(null, dynamicAdjustments);
+                  }}
+                  className="px-2.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold rounded-lg text-xs transition-all active:scale-98 shadow-xs flex items-center justify-center gap-1 shrink-0 cursor-pointer"
+                  title="Xem trước bóng mờ bố cục trên 3D"
+                >
+                  <span>👁</span>
+                  <span>Xem trước</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  if (dynamicAdjustments.length > 0) {
+                    onApplyMultipleAdjustments(dynamicAdjustments);
+                  }
+                }}
+                disabled={dynamicAdjustments.length === 0}
+                className="flex-1 py-2 bg-[#00705a] hover:bg-[#005c4a] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg text-xs transition-all active:scale-98 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>✦</span>
+                <span>
+                  {dynamicAdjustments.length > 0
+                    ? `Áp dụng đề xuất (${dynamicAdjustments.length})`
+                    : 'Bố cục đã tối ưu'}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       )}

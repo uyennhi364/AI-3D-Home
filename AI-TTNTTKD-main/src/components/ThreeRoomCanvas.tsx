@@ -22,6 +22,12 @@ import {
 } from '../engine/proceduralModels';
 import { DIRECTION_NAMES_VI } from '../engine/batTrach';
 import { getFengShuiCompassTexture } from '../engine/compassTexture';
+import {
+  createOBBFromObject,
+  checkOBBCollision,
+  isOBBInsideRoom,
+  isDoorCorridorBlocked,
+} from '../engine/geometryEngine';
 
 interface ThreeRoomCanvasProps {
   roomConfig: RoomConfig;
@@ -110,6 +116,7 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
 
   // Wall Transparency / Cutaway mode
   const [wallTransparency, setWallTransparency] = useState<number>(0.2); // 0.2 = semi-transparent/cutaway
+  const [hasGhostConflicts, setHasGhostConflicts] = useState<boolean>(false);
 
   // Dragging state for manual pointer drag
   const isDraggingRef = useRef(false);
@@ -1076,6 +1083,7 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
   }, [objects, selectedObjectId, transformMode]);
 
   // Render Proposed Layout Preview Ghost Meshes (Supports single and multiple proposals)
+  // Highlights conflicting/overlapping objects in RED and valid objects in GREEN
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
@@ -1088,6 +1096,10 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
       const activeProposals = previewAdjustments.length > 0
         ? previewAdjustments
         : proposedAdjustment ? [proposedAdjustment] : [];
+
+      let anyConflict = false;
+      const doorObj = objects.find((o) => o.type === 'door');
+      const nonCollidingTypes = ['rug', 'painting', 'curtain', 'door', 'window', 'lamp'];
 
       activeProposals.forEach((adj) => {
         const targetObj = objects.find((o) => o.id === adj.objectId);
@@ -1106,16 +1118,78 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
             },
           };
 
+          // Check if this ghost object has any collision or constraint violation
+          let isConflict = false;
+          if (!nonCollidingTypes.includes(targetObj.type)) {
+            const ghostOBB = createOBBFromObject(
+              { x: adj.suggestedX, z: adj.suggestedZ },
+              targetObj.dimensions,
+              adj.suggestedRotationY,
+              0.02
+            );
+
+            // 1. Check inside room bounds
+            if (!isOBBInsideRoom(ghostOBB, roomConfig, 0.04)) {
+              isConflict = true;
+            }
+
+            // 2. Check door clearance
+            if (!isConflict && isDoorCorridorBlocked(ghostOBB, roomConfig, doorObj)) {
+              isConflict = true;
+            }
+
+            // 3. Check collision with other ghost objects in the proposed layout
+            if (!isConflict) {
+              for (const otherAdj of activeProposals) {
+                if (otherAdj.objectId === adj.objectId) continue;
+                const otherTarget = objects.find((o) => o.id === otherAdj.objectId);
+                if (!otherTarget || nonCollidingTypes.includes(otherTarget.type)) continue;
+                const otherOBB = createOBBFromObject(
+                  { x: otherAdj.suggestedX, z: otherAdj.suggestedZ },
+                  otherTarget.dimensions,
+                  otherAdj.suggestedRotationY,
+                  0.02
+                );
+                if (checkOBBCollision(ghostOBB, otherOBB)) {
+                  isConflict = true;
+                  break;
+                }
+              }
+            }
+
+            // 4. Check collision with unmoved solid objects
+            if (!isConflict) {
+              for (const otherObj of objects) {
+                if (activeProposals.some((a) => a.objectId === otherObj.id)) continue;
+                if (nonCollidingTypes.includes(otherObj.type)) continue;
+                const otherOBB = createOBBFromObject(
+                  otherObj.position,
+                  otherObj.dimensions,
+                  otherObj.rotation.y,
+                  0.02
+                );
+                if (checkOBBCollision(ghostOBB, otherOBB)) {
+                  isConflict = true;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (isConflict) {
+            anyConflict = true;
+          }
+
           const ghostMesh = createProceduralFurniture(ghostObj);
           ghostMesh.traverse((child) => {
             if ((child as THREE.Mesh).isMesh) {
               const m = child as THREE.Mesh;
               m.material = new THREE.MeshStandardMaterial({
-                color: 0x10b981,
-                emissive: 0x059669,
-                emissiveIntensity: 0.45,
+                color: isConflict ? 0xef4444 : 0x10b981,
+                emissive: isConflict ? 0xdc2626 : 0x059669,
+                emissiveIntensity: isConflict ? 0.6 : 0.45,
                 transparent: true,
-                opacity: 0.65,
+                opacity: isConflict ? 0.75 : 0.65,
               });
             }
           });
@@ -1124,8 +1198,12 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
           previewMeshesRef.current.push(ghostMesh);
         }
       });
+
+      setHasGhostConflicts(anyConflict);
+    } else {
+      setHasGhostConflicts(false);
     }
-  }, [isPreviewingProposal, proposedAdjustment, previewAdjustments, objects]);
+  }, [isPreviewingProposal, proposedAdjustment, previewAdjustments, objects, roomConfig]);
 
   // Raycasting & Pointer Selection
   const getPointerPos = (e: React.PointerEvent) => {
@@ -1371,19 +1449,37 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
 
       {/* Ghost Proposal Preview Floating Banner */}
       {isPreviewingProposal && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-emerald-950/90 backdrop-blur-md border border-emerald-500/80 text-white px-4 py-2 rounded-2xl shadow-2xl flex items-center gap-3 text-xs animate-in fade-in slide-in-from-top-2 pointer-events-auto">
+        <div
+          className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 backdrop-blur-md px-4 py-2 rounded-2xl shadow-2xl flex items-center gap-3 text-xs animate-in fade-in slide-in-from-top-2 pointer-events-auto border ${
+            hasGhostConflicts
+              ? 'bg-rose-950/95 border-rose-500/80 text-white'
+              : 'bg-emerald-950/90 border-emerald-500/80 text-white'
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-            <span className="font-bold text-emerald-100">
-              👁 Đang xem trước bố cục AI đề xuất (Bóng xanh)
+            <span
+              className={`w-2.5 h-2.5 rounded-full animate-ping ${
+                hasGhostConflicts ? 'bg-rose-400' : 'bg-emerald-400'
+              }`}
+            />
+            <span className={`font-bold ${hasGhostConflicts ? 'text-rose-200' : 'text-emerald-100'}`}>
+              {hasGhostConflicts
+                ? '⚠ Phát hiện vị trí xung đột / chồng lấn (Đỏ) — Không thể áp dụng'
+                : '✓ Xem trước bố cục AI đề xuất (Hợp lệ - Màu xanh)'}
             </span>
           </div>
-          <div className="h-4 w-px bg-emerald-700" />
+          <div className={`h-4 w-px ${hasGhostConflicts ? 'bg-rose-700' : 'bg-emerald-700'}`} />
           <div className="flex items-center gap-1.5">
             {onApplyPreview && (
               <button
                 onClick={onApplyPreview}
-                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all active:scale-95 shadow-xs flex items-center gap-1"
+                disabled={hasGhostConflicts}
+                className={`px-3 py-1 font-bold rounded-lg text-xs transition-all active:scale-95 shadow-xs flex items-center gap-1 ${
+                  hasGhostConflicts
+                    ? 'bg-rose-900/60 text-rose-300 opacity-60 cursor-not-allowed'
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
+                }`}
+                title={hasGhostConflicts ? 'Không thể áp dụng khi còn vật thể bị chồng lấn (Đỏ)' : 'Áp dụng vào mô hình 3D'}
               >
                 <span>✓</span>
                 <span>Áp dụng vào 3D</span>
@@ -1392,7 +1488,7 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
             {onCancelPreview && (
               <button
                 onClick={onCancelPreview}
-                className="px-2.5 py-1 bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white font-medium rounded-lg text-xs transition-all active:scale-95"
+                className="px-2.5 py-1 bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white font-medium rounded-lg text-xs transition-all active:scale-95 cursor-pointer"
               >
                 Hủy
               </button>

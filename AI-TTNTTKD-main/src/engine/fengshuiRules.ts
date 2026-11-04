@@ -156,10 +156,11 @@ export function evaluateRoomFengShui(
 
   // Room Direction Check
   const roomSector = profile.directionDetails[room.direction];
-  const roomDirectionScore = roomSector.isGood ? 95 : 60;
-  if (!roomSector.isGood) {
+  const roomDirectionScore = roomSector?.isGood ? 95 : 60;
+  if (roomSector && !roomSector.isGood) {
+    const meaningText = roomSector.meaning || (roomSector as any).description || '';
     keyIssues.push(
-      `Hướng phòng (${roomSector.name}) thuộc hướng ${roomSector.name} (${roomSector.meaning.slice(0, 30)}...) - cần chú trọng đặt giường và bàn ở cung Cát để hóa giải.`
+      `Hướng phòng (${roomSector.name}) thuộc hướng ${roomSector.name} (${meaningText.slice(0, 30)}...) - cần chú trọng đặt giường và bàn ở cung Cát để hóa giải.`
     );
   }
 

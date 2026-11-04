@@ -27,7 +27,16 @@ import { LayoutComparisonModal } from './components/LayoutComparisonModal';
 import { AIAnalysisReportModal } from './components/AIAnalysisReportModal';
 import { RoomConfigModal } from './components/RoomConfigModal';
 import { validateAICommand } from './services/aiCommandHandler';
-import { clampOBBInsideRoom, validatePlacementSafety, findSmartPlacement } from './engine/geometryEngine';
+import {
+  clampOBBInsideRoom,
+  validatePlacementSafety,
+  findSmartPlacement,
+  checkOBBCollision,
+  createOBBFromObject,
+  isOBBInsideRoom,
+  isDoorCorridorBlocked,
+} from './engine/geometryEngine';
+import { validateOptimizedLayout } from './engine/layoutOptimizer';
 
 // Objects that never take part in floor collision when the user moves them by hand.
 const FREE_MOVE_TYPES: string[] = ['rug', 'painting', 'curtain', 'door', 'window', 'lamp'];
@@ -646,10 +655,29 @@ export default function App() {
     }
   };
 
-  // Handler: Apply Proposal
+  // Handler: Apply Proposal (single adjustment — always validate before applying)
   const handleApplyProposal = (adj: ProposedAdjustment) => {
+    const target = objects.find((o) => o.id === adj.objectId);
+    if (!target) return;
+
+    // Validate the new position doesn't collide with other objects
+    const safety = validatePlacementSafety(
+      { x: adj.suggestedX, z: adj.suggestedZ },
+      target.dimensions,
+      adj.suggestedRotationY,
+      objects,
+      { width: roomConfig.width, length: roomConfig.length },
+      adj.objectId,
+      manualIgnoreTypes(target.type)
+    );
+
+    if (!safety.valid) {
+      showToast(`⚠ Không thể áp dụng: ${safety.reason || 'Vị trí bị va chạm với đồ vật khác.'}`);
+      return;
+    }
+
     pushSnapshot(objects);
-    const objName = objects.find((o) => o.id === adj.objectId)?.name || 'đồ vật';
+    const objName = target.name;
     setObjects((prev) =>
       prev.map((o) => {
         if (o.id === adj.objectId) {
@@ -667,29 +695,59 @@ export default function App() {
     showToast(`✓ Đã áp dụng vị trí tối ưu cho ${objName}!`);
   };
 
-  // Handler: Apply Multiple Adjustments
+  // Handler: Apply Multiple Adjustments (layout optimizer proposal)
+  // Runs full post-apply collision validation and rolls back on conflict.
   const handleApplyMultipleAdjustments = (adjs: ProposedAdjustment[]) => {
-    pushSnapshot(objects);
-    setObjects((prev) => {
-      let updated = [...prev];
-      adjs.forEach((adj) => {
-        updated = updated.map((o) => {
-          if (o.id === adj.objectId) {
-            return {
-              ...o,
-              position: { ...o.position, x: adj.suggestedX, z: adj.suggestedZ },
-              rotation: { ...o.rotation, y: adj.suggestedRotationY },
-            };
-          }
-          return o;
-        });
-      });
-      return updated;
+    // Build the full proposed layout
+    const proposed: RoomObject[] = objects.map((obj) => {
+      const adj = adjs.find((a) => a.objectId === obj.id);
+      if (!adj) return obj;
+      return {
+        ...obj,
+        position: { ...obj.position, x: adj.suggestedX, z: adj.suggestedZ },
+        rotation: { ...obj.rotation, y: adj.suggestedRotationY },
+      };
     });
+
+    // Run OBB collision check on the full proposed layout
+    const conflicts = validateOptimizedLayout(proposed, { width: roomConfig.width, length: roomConfig.length });
+    if (conflicts.length > 0) {
+      const names = conflicts.map((c) => `"${c.name1}" ↔ "${c.name2}"`).join(', ');
+      showToast(`⚠ Phương án bị từ chối: vẫn còn va chạm giữa ${names}. Layout Engine sẽ cố gắng tìm phương án khác.`);
+      setIsPreviewingProposal(false);
+      setPreviewAdjustments([]);
+      setIsComparisonModalOpen(false);
+      return;
+    }
+
+    // Check boundary containment and door clearance for all proposed objects
+    const door = proposed.find((o) => o.type === 'door');
+    for (const obj of proposed) {
+      if (FREE_MOVE_TYPES.includes(obj.type)) continue;
+      const obb = createOBBFromObject(obj.position, obj.dimensions, obj.rotation.y, 0.02);
+      if (!isOBBInsideRoom(obb, roomConfig, 0.04)) {
+        showToast(`⚠ Không thể áp dụng: Đồ vật "${obj.name}" vượt ra ngoài ranh giới tường.`);
+        setIsPreviewingProposal(false);
+        setPreviewAdjustments([]);
+        setIsComparisonModalOpen(false);
+        return;
+      }
+      if (isDoorCorridorBlocked(obb, roomConfig, door)) {
+        showToast(`⚠ Không thể áp dụng: Đồ vật "${obj.name}" chắn lối mở cửa chính.`);
+        setIsPreviewingProposal(false);
+        setPreviewAdjustments([]);
+        setIsComparisonModalOpen(false);
+        return;
+      }
+    }
+
+    // All clear — apply
+    pushSnapshot(objects);
+    setObjects(proposed);
     setIsPreviewingProposal(false);
     setPreviewAdjustments([]);
     setIsComparisonModalOpen(false);
-    showToast(`✓ Đã áp dụng toàn bộ phương án tối ưu phong thủy!`);
+    showToast(`✓ Đã áp dụng toàn bộ phương án tối ưu phong thủy (${adjs.length} điều chỉnh, không có va chạm)!`);
   };
 
   // Handler: Trigger Deep AI Feng Shui Report
