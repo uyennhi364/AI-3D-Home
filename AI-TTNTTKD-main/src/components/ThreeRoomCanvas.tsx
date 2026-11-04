@@ -1447,51 +1447,6 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
         </div>
       )}
 
-      {/* Ghost Proposal Preview Floating Banner */}
-      {isPreviewingProposal && (
-        <div
-          className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 backdrop-blur-md px-4 py-2 rounded-2xl shadow-2xl flex items-center gap-3 text-xs animate-in fade-in slide-in-from-top-2 pointer-events-auto border ${
-            hasGhostConflicts
-              ? 'bg-rose-950/95 border-rose-500/80 text-white'
-              : 'bg-emerald-950/90 border-emerald-500/80 text-white'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-2.5 h-2.5 rounded-full animate-ping ${
-                hasGhostConflicts ? 'bg-rose-400' : 'bg-emerald-400'
-              }`}
-            />
-            <span className={`font-bold ${hasGhostConflicts ? 'text-rose-200' : 'text-emerald-100'}`}>
-              {hasGhostConflicts
-                ? '⚠ Phát hiện vị trí xung đột / chồng lấn (Đỏ) — Không thể áp dụng'
-                : '✓ Xem trước bố cục AI đề xuất (Hợp lệ - Màu xanh)'}
-            </span>
-          </div>
-          <div className={`h-4 w-px ${hasGhostConflicts ? 'bg-rose-700' : 'bg-emerald-700'}`} />
-          <div className="flex items-center gap-1.5">
-            {onApplyPreview && (
-              <button
-                onClick={onApplyPreview}
-                className="px-3 py-1 font-bold rounded-lg text-xs transition-all active:scale-95 shadow-xs flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
-                title="Áp dụng phương án vào mô hình 3D"
-              >
-                <span>✓</span>
-                <span>Áp dụng vào 3D</span>
-              </button>
-            )}
-            {onCancelPreview && (
-              <button
-                onClick={onCancelPreview}
-                className="px-2.5 py-1 bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white font-medium rounded-lg text-xs transition-all active:scale-95 cursor-pointer"
-              >
-                Hủy
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* 3D In-Scene Compact Delete Button on Selected Object */}
       {selectedObject && (
         <div

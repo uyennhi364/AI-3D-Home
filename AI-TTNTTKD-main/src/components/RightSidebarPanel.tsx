@@ -413,13 +413,21 @@ export const RightSidebarPanel: React.FC<RightSidebarPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    onPreviewProposal(null, dynamicAdjustments);
+                    if (isPreviewingProposal) {
+                      onPreviewProposal(null, []);
+                    } else {
+                      onPreviewProposal(null, dynamicAdjustments);
+                    }
                   }}
-                  className="px-2.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold rounded-lg text-xs transition-all active:scale-98 shadow-xs flex items-center justify-center gap-1 shrink-0 cursor-pointer"
-                  title="Xem trước bóng mờ bố cục trên 3D"
+                  className={`px-2.5 py-2 font-semibold rounded-lg text-xs transition-all active:scale-98 shadow-xs flex items-center justify-center gap-1 shrink-0 cursor-pointer ${
+                    isPreviewingProposal
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200'
+                      : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+                  }`}
+                  title={isPreviewingProposal ? 'Tắt xem trước bóng mờ 3D' : 'Xem trước bóng mờ bố cục trên 3D'}
                 >
-                  <span>👁</span>
-                  <span>Xem trước</span>
+                  <span>{isPreviewingProposal ? '✕' : '👁'}</span>
+                  <span>{isPreviewingProposal ? 'Tắt xem' : 'Xem trước'}</span>
                 </button>
               )}
               <button
