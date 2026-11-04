@@ -709,45 +709,68 @@ export default function App() {
       };
     });
 
-    // Run OBB collision check on the full proposed layout
-    const conflicts = validateOptimizedLayout(proposed, { width: roomConfig.width, length: roomConfig.length });
-    if (conflicts.length > 0) {
+    // Run OBB collision check on the proposed layout, focusing on adjusted objects
+    const adjustedIds = new Set(adjs.map((a) => a.objectId));
+    const allConflicts = validateOptimizedLayout(proposed, { width: roomConfig.width, length: roomConfig.length });
+    const conflicts = allConflicts.filter((c) => adjustedIds.has(c.id1) || adjustedIds.has(c.id2));
+
+    // If any adjustment causes collision, filter it out so safe adjustments can still be applied
+    const safeAdjs = conflicts.length > 0
+      ? adjs.filter((a) => !conflicts.some((c) => c.id1 === a.objectId || c.id2 === a.objectId))
+      : adjs;
+
+    if (safeAdjs.length === 0) {
       const names = conflicts.map((c) => `"${c.name1}" ↔ "${c.name2}"`).join(', ');
-      showToast(`⚠ Phương án bị từ chối: vẫn còn va chạm giữa ${names}. Layout Engine sẽ cố gắng tìm phương án khác.`);
+      showToast(`⚠ Không thể áp dụng do xung đột va chạm giữa ${names}.`);
       setIsPreviewingProposal(false);
       setPreviewAdjustments([]);
       setIsComparisonModalOpen(false);
       return;
     }
 
-    // Check boundary containment and door clearance for all proposed objects
+    // Check boundary containment and door clearance for all adjusted objects
     const door = proposed.find((o) => o.type === 'door');
-    for (const obj of proposed) {
-      if (FREE_MOVE_TYPES.includes(obj.type)) continue;
+    const finalAdjs = safeAdjs.filter((adj) => {
+      const obj = proposed.find((o) => o.id === adj.objectId);
+      if (!obj) return false;
+      if (FREE_MOVE_TYPES.includes(obj.type)) return true;
       const obb = createOBBFromObject(obj.position, obj.dimensions, obj.rotation.y, 0.02);
-      if (!isOBBInsideRoom(obb, roomConfig, 0.04)) {
-        showToast(`⚠ Không thể áp dụng: Đồ vật "${obj.name}" vượt ra ngoài ranh giới tường.`);
-        setIsPreviewingProposal(false);
-        setPreviewAdjustments([]);
-        setIsComparisonModalOpen(false);
-        return;
-      }
-      if (isDoorCorridorBlocked(obb, roomConfig, door)) {
-        showToast(`⚠ Không thể áp dụng: Đồ vật "${obj.name}" chắn lối mở cửa chính.`);
-        setIsPreviewingProposal(false);
-        setPreviewAdjustments([]);
-        setIsComparisonModalOpen(false);
-        return;
-      }
+      if (!isOBBInsideRoom(obb, roomConfig, 0.04)) return false;
+      if (isDoorCorridorBlocked(obb, roomConfig, door)) return false;
+      return true;
+    });
+
+    if (finalAdjs.length === 0) {
+      showToast(`⚠ Các vị trí đề xuất vi phạm ranh giới phòng hoặc chắn cửa.`);
+      setIsPreviewingProposal(false);
+      setPreviewAdjustments([]);
+      setIsComparisonModalOpen(false);
+      return;
     }
+
+    // Re-build clean proposed layout using finalAdjs
+    const finalProposed: RoomObject[] = objects.map((obj) => {
+      const adj = finalAdjs.find((a) => a.objectId === obj.id);
+      if (!adj) return obj;
+      return {
+        ...obj,
+        position: { ...obj.position, x: adj.suggestedX, z: adj.suggestedZ },
+        rotation: { ...obj.rotation, y: adj.suggestedRotationY },
+      };
+    });
 
     // All clear — apply
     pushSnapshot(objects);
-    setObjects(proposed);
+    setObjects(finalProposed);
     setIsPreviewingProposal(false);
     setPreviewAdjustments([]);
     setIsComparisonModalOpen(false);
-    showToast(`✓ Đã áp dụng toàn bộ phương án tối ưu phong thủy (${adjs.length} điều chỉnh, không có va chạm)!`);
+
+    if (conflicts.length > 0) {
+      showToast(`✓ Đã áp dụng ${finalAdjs.length} vị trí tối ưu an toàn (bỏ qua ${adjs.length - finalAdjs.length} vị trí xung đột).`);
+    } else {
+      showToast(`✓ Đã áp dụng toàn bộ phương án tối ưu phong thủy (${finalAdjs.length} đồ vật)!`);
+    }
   };
 
   // Handler: Trigger Deep AI Feng Shui Report

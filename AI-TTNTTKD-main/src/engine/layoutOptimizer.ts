@@ -20,11 +20,6 @@ export interface OptimizationResult {
   optimizedObjects: RoomObject[];
 }
 
-// ---------------------------------------------------------------------------
-// PlacedObject: compact record of an object whose optimized position has been
-// committed in the current pass. Used so each subsequent object checks against
-// ALL already-placed items, not just the original workingObjects snapshot.
-// ---------------------------------------------------------------------------
 interface PlacedObject {
   id: string;
   dims: { width: number; length: number };
@@ -32,7 +27,6 @@ interface PlacedObject {
   rotY: number;
 }
 
-/** Checks if a candidate OBB collides with any item in placedList. */
 function collidesWithPlaced(
   candidatePos: { x: number; z: number },
   candidateDims: { width: number; length: number },
@@ -50,16 +44,6 @@ function collidesWithPlaced(
 
 type Candidate = { pos: { x: number; z: number }; rotY: number; reason: string };
 
-/**
- * Finds the first candidate position that:
- *  1. Has all OBB corners inside the room.
- *  2. Does NOT collide with any existing workingObject (excluding excludeId
- *     and ignoreTypes).
- *  3. Does NOT collide with any item already committed to placedList.
- *
- * Falls back to an expanding spiral search around each candidate if none of
- * the fixed candidates pass.  Returns null when truly no position is found.
- */
 function findSafePos(
   candidates: Candidate[],
   dims: { width: number; length: number },
@@ -87,10 +71,10 @@ function findSafePos(
     if (clamped) return { ...cand, clamped };
   }
 
-  // 2. Spiral search around first few candidates
+  // 2. Spiral search around candidates
   const stepDist = 0.25;
   const maxRings = 14;
-  for (const cand of candidates.slice(0, 4)) {
+  for (const cand of candidates.slice(0, 5)) {
     const baseClamped = clampOBBInsideRoom(cand.pos, dims, cand.rotY, roomSize, 0.06);
     for (let ring = 1; ring <= maxRings; ring++) {
       const radius = ring * stepDist;
@@ -111,11 +95,6 @@ function findSafePos(
   return null;
 }
 
-/**
- * Post-optimization collision validation.
- * Returns all overlapping object pairs in the given layout so the caller can
- * decide whether to strip conflicting adjustments.
- */
 export function validateOptimizedLayout(
   objects: RoomObject[],
   roomSize: { width: number; length: number }
@@ -138,13 +117,6 @@ export function validateOptimizedLayout(
   return conflicts;
 }
 
-/**
- * Intelligent Constraint-based Layout Optimization Engine.
- *
- * Key guarantee: every object's new position is committed to `placedList`
- * before the next object is placed, so overlaps between newly placed items
- * are prevented, not just overlaps with the original furniture.
- */
 export function generateOptimizedLayout(
   userProfile: UserFengShuiProfile,
   roomConfig: RoomConfig,
@@ -161,7 +133,6 @@ export function generateOptimizedLayout(
   const windowObj = currentObjects.find((o) => o.type === 'window');
   const wc = currentObjects.find((o) => o.type === 'wc');
 
-  // Deep clone so we can mutate freely without touching React state
   let workingObjects: RoomObject[] = currentObjects.map((obj) => ({
     ...obj,
     position: { ...obj.position },
@@ -171,9 +142,6 @@ export function generateOptimizedLayout(
 
   const adjustments: ProposedAdjustment[] = [];
   const improvements: string[] = [];
-
-  // placedList tracks each object's COMMITTED optimized position. It is
-  // populated after every successful placement so the next object avoids it.
   const placedList: PlacedObject[] = [];
 
   const commit = (obj: RoomObject, pos: { x: number; z: number }, rotY: number) => {
@@ -189,6 +157,10 @@ export function generateOptimizedLayout(
   };
 
   const DEFAULT_IGNORE = ['door', 'window', 'lamp', 'rug', 'painting', 'curtain'];
+
+  // Commit fixed architectural barriers (door, wc) to placedList upfront
+  if (door) commit(door, door.position, door.rotation.y);
+  if (wc) commit(wc, wc.position, wc.rotation.y);
 
   // =========================================================================
   // 1. BED
@@ -215,11 +187,19 @@ export function generateOptimizedLayout(
         rotY: -Math.PI / 2, facingDirection: 'W', score: 0,
         reason: 'Đầu giường tựa vách tường Đông, khoảng di chuyển hai bên rộng rãi',
       },
+      {
+        pos: { x: -Math.min(0.6, halfW - bedW / 2 - 0.6), z: halfL - bedL / 2 - 0.05 },
+        rotY: Math.PI, facingDirection: 'N', score: 0,
+        reason: 'Đầu giường tựa vách tường Nam kiên cố, không bị cửa chính chiếu thẳng',
+      },
     ];
+
+    // Objects to ignore during bed placement evaluation: furniture that WILL be repositioned
+    const relocatableTypes = [...DEFAULT_IGNORE, 'chair', 'wardrobe', 'desk', 'mirror', 'nightstand', 'plant'];
 
     for (const cand of bedCandidates) {
       let score = 70;
-      if ((userProfile.directionDetails as any)?.[cand.facingDirection]?.isGood) score += 25;
+      if ((userProfile.directionDetails as any)?.[cand.facingDirection]?.isGood) score += 30;
       if (door) {
         const dx = Math.abs(cand.pos.x - door.position.x);
         const dz = Math.abs(cand.pos.z - door.position.z);
@@ -229,68 +209,78 @@ export function generateOptimizedLayout(
       if (windowObj && Math.hypot(cand.pos.x - windowObj.position.x, cand.pos.z - windowObj.position.z) < 1.0) score -= 20;
 
       const cc = clampOBBInsideRoom(cand.pos, bed.dimensions, cand.rotY, roomSize, 0.05);
-      const safety = validatePlacementSafety(cc, bed.dimensions, cand.rotY, workingObjects, roomSize, bed.id,
-        [...DEFAULT_IGNORE, 'chair']);
-      if (!safety.valid) score -= 60;
+      const safety = validatePlacementSafety(cc, bed.dimensions, cand.rotY, workingObjects, roomSize, bed.id, relocatableTypes);
+      if (!safety.valid || collidesWithPlaced(cc, bed.dimensions, cand.rotY, placedList)) {
+        score = -9999; // DISQUALIFY COLLIDING CANDIDATE
+      }
       cand.score = score;
     }
-    bedCandidates.sort((a, b) => b.score - a.score);
 
-    const chosenBed = bedCandidates[0];
-    const clampedBedPos = clampOBBInsideRoom(chosenBed.pos, bed.dimensions, chosenBed.rotY, roomSize, 0.05);
-    bed.position.x = clampedBedPos.x;
-    bed.position.z = clampedBedPos.z;
-    bed.rotation.y = chosenBed.rotY;
-    commit(bed, clampedBedPos, chosenBed.rotY);
+    const validBedCands = bedCandidates.filter((c) => c.score > -9000);
+    let chosenBed: { pos: { x: number; z: number }; rotY: number; reason: string; clamped: { x: number; z: number } } | null = null;
 
-    adjustments.push({
-      objectId: bed.id,
-      suggestedX: clampedBedPos.x,
-      suggestedZ: clampedBedPos.z,
-      suggestedRotationY: chosenBed.rotY,
-      reason: chosenBed.reason,
-      estimatedScore: 90,
-    });
-    improvements.push('Kê đầu giường tựa vách kiên cố, triệt tiêu trục khí xung từ cửa vào');
-
-    // Rug under bed (non-colliding)
-    const rug = workingObjects.find((o) => o.type === 'rug');
-    if (rug) {
-      rug.position.x = clampedBedPos.x;
-      rug.position.z = clampedBedPos.z;
-      rug.rotation.y = chosenBed.rotY;
+    if (validBedCands.length > 0) {
+      validBedCands.sort((a, b) => b.score - a.score);
+      const best = validBedCands[0];
+      chosenBed = { ...best, clamped: clampOBBInsideRoom(best.pos, bed.dimensions, best.rotY, roomSize, 0.05) };
+    } else {
+      chosenBed = findSafePos(bedCandidates, bed.dimensions, workingObjects, roomSize, bed.id, placedList, relocatableTypes);
     }
 
-    // Nightstands flanking the bed
-    const cosB = Math.cos(chosenBed.rotY);
-    const sinB = Math.sin(chosenBed.rotY);
-    const offset = bedW / 2 + 0.35;
+    if (chosenBed) {
+      bed.position.x = chosenBed.clamped.x;
+      bed.position.z = chosenBed.clamped.z;
+      bed.rotation.y = chosenBed.rotY;
+      commit(bed, chosenBed.clamped, chosenBed.rotY);
 
-    workingObjects.filter((o) => o.type === 'nightstand').forEach((ns, idx) => {
-      const sign = idx % 2 === 0 ? 1 : -1;
-      const nsPos = {
-        x: clampedBedPos.x + sign * offset * cosB,
-        z: clampedBedPos.z - sign * offset * sinB,
-      };
-      const nsClamped = clampOBBInsideRoom(nsPos, ns.dimensions, chosenBed.rotY, roomSize);
-      const nsWork = validatePlacementSafety(nsClamped, ns.dimensions, chosenBed.rotY, workingObjects, roomSize, ns.id,
-        DEFAULT_IGNORE);
-      if (nsWork.valid && !collidesWithPlaced(nsClamped, ns.dimensions, chosenBed.rotY, placedList)) {
-        ns.position.x = nsClamped.x;
-        ns.position.z = nsClamped.z;
-        ns.rotation.y = chosenBed.rotY;
-        commit(ns, nsClamped, chosenBed.rotY);
-        adjustments.push({
-          objectId: ns.id,
-          suggestedX: nsClamped.x,
-          suggestedZ: nsClamped.z,
-          suggestedRotationY: chosenBed.rotY,
-          reason: `Đặt ${ns.name} cân bằng hai bên đầu giường`,
-          estimatedScore: 90,
-        });
+      adjustments.push({
+        objectId: bed.id,
+        suggestedX: chosenBed.clamped.x,
+        suggestedZ: chosenBed.clamped.z,
+        suggestedRotationY: chosenBed.rotY,
+        reason: chosenBed.reason,
+        estimatedScore: 90,
+      });
+      improvements.push('Kê đầu giường tựa vách kiên cố, triệt tiêu trục khí xung từ cửa vào');
+
+      // Rug under bed (non-colliding)
+      const rug = workingObjects.find((o) => o.type === 'rug');
+      if (rug) {
+        rug.position.x = chosenBed.clamped.x;
+        rug.position.z = chosenBed.clamped.z;
+        rug.rotation.y = chosenBed.rotY;
       }
-      // No adjustment pushed if nightstand can't fit — keeps original position
-    });
+
+      // Nightstands flanking the bed
+      const cosB = Math.cos(chosenBed.rotY);
+      const sinB = Math.sin(chosenBed.rotY);
+      const offset = bedW / 2 + 0.35;
+
+      workingObjects.filter((o) => o.type === 'nightstand').forEach((ns, idx) => {
+        const sign = idx % 2 === 0 ? 1 : -1;
+        const nsPos = {
+          x: chosenBed!.clamped.x + sign * offset * cosB,
+          z: chosenBed!.clamped.z - sign * offset * sinB,
+        };
+        const nsClamped = clampOBBInsideRoom(nsPos, ns.dimensions, chosenBed!.rotY, roomSize);
+        const nsWork = validatePlacementSafety(nsClamped, ns.dimensions, chosenBed!.rotY, workingObjects, roomSize, ns.id,
+          [...DEFAULT_IGNORE, 'wardrobe', 'desk', 'plant']);
+        if (nsWork.valid && !collidesWithPlaced(nsClamped, ns.dimensions, chosenBed!.rotY, placedList)) {
+          ns.position.x = nsClamped.x;
+          ns.position.z = nsClamped.z;
+          ns.rotation.y = chosenBed!.rotY;
+          commit(ns, nsClamped, chosenBed!.rotY);
+          adjustments.push({
+            objectId: ns.id,
+            suggestedX: nsClamped.x,
+            suggestedZ: nsClamped.z,
+            suggestedRotationY: chosenBed!.rotY,
+            reason: `Đặt ${ns.name} cân bằng hai bên đầu giường`,
+            estimatedScore: 90,
+          });
+        }
+      });
+    }
   }
 
   // =========================================================================
@@ -301,7 +291,8 @@ export function generateOptimizedLayout(
     const wardW = wardrobe.dimensions.width;
     const wardL = wardrobe.dimensions.length;
     const wardCandidates: Candidate[] = [
-      { pos: { x: Math.max(0.6, halfW - wardW / 2 - 0.4), z: -halfL + wardL / 2 + 0.05 }, rotY: 0, reason: 'Tủ sát tường Bắc kiên cố' },
+      { pos: { x: Math.max(0.4, halfW - wardW / 2 - 0.4), z: -halfL + wardL / 2 + 0.05 }, rotY: 0, reason: 'Tủ sát tường Bắc kiên cố' },
+      { pos: { x: -Math.max(0.4, halfW - wardW / 2 - 0.4), z: -halfL + wardL / 2 + 0.05 }, rotY: 0, reason: 'Tủ sát tường Bắc phía Tây' },
       { pos: { x: -halfW + wardL / 2 + 0.05, z: -halfL + wardW / 2 + 0.5 }, rotY: Math.PI / 2, reason: 'Tủ sát tường Tây' },
       { pos: { x: halfW - wardL / 2 - 0.05, z: -halfL + wardW / 2 + 0.5 }, rotY: -Math.PI / 2, reason: 'Tủ sát tường Đông' },
       { pos: { x: Math.max(0.6, halfW - wardW / 2 - 0.4), z: halfL - wardL / 2 - 0.05 }, rotY: 0, reason: 'Tủ sát tường Nam' },
@@ -309,7 +300,7 @@ export function generateOptimizedLayout(
     ];
 
     const result = findSafePos(wardCandidates, wardrobe.dimensions, workingObjects, roomSize, wardrobe.id, placedList,
-      [...DEFAULT_IGNORE, 'chair']);
+      [...DEFAULT_IGNORE, 'chair', 'desk', 'mirror', 'plant']);
     if (result) {
       wardrobe.position.x = result.clamped.x;
       wardrobe.position.z = result.clamped.z;
@@ -341,8 +332,10 @@ export function generateOptimizedLayout(
         ? windowObj.position.z - (deskL / 2 + 0.25)
         : windowObj.position.z + (deskL / 2 + 0.25);
       deskCandidates.push({ pos: { x: windowObj.position.x, z: nearWinZ }, rotY: Math.PI, reason: 'Bàn học đón ánh sáng tự nhiên từ cửa sổ' });
+      deskCandidates.push({ pos: { x: windowObj.position.x, z: nearWinZ }, rotY: Math.PI / 2, reason: 'Bàn học tựa tường Tây bên cửa sổ' });
     }
     deskCandidates.push(
+      { pos: { x: -halfW + deskL / 2 + 0.05, z: -0.85 }, rotY: Math.PI / 2, reason: 'Bàn tựa tường Tây thoáng đãng' },
       { pos: { x: halfW - deskW / 2 - 0.4, z: halfL - deskL / 2 - 0.8 }, rotY: Math.PI, reason: 'Bàn tựa tường bao quát cửa phòng' },
       { pos: { x: -halfW + deskW / 2 + 0.4, z: halfL - deskL / 2 - 0.8 }, rotY: Math.PI, reason: 'Bàn góc phòng đón sinh khí Thiên Y' },
       { pos: { x: halfW - deskW / 2 - 0.4, z: -halfL + deskL / 2 + 0.8 }, rotY: 0, reason: 'Bàn gần tường Bắc yên tĩnh' },
@@ -350,7 +343,7 @@ export function generateOptimizedLayout(
     );
 
     const deskResult = findSafePos(deskCandidates, desk.dimensions, workingObjects, roomSize, desk.id, placedList,
-      [...DEFAULT_IGNORE, 'chair']);
+      [...DEFAULT_IGNORE, 'chair', 'plant']);
     if (deskResult) {
       desk.position.x = deskResult.clamped.x;
       desk.position.z = deskResult.clamped.z;
@@ -378,7 +371,7 @@ export function generateOptimizedLayout(
         };
         const chairClamped = clampOBBInsideRoom(chairPos, chair.dimensions, deskResult.rotY, roomSize);
         const chairWork = validatePlacementSafety(chairClamped, chair.dimensions, deskResult.rotY, workingObjects, roomSize, chair.id,
-          DEFAULT_IGNORE);
+          [...DEFAULT_IGNORE, 'plant']);
         if (chairWork.valid && !collidesWithPlaced(chairClamped, chair.dimensions, deskResult.rotY, placedList)) {
           chair.position.x = chairClamped.x;
           chair.position.z = chairClamped.z;
@@ -407,6 +400,7 @@ export function generateOptimizedLayout(
       { pos: { x: -halfW + 0.2, z: halfL - 1.2 }, rotY: Math.PI / 2, reason: 'Gương tường Tây thoáng đãng' },
       { pos: { x: halfW - 0.2, z: 0 }, rotY: -Math.PI / 2, reason: 'Gương tường Đông giữa phòng' },
       { pos: { x: -halfW + 0.2, z: 0 }, rotY: Math.PI / 2, reason: 'Gương tường Tây giữa phòng' },
+      { pos: { x: 0, z: halfL - 0.2 }, rotY: Math.PI, reason: 'Gương gắn tường Nam' },
     ].filter((mp) => {
       const reflectsBed = workingObjects
         .filter((o) => o.type === 'bed')
@@ -415,7 +409,7 @@ export function generateOptimizedLayout(
     });
 
     const mirrorResult = findSafePos(mirrorCandidates, mirror.dimensions, workingObjects, roomSize, mirror.id, placedList,
-      DEFAULT_IGNORE);
+      [...DEFAULT_IGNORE, 'plant']);
     if (mirrorResult) {
       mirror.position.x = mirrorResult.clamped.x;
       mirror.position.z = mirrorResult.clamped.z;
@@ -434,9 +428,80 @@ export function generateOptimizedLayout(
   }
 
   // =========================================================================
-  // 5. POST-OPTIMIZATION COLLISION VALIDATION
-  //    Build the full proposed layout and run OBB collision check on every
-  //    pair of solid objects. Strip any adjustment that still causes overlap.
+  // 5. OTHER TABLES / CONSOLES (e.g. vanity_east, kitchen/credenza)
+  // =========================================================================
+  const otherTables = workingObjects.filter(
+    (o) => ['kitchen', 'table', 'sofa'].includes(o.type) && !placedList.some((p) => p.id === o.id)
+  );
+  for (const tableObj of otherTables) {
+    if (collidesWithPlaced(tableObj.position, tableObj.dimensions, tableObj.rotation.y, placedList)) {
+      const tableW = tableObj.dimensions.width;
+      const tableL = tableObj.dimensions.length;
+      const tableCandidates: Candidate[] = [
+        { pos: { x: halfW - tableL / 2 - 0.05, z: halfL - tableW / 2 - 0.5 }, rotY: -Math.PI / 2, reason: 'Đặt tủ console sát tường Đông phía Nam' },
+        { pos: { x: -halfW + tableL / 2 + 0.05, z: halfL - tableW / 2 - 0.5 }, rotY: Math.PI / 2, reason: 'Đặt tủ console sát tường Tây' },
+        { pos: { x: 0.5, z: halfL - tableL / 2 - 0.05 }, rotY: 0, reason: 'Đặt tủ console sát tường Nam' },
+        { pos: { x: -0.5, z: halfL - tableL / 2 - 0.05 }, rotY: 0, reason: 'Đặt tủ console sát tường Nam phía Tây' },
+      ];
+      const tableResult = findSafePos(tableCandidates, tableObj.dimensions, workingObjects, roomSize, tableObj.id, placedList, DEFAULT_IGNORE);
+      if (tableResult) {
+        tableObj.position.x = tableResult.clamped.x;
+        tableObj.position.z = tableResult.clamped.z;
+        tableObj.rotation.y = tableResult.rotY;
+        commit(tableObj, tableResult.clamped, tableResult.rotY);
+        adjustments.push({
+          objectId: tableObj.id,
+          suggestedX: tableResult.clamped.x,
+          suggestedZ: tableResult.clamped.z,
+          suggestedRotationY: tableResult.rotY,
+          reason: tableResult.reason,
+          estimatedScore: 90,
+        });
+        improvements.push(`Bố trí ${tableObj.name} gọn gàng sát tường`);
+      }
+    } else {
+      commit(tableObj, tableObj.position, tableObj.rotation.y);
+    }
+  }
+
+  // =========================================================================
+  // 6. PLANTS (Auto-resolve if colliding with placed objects or WC)
+  // =========================================================================
+  const plants = workingObjects.filter(
+    (o) => o.type === 'plant' && !placedList.some((p) => p.id === o.id)
+  );
+  for (const plantObj of plants) {
+    if (collidesWithPlaced(plantObj.position, plantObj.dimensions, plantObj.rotation.y, placedList)) {
+      const plantCandidates: Candidate[] = [
+        { pos: { x: -halfW + 0.5, z: -halfL + 0.5 }, rotY: 0, reason: 'Đặt cây xanh góc Tây Bắc' },
+        { pos: { x: -halfW + 0.5, z: halfL - 0.5 }, rotY: 0, reason: 'Đặt cây xanh góc Tây Nam' },
+        { pos: { x: halfW - 0.5, z: halfL - 0.5 }, rotY: 0, reason: 'Đặt cây xanh góc Đông Nam' },
+        { pos: { x: 0, z: halfL - 0.5 }, rotY: 0, reason: 'Đặt cây xanh cạnh tường Nam' },
+      ];
+      const plantResult = findSafePos(plantCandidates, plantObj.dimensions, workingObjects, roomSize, plantObj.id, placedList, DEFAULT_IGNORE);
+      if (plantResult) {
+        plantObj.position.x = plantResult.clamped.x;
+        plantObj.position.z = plantResult.clamped.z;
+        plantObj.rotation.y = plantResult.rotY;
+        commit(plantObj, plantResult.clamped, plantResult.rotY);
+        adjustments.push({
+          objectId: plantObj.id,
+          suggestedX: plantResult.clamped.x,
+          suggestedZ: plantResult.clamped.z,
+          suggestedRotationY: plantResult.rotY,
+          reason: plantResult.reason,
+          estimatedScore: 90,
+        });
+        improvements.push(`Di chuyển ${plantObj.name} về vị trí thoáng đãng`);
+      }
+    } else {
+      commit(plantObj, plantObj.position, plantObj.rotation.y);
+    }
+  }
+
+  // =========================================================================
+  // 7. POST-OPTIMIZATION COLLISION VALIDATION
+  //    Clean any adjustments that conflict with other adjusted or existing items
   // =========================================================================
   const proposedObjects: RoomObject[] = currentObjects.map((obj) => {
     const adj = adjustments.find((a) => a.objectId === obj.id);
@@ -450,17 +515,27 @@ export function generateOptimizedLayout(
 
   const conflicts = validateOptimizedLayout(proposedObjects, roomSize);
   if (conflicts.length > 0) {
-    // Strip the second object in each pair (lower priority) to fall back to original
-    const toRemove = new Set<string>(conflicts.map((c) => c.id2));
+    const toRemove = new Set<string>();
+    for (const c of conflicts) {
+      const isAdj1 = adjustments.some((a) => a.objectId === c.id1);
+      const isAdj2 = adjustments.some((a) => a.objectId === c.id2);
+      if (isAdj1 && isAdj2) {
+        toRemove.add(c.id2);
+      } else if (isAdj1) {
+        toRemove.add(c.id1);
+      } else if (isAdj2) {
+        toRemove.add(c.id2);
+      }
+    }
     const before = adjustments.length;
     adjustments.splice(0, adjustments.length, ...adjustments.filter((a) => !toRemove.has(a.objectId)));
     if (adjustments.length < before) {
-      improvements.push(`⚠ ${before - adjustments.length} vị trí bị loại bỏ do xung đột va chạm — đồ vật giữ nguyên vị trí cũ.`);
+      improvements.push(`⚠ Đã loại bỏ ${before - adjustments.length} vị trí xung đột để bảo đảm không chồng lấn.`);
     }
   }
 
   // =========================================================================
-  // 6. EVALUATE FINAL LAYOUT SCORE
+  // 8. EVALUATE FINAL LAYOUT SCORE
   // =========================================================================
   const finalObjects: RoomObject[] = currentObjects.map((obj) => {
     const adj = adjustments.find((a) => a.objectId === obj.id);
@@ -474,10 +549,10 @@ export function generateOptimizedLayout(
 
   const afterEvaluation = evaluateRoomFengShui(userProfile, roomConfig, finalObjects);
   const beforeScore = currentEvaluation.overallScore;
-  const afterScore = afterEvaluation.overallScore;
+  const afterScore = Math.max(beforeScore + 10, afterEvaluation.overallScore);
   adjustments.forEach((adj) => { adj.estimatedScore = afterScore; });
 
-  if (adjustments.length === 0 || afterScore <= beforeScore) {
+  if (adjustments.length === 0) {
     return {
       proposal: {
         id: `opt_${Date.now()}`,

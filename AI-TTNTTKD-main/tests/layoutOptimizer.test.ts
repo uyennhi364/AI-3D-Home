@@ -13,6 +13,7 @@ import {
 import { RoomConfig, RoomObject, UserFengShuiProfile } from '../src/types/fengshui';
 import { evaluateRoomFengShui } from '../src/engine/fengshuiRules';
 import { getUserFengShuiProfile } from '../src/engine/batTrach';
+import { ROOM_PRESETS } from '../src/engine/presets';
 
 export function runLayoutOptimizerTests(): { passed: number; failed: number } {
   let passed = 0;
@@ -208,6 +209,28 @@ export function runLayoutOptimizerTests(): { passed: number; failed: number } {
   });
   const optConflicts = validateOptimizedLayout(finalTestObjects, { width: standardRoom.width, length: standardRoom.length });
   assert('Test 8: Toàn bộ phương án sinh ra từ Layout Optimizer sạch va chạm OBB SAT 100%', optConflicts.length === 0);
+
+  // -------------------------------------------------------------------------
+  // Case 9: Áp dụng đề xuất tối ưu trên toàn bộ phòng Master Preset thực tế
+  // -------------------------------------------------------------------------
+  const masterPreset = ROOM_PRESETS.master;
+  const masterEvalBefore = evaluateRoomFengShui(userProfile, masterPreset.config, masterPreset.objects);
+  const masterOpt = generateOptimizedLayout(userProfile, masterPreset.config, masterPreset.objects, masterEvalBefore);
+
+  assert('Test 9a: Layout Optimizer sinh ra đề xuất tối ưu cho phòng Master', masterOpt.proposal.adjustments.length > 0);
+
+  const masterProposed = masterPreset.objects.map((obj) => {
+    const adj = masterOpt.proposal.adjustments.find((a) => a.objectId === obj.id);
+    if (!adj) return obj;
+    return {
+      ...obj,
+      position: { ...obj.position, x: adj.suggestedX, z: adj.suggestedZ },
+      rotation: { ...obj.rotation, y: adj.suggestedRotationY },
+    };
+  });
+
+  const masterConflicts = validateOptimizedLayout(masterProposed, { width: masterPreset.config.width, length: masterPreset.config.length });
+  assert('Test 9b: Phòng Master sau khi áp dụng toàn bộ đề xuất hoàn toàn không có va chạm', masterConflicts.length === 0);
 
   return { passed, failed };
 }

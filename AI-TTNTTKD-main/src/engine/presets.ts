@@ -90,12 +90,12 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         rotation: { x: 0, y: 0, z: 0 },
         dimensions: { width: 0.7, length: 0.7, height: 1.35 },
       },
-      // 9. Secondary Potted Plant next to Wardrobe
+      // 9. Secondary Potted Plant next to Wardrobe (North-West corner)
       {
         id: 'plant_wardrobe',
         type: 'plant',
         name: 'Cây bàng Singapore',
-        position: { x: 1.75, y: 0, z: -2.15 },
+        position: { x: -1.95, y: 0, z: -2.15 },
         rotation: { x: 0, y: 0, z: 0 },
         dimensions: { width: 0.55, length: 0.55, height: 1.1 },
       },

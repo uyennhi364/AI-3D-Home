@@ -1473,13 +1473,8 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
             {onApplyPreview && (
               <button
                 onClick={onApplyPreview}
-                disabled={hasGhostConflicts}
-                className={`px-3 py-1 font-bold rounded-lg text-xs transition-all active:scale-95 shadow-xs flex items-center gap-1 ${
-                  hasGhostConflicts
-                    ? 'bg-rose-900/60 text-rose-300 opacity-60 cursor-not-allowed'
-                    : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
-                }`}
-                title={hasGhostConflicts ? 'Không thể áp dụng khi còn vật thể bị chồng lấn (Đỏ)' : 'Áp dụng vào mô hình 3D'}
+                className="px-3 py-1 font-bold rounded-lg text-xs transition-all active:scale-95 shadow-xs flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+                title="Áp dụng phương án vào mô hình 3D"
               >
                 <span>✓</span>
                 <span>Áp dụng vào 3D</span>
