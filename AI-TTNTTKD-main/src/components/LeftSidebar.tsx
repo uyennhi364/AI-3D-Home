@@ -29,7 +29,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   }));
 
   return (
-    <aside className="w-[280px] max-h-full bg-[#16191B]/95 backdrop-blur-md rounded-2xl shadow-2xl border border-stone-800/80 p-3 flex flex-col gap-2 select-none text-white pointer-events-auto transition-all duration-200 overflow-y-auto scrollbar-thin">
+    <aside className="w-full h-full bg-[#16191B]/95 backdrop-blur-md rounded-2xl shadow-2xl border border-stone-800/80 p-3 flex flex-col gap-2 select-none text-white pointer-events-auto transition-all duration-200 overflow-y-auto scrollbar-thin">
       {/* 1. Header: Hồ sơ gia chủ + Chevron Up */}
       <div className="flex items-center justify-between pb-0.5">
         <h2 className="text-sm font-bold text-white tracking-tight">

@@ -368,6 +368,12 @@ export const ObjectLibraryDock: React.FC<ObjectLibraryDockProps> = ({ onAddObjec
     return item.category === activeCategory;
   });
 
+  const handleScrollLeft = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: -160, behavior: 'smooth' });
+    }
+  };
+
   const handleScrollRight = () => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollBy({ left: 160, behavior: 'smooth' });
@@ -375,10 +381,10 @@ export const ObjectLibraryDock: React.FC<ObjectLibraryDockProps> = ({ onAddObjec
   };
 
   return (
-    <div className="w-full bg-white rounded-2xl shadow-xl border border-stone-200/80 px-4 py-2 flex flex-col gap-1.5 select-none pointer-events-auto">
+    <div className="w-full bg-white rounded-2xl shadow-xl border border-stone-200/80 px-3.5 py-1.5 flex flex-col gap-1 select-none pointer-events-auto">
       {/* 1. Header Row: Categories + Search & Filter */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <h3 className="text-xs font-bold text-stone-900 tracking-tight shrink-0">
             Thư viện nội thất
           </h3>
@@ -389,7 +395,7 @@ export const ObjectLibraryDock: React.FC<ObjectLibraryDockProps> = ({ onAddObjec
               <button
                 key={cat.id}
                 onClick={() => setActiveCategory(cat.id)}
-                className={`px-2.5 py-0.5 text-xs rounded-full transition-all whitespace-nowrap font-medium ${
+                className={`px-2 py-0.5 text-[11px] rounded-full transition-all whitespace-nowrap font-medium cursor-pointer ${
                   activeCategory === cat.id
                     ? 'bg-[#005C4A] text-white shadow-2xs font-semibold'
                     : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
@@ -407,7 +413,7 @@ export const ObjectLibraryDock: React.FC<ObjectLibraryDockProps> = ({ onAddObjec
             <input
               type="text"
               placeholder="Tìm kiếm..."
-              className="w-28 h-6 bg-stone-50 border border-stone-200 rounded-full pl-6 pr-2 text-[11px] text-stone-700 placeholder-stone-400 focus:outline-hidden focus:border-stone-400"
+              className="w-24 sm:w-28 h-6 bg-stone-50 border border-stone-200 rounded-full pl-6 pr-2 text-[11px] text-stone-700 placeholder-stone-400 focus:outline-hidden focus:border-stone-400"
             />
             <svg
               className="w-3 h-3 text-stone-400 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none"
@@ -420,28 +426,20 @@ export const ObjectLibraryDock: React.FC<ObjectLibraryDockProps> = ({ onAddObjec
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
           </div>
-
-          <button
-            className="w-6 h-6 rounded-md border border-stone-200 bg-white hover:bg-stone-50 flex items-center justify-center text-xs text-stone-600 shadow-2xs"
-            title="Lọc nâng cao"
-          >
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="4" y1="21" x2="4" y2="14" />
-              <line x1="4" y1="10" x2="4" y2="3" />
-              <line x1="12" y1="21" x2="12" y2="12" />
-              <line x1="12" y1="8" x2="12" y2="3" />
-              <line x1="20" y1="21" x2="20" y2="16" />
-              <line x1="20" y1="12" x2="20" y2="3" />
-              <line x1="1" y1="14" x2="7" y2="14" />
-              <line x1="9" y1="8" x2="15" y2="8" />
-              <line x1="17" y1="16" x2="23" y2="16" />
-            </svg>
-          </button>
         </div>
       </div>
 
       {/* 2. Compact Furniture Cards Row */}
       <div className="relative flex items-center">
+        {/* Scroll Prev Chevron */}
+        <button
+          onClick={handleScrollLeft}
+          className="mr-1.5 w-6 h-6 rounded-full border border-stone-200 bg-white hover:bg-stone-50 flex items-center justify-center text-xs text-stone-600 shadow-2xs active:scale-90 transition-all shrink-0 cursor-pointer"
+          title="Xem trước"
+        >
+          ‹
+        </button>
+
         <div
           ref={scrollContainerRef}
           className="flex-1 flex items-center gap-2 overflow-x-auto py-0.5 px-0.5 scrollbar-none"
@@ -450,10 +448,10 @@ export const ObjectLibraryDock: React.FC<ObjectLibraryDockProps> = ({ onAddObjec
             <div
               key={item.id}
               onClick={() => onAddObject(item)}
-              className="w-[96px] shrink-0 p-1.5 rounded-xl bg-[#F9FAFB] border border-stone-200/70 hover:border-[#00705a] hover:bg-white hover:shadow-xs active:scale-95 transition-all cursor-pointer group flex flex-col items-center text-center"
+              className="w-[92px] shrink-0 p-1 rounded-xl bg-[#F9FAFB] border border-stone-200/70 hover:border-[#00705a] hover:bg-white hover:shadow-xs active:scale-95 transition-all cursor-pointer group flex flex-col items-center text-center"
             >
               {/* 3D Isometric Preview Area */}
-              <div className="w-full h-11 rounded-lg flex items-center justify-center overflow-hidden transition-transform group-hover:scale-105">
+              <div className="w-full h-10 rounded-lg flex items-center justify-center overflow-hidden transition-transform group-hover:scale-105">
                 {item.renderPreview()}
               </div>
 
@@ -471,7 +469,7 @@ export const ObjectLibraryDock: React.FC<ObjectLibraryDockProps> = ({ onAddObjec
         {/* Scroll Next Chevron */}
         <button
           onClick={handleScrollRight}
-          className="ml-1.5 w-6 h-6 rounded-full border border-stone-200 bg-white hover:bg-stone-50 flex items-center justify-center text-xs text-stone-600 shadow-2xs active:scale-90 transition-all shrink-0"
+          className="ml-1.5 w-6 h-6 rounded-full border border-stone-200 bg-white hover:bg-stone-50 flex items-center justify-center text-xs text-stone-600 shadow-2xs active:scale-90 transition-all shrink-0 cursor-pointer"
           title="Xem tiếp"
         >
           ›

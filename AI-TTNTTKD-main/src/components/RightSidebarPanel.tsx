@@ -107,7 +107,7 @@ export const RightSidebarPanel: React.FC<RightSidebarPanelProps> = ({
   };
 
   return (
-    <aside className="w-[410px] h-[calc(100vh-80px)] max-h-[820px] bg-white rounded-2xl shadow-2xl border border-stone-200/80 p-3 flex flex-col gap-2.5 select-none text-stone-900 pointer-events-auto transition-all duration-200 overflow-hidden">
+    <aside className="w-full h-full bg-white rounded-2xl shadow-2xl border border-stone-200/80 p-3 flex flex-col gap-2 select-none text-stone-900 pointer-events-auto overflow-hidden">
       {/* 1. Header: Trợ lý Phong Thủy + Tab Switcher (Phân tích / AI Hỗ trợ) */}
       <div className="flex items-center justify-between pb-1.5 border-b border-stone-100 shrink-0 gap-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -168,7 +168,7 @@ export const RightSidebarPanel: React.FC<RightSidebarPanelProps> = ({
 
       {/* 2. Content: Analysis View OR AI Chat View */}
       {activeTab === 'ai_chat' ? (
-        <div className="flex-1 h-full min-h-0 overflow-hidden flex flex-col -mx-3 -mb-3">
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col -mx-3 -mb-3">
           <AIChatConsultant
             userProfile={userProfile}
             roomConfig={roomConfig}

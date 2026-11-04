@@ -260,7 +260,7 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
   };
 
   return (
-    <aside className="w-full h-full max-h-[calc(100vh-130px)] bg-white/95 backdrop-blur-md rounded-2xl border border-stone-200/90 shadow-2xl flex flex-col overflow-hidden text-stone-800 select-none animate-in fade-in duration-200">
+    <div className="w-full h-full flex flex-col overflow-hidden text-stone-800 select-none bg-white">
       {/* 1. HEADER (AI Design Copilot) */}
       <div className="px-3.5 py-2.5 border-b border-stone-100 flex items-center justify-between gap-2 shrink-0 bg-white">
         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -612,6 +612,6 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
           </div>
         </div>
       )}
-    </aside>
+    </div>
   );
 };

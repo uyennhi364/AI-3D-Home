@@ -39,6 +39,8 @@ export interface RoomConfig {
   length: number; // Length in meters (Z axis)
   height: number; // Height in meters (Y axis)
   direction: CompassDirection; // Room facing direction
+  doorWall?: 'east' | 'west' | 'south' | 'north' | string;
+  windowWall?: 'east' | 'west' | 'south' | 'north' | string;
 }
 
 export type RoomObjectType =
@@ -118,6 +120,7 @@ export interface AIActionCommand {
   type: 'add_object' | 'move_object' | 'rotate_object' | 'delete_object' | 'optimize_room' | 'select_object' | 'undo_action';
   objectType?: RoomObjectType;
   objectId?: string;
+  objectIds?: string[];
   name?: string;
   dimensions?: { width: number; length: number; height: number };
   position?: { x: number; z: number };

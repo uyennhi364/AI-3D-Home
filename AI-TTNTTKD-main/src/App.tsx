@@ -25,6 +25,7 @@ import { RoomCompassWidget } from './components/RoomCompassWidget';
 import { UserProfileModal } from './components/UserProfileModal';
 import { LayoutComparisonModal } from './components/LayoutComparisonModal';
 import { AIAnalysisReportModal } from './components/AIAnalysisReportModal';
+import { RoomConfigModal } from './components/RoomConfigModal';
 import { validateAICommand } from './services/aiCommandHandler';
 import { clampOBBInsideRoom, validatePlacementSafety, findSmartPlacement } from './engine/geometryEngine';
 
@@ -79,6 +80,7 @@ export default function App() {
   const [activeOptimizationProposal, setActiveOptimizationProposal] = useState<LayoutOptimizationProposal | null>(null);
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
+  const [isRoomConfigModalOpen, setIsRoomConfigModalOpen] = useState<boolean>(false);
   const [isAiAnalyzing, setIsAiAnalyzing] = useState<boolean>(false);
   const [aiReportData, setAiReportData] = useState<any>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -114,6 +116,28 @@ export default function App() {
     setHistoryPast((prev) => [...prev, objects]);
     setObjects(next);
     showToast('↷ Đã làm lại thao tác.');
+  };
+
+  const handleExport3DImage = () => {
+    window.dispatchEvent(new CustomEvent('three-export-3d-image'));
+    showToast('✓ Đang xuất ảnh 3D phòng ngủ...');
+  };
+
+  const handleExport2DPlan = () => {
+    window.dispatchEvent(new CustomEvent('three-export-2d-plan'));
+    showToast('✓ Đang xuất sơ đồ mặt bằng 2D...');
+  };
+
+  const handleLoadLayout = (config: RoomConfig, loadedObjects: RoomObject[], profile?: UserFengShuiProfile) => {
+    pushSnapshot(objects);
+    setRoomConfig(config);
+    setObjects(loadedObjects);
+    setSelectedObjectId(null);
+    if (profile) {
+      if (profile.birthYear) setBirthYear(profile.birthYear);
+      if (profile.gender) setGender(profile.gender);
+    }
+    showToast(`✓ Đã nạp bố cục thành công (${loadedObjects.length} đồ vật).`);
   };
 
   // Keyboard shortcut for Undo (Ctrl+Z) and Redo (Ctrl+Y / Ctrl+Shift+Z)
@@ -307,9 +331,9 @@ export default function App() {
     const safePos = candidatePlacement.resolved
       ? candidatePlacement.safePos
       : {
-          x: Math.max(-roomConfig.width / 2 + 0.4, Math.min(roomConfig.width / 2 - 0.4, target.position.x + 0.5)),
-          z: Math.max(-roomConfig.length / 2 + 0.4, Math.min(roomConfig.length / 2 - 0.4, target.position.z + 0.5)),
-        };
+        x: Math.max(-roomConfig.width / 2 + 0.4, Math.min(roomConfig.width / 2 - 0.4, target.position.x + 0.5)),
+        z: Math.max(-roomConfig.length / 2 + 0.4, Math.min(roomConfig.length / 2 - 0.4, target.position.z + 0.5)),
+      };
 
     const newObj: RoomObject = {
       ...target,
@@ -701,7 +725,7 @@ export default function App() {
           1. TOP APP BAR (Professional Interior Architecture Toolbar)
          ========================================================================= */}
       <header className="h-14 bg-[#14171A] border-b border-stone-800/80 px-4 flex items-center justify-between shrink-0 z-30 shadow-md text-stone-200">
-        {/* Left: Lotus Icon & Studio Title */}
+        {/* Left: Lotus Icon & Studio Title & Panel Toggle */}
         <div className="flex items-center gap-3">
           <div className="w-8.5 h-8.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center shadow-xs">
             <svg className="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none">
@@ -718,110 +742,138 @@ export default function App() {
               Thiết kế không gian sống hài hòa
             </p>
           </div>
+
+          {/* Toggle Left Sidebar */}
+          <button
+            onClick={() => setIsLeftPanelOpen(!isLeftPanelOpen)}
+            className={`ml-2 px-2.5 py-1 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+              isLeftPanelOpen
+                ? 'bg-stone-800 text-white border-stone-700 shadow-xs'
+                : 'text-stone-400 hover:text-white hover:bg-stone-800 border-stone-800/60'
+            }`}
+            title={isLeftPanelOpen ? 'Thu gọn cột trái' : 'Mở cột trái (Hồ sơ & Hướng)'}
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M9 3v18" />
+            </svg>
+            <span className="hidden md:inline text-[11px]">Hồ sơ</span>
+          </button>
         </div>
 
         {/* Center: Camera View Modes & Day/Night Toggle (Exact match to reference photo) */}
         <div className="flex items-center gap-3">
           <div className="flex items-center p-1 bg-[#1E2124] rounded-xl border border-stone-800 text-xs">
-          <button
-            onClick={() => setCameraViewMode('3d')}
-            className={`px-3 py-1.5 rounded-lg transition-all font-semibold flex items-center gap-1.5 ${
-              cameraViewMode === '3d'
+            <button
+              onClick={() => setCameraViewMode('3d')}
+              className={`px-3 py-1.5 rounded-lg transition-all font-semibold flex items-center gap-1.5 ${cameraViewMode === '3d'
                 ? 'bg-[#005C4A] text-white shadow-xs border border-emerald-500/50'
                 : 'text-stone-300 hover:text-white'
-            }`}
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-              <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-              <line x1="12" y1="22.08" x2="12" y2="12" />
-            </svg>
-            <span>3D Phối Cảnh</span>
-          </button>
-          <button
-            onClick={() => setCameraViewMode('2d')}
-            className={`px-3 py-1.5 rounded-lg transition-all font-semibold flex items-center gap-1.5 ${
-              cameraViewMode === '2d'
+                }`}
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                <line x1="12" y1="22.08" x2="12" y2="12" />
+              </svg>
+              <span>3D Phối Cảnh</span>
+            </button>
+            <button
+              onClick={() => setCameraViewMode('2d')}
+              className={`px-3 py-1.5 rounded-lg transition-all font-semibold flex items-center gap-1.5 ${cameraViewMode === '2d'
                 ? 'bg-[#005C4A] text-white shadow-xs border border-emerald-500/50'
                 : 'text-stone-300 hover:text-white'
-            }`}
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <path d="M3 9h18" />
-              <path d="M9 21V9" />
-            </svg>
-            <span>Mặt Bằng 2D</span>
-          </button>
-          <button
-            onClick={() => setCameraViewMode('iso')}
-            className={`px-3 py-1.5 rounded-lg transition-all font-semibold flex items-center gap-1.5 ${
-              cameraViewMode === 'iso'
+                }`}
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M3 9h18" />
+                <path d="M9 21V9" />
+              </svg>
+              <span>Mặt Bằng 2D</span>
+            </button>
+            <button
+              onClick={() => setCameraViewMode('iso')}
+              className={`px-3 py-1.5 rounded-lg transition-all font-semibold flex items-center gap-1.5 ${cameraViewMode === 'iso'
                 ? 'bg-[#005C4A] text-white shadow-xs border border-emerald-500/50'
                 : 'text-stone-300 hover:text-white'
-            }`}
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="m12 3-8 4.5v9L12 21l8-4.5v-9L12 3Z" />
-            </svg>
-            <span>Isometric</span>
-          </button>
+                }`}
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="m12 3-8 4.5v9L12 21l8-4.5v-9L12 3Z" />
+              </svg>
+              <span>Isometric</span>
+            </button>
+          </div>
+
+          {/* Undo / Redo Actions */}
+          <div className="flex items-center p-1 bg-[#1E2124] rounded-xl border border-stone-800 text-xs gap-0.5">
+            <button
+              onClick={handleUndo}
+              disabled={historyPast.length === 0}
+              className="p-1.5 rounded-lg text-stone-300 hover:text-white hover:bg-stone-800 disabled:opacity-30 disabled:pointer-events-none transition-all"
+              title="Hoàn tác (Ctrl+Z)"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M3 7v6h6" />
+                <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+              </svg>
+            </button>
+            <button
+              onClick={handleRedo}
+              disabled={historyFuture.length === 0}
+              className="p-1.5 rounded-lg text-stone-300 hover:text-white hover:bg-stone-800 disabled:opacity-30 disabled:pointer-events-none transition-all"
+              title="Làm lại (Ctrl+Y)"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M21 7v6h-6" />
+                <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Day / Night Button matching reference layout */}
+          {lightingMode === 'day' ? (
+            <button
+              onClick={() => setLightingMode('night')}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#26221A] border border-amber-600/40 text-amber-300 hover:bg-[#2e2a1e] transition-all text-xs font-semibold shadow-xs select-none active:scale-95 cursor-pointer"
+              title="Nhấp để chuyển sang chế độ Ban đêm"
+            >
+              <span className="text-amber-400 text-sm">☼</span>
+              <span>Ban ngày</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setLightingMode('day')}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#191D24] border border-amber-500/35 text-amber-200 hover:bg-[#20252e] transition-all text-xs font-semibold shadow-xs select-none active:scale-95 cursor-pointer"
+              title="Nhấp để chuyển sang chế độ Ban ngày"
+            >
+              <span className="text-amber-300 text-sm">☾</span>
+              <span>Ban đêm</span>
+            </button>
+          )}
         </div>
 
-        {/* Undo / Redo Actions */}
-        <div className="flex items-center p-1 bg-[#1E2124] rounded-xl border border-stone-800 text-xs gap-0.5">
+        {/* Right: Report, Avatar, Toggle Right Sidebar */}
+        <div className="flex items-center gap-2">
+          {/* Toggle Right Sidebar */}
           <button
-            onClick={handleUndo}
-            disabled={historyPast.length === 0}
-            className="p-1.5 rounded-lg text-stone-300 hover:text-white hover:bg-stone-800 disabled:opacity-30 disabled:pointer-events-none transition-all"
-            title="Hoàn tác (Ctrl+Z)"
+            onClick={() => setIsRightPanelOpen(!isRightPanelOpen)}
+            className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+              isRightPanelOpen
+                ? 'bg-[#005C4A] text-white border-emerald-500/50 shadow-xs'
+                : 'text-stone-400 hover:text-white hover:bg-stone-800 border-stone-800/60'
+            }`}
+            title={isRightPanelOpen ? 'Thu gọn cột phải (Trợ lý phong thủy)' : 'Mở cột phải (Trợ lý phong thủy)'}
           >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M3 7v6h6" />
-              <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
-            </svg>
+            <span className="text-xs">🪷</span>
+            <span className="hidden md:inline text-[11px]">Trợ lý AI</span>
           </button>
-          <button
-            onClick={handleRedo}
-            disabled={historyFuture.length === 0}
-            className="p-1.5 rounded-lg text-stone-300 hover:text-white hover:bg-stone-800 disabled:opacity-30 disabled:pointer-events-none transition-all"
-            title="Làm lại (Ctrl+Y)"
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M21 7v6h-6" />
-              <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" />
-            </svg>
-          </button>
-        </div>
 
-        {/* Day / Night Button matching reference layout */}
-        {lightingMode === 'day' ? (
-          <button
-            onClick={() => setLightingMode('night')}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#26221A] border border-amber-600/40 text-amber-300 hover:bg-[#2e2a1e] transition-all text-xs font-semibold shadow-xs select-none active:scale-95 cursor-pointer"
-            title="Nhấp để chuyển sang chế độ Ban đêm"
-          >
-            <span className="text-amber-400 text-sm">☼</span>
-            <span>Ban ngày</span>
-          </button>
-        ) : (
-          <button
-            onClick={() => setLightingMode('day')}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#191D24] border border-amber-500/35 text-amber-200 hover:bg-[#20252e] transition-all text-xs font-semibold shadow-xs select-none active:scale-95 cursor-pointer"
-            title="Nhấp để chuyển sang chế độ Ban ngày"
-          >
-            <span className="text-amber-300 text-sm">☾</span>
-            <span>Ban đêm</span>
-          </button>
-        )}
-      </div>
-
-      {/* Right: Report, Avatar */}
-      <div className="flex items-center gap-2">
-        {/* High-Contrast Report Button */}
+          {/* High-Contrast Report Button */}
           <button
             onClick={() => handleTriggerAiAnalysis()}
-            className="px-3.5 py-1.5 rounded-full bg-white hover:bg-stone-100 text-stone-900 border border-stone-200 text-xs font-bold transition-all shadow-xs active:scale-95 flex items-center gap-1.5"
+            className="px-3.5 py-1.5 rounded-full bg-white hover:bg-stone-100 text-stone-900 border border-stone-200 text-xs font-bold transition-all shadow-xs active:scale-95 flex items-center gap-1.5 cursor-pointer"
             title="Tạo & xem báo cáo phong thủy mới nhất"
           >
             <span>📄</span>
@@ -831,7 +883,7 @@ export default function App() {
           {/* User Profile Avatar */}
           <button
             onClick={() => setIsProfileModalOpen(true)}
-            className="w-7.5 h-7.5 rounded-full bg-[#005C4A] text-white flex items-center justify-center font-bold text-xs shadow-2xs"
+            className="w-7.5 h-7.5 rounded-full bg-[#005C4A] text-white flex items-center justify-center font-bold text-xs shadow-2xs cursor-pointer"
             title="Hồ sơ người dùng"
           >
             N
@@ -840,142 +892,193 @@ export default function App() {
       </header>
 
       {/* =========================================================================
-          2. 3D STUDIO CANVAS (65–70% SCREEN OCCUPANCY) & FLOATING OVERLAYS
+          2. THREE-COLUMN ARCHITECTURAL FLEXBOX LAYOUT (NO ABSOLUTE OVERLAP)
          ========================================================================= */}
-      <div className="flex-1 w-full h-[calc(100vh-56px)] overflow-hidden bg-[#181B1E] relative select-none">
-        {/* Full-bleed 3D Canvas occupying the visual focal point */}
-        <div className="absolute inset-0 z-0">
-          <ThreeRoomCanvas
-            roomConfig={roomConfig}
-            objects={objects}
-            userProfile={userProfile}
-            evaluation={evaluation}
-            selectedObjectId={selectedObjectId}
-            onSelectObject={(id) => setSelectedObjectId(id)}
-            onUpdateObjectPosition={handleUpdateObjectPosition}
-            onRotateObject={handleRotateObject}
-            onSetObjectRotation={handleSetObjectRotation}
-            onBeginInteraction={handleBeginInteraction}
-            onDeleteObject={handleDeleteObject}
-            onDuplicateObject={handleDuplicateObject}
-            proposedAdjustment={proposedAdjustment}
-            previewAdjustments={previewAdjustments}
-            isPreviewingProposal={isPreviewingProposal}
-            onApplyPreview={() => {
-              if (previewAdjustments.length > 0) {
-                handleApplyMultipleAdjustments(previewAdjustments);
-              } else if (proposedAdjustment) {
-                handleApplyProposal(proposedAdjustment);
-              }
-            }}
-            onCancelPreview={() => {
-              setIsPreviewingProposal(false);
-              setProposedAdjustment(null);
-              setPreviewAdjustments([]);
-            }}
-            cameraViewMode={cameraViewMode}
-            onChangeCameraViewMode={setCameraViewMode}
-            onResetCamera={() => setCameraViewMode('3d')}
-            showFengShuiOverlay={showFengShuiOverlay}
-            onToggleFengShuiOverlay={() => setShowFengShuiOverlay(!showFengShuiOverlay)}
-            transformMode={transformMode}
-            onChangeTransformMode={setTransformMode}
-            onDropFromLibrary={handleDropFromLibrary}
-            activeVisualConnection={activeVisualConnection}
-            onClearVisualConnection={() => setActiveVisualConnection(null)}
-            lightingMode={lightingMode}
-          />
-        </div>
+      <main className="flex-1 w-full h-[calc(100vh-56px)] flex overflow-hidden bg-[#14171A] p-2.5 sm:p-3 gap-2.5 sm:gap-3 select-none">
+        {/* -------------------------------------------------------------------
+            COLUMN 1: LEFT SIDEBAR (Hồ sơ gia chủ & Hướng phòng)
+           ------------------------------------------------------------------- */}
+        {isLeftPanelOpen && (
+          <div className="w-[270px] lg:w-[280px] shrink-0 h-full flex flex-col gap-2.5 overflow-hidden animate-in fade-in slide-in-from-left-4 duration-150">
+            <div className="flex-1 min-h-0 overflow-hidden rounded-2xl shadow-2xl flex flex-col">
+              <LeftSidebar
+                userProfile={userProfile}
+                onEditProfile={() => setIsProfileModalOpen(true)}
+                roomDirection={roomConfig.direction}
+                onClose={() => setIsLeftPanelOpen(false)}
+              />
+            </div>
 
-        {/* TOP FLOATING CONTROLS: Di chuyển / Xoay (Thu phóng removed as requested) */}
-        <div className="absolute top-3 left-[360px] z-20 flex items-center gap-2 pointer-events-auto">
-          <div className="flex items-center gap-1 p-1 bg-[#1E2124]/90 backdrop-blur-md rounded-xl border border-stone-800 text-xs text-stone-300 shadow-lg">
-            <button
-              onClick={() => setTransformMode('translate')}
-              className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-all ${
-                transformMode === 'translate'
-                  ? 'bg-[#005C4A] text-white shadow-xs border border-emerald-500/50'
-                  : 'text-stone-300 hover:text-white hover:bg-stone-800'
-              }`}
-              title="Chế độ di chuyển đồ vật"
-            >
-              <span>✥</span>
-              <span>Di chuyển</span>
-            </button>
-            <button
-              onClick={() => setTransformMode('rotate')}
-              className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-all ${
-                transformMode === 'rotate'
-                  ? 'bg-[#005C4A] text-white shadow-xs border border-emerald-500/50'
-                  : 'text-stone-300 hover:text-white hover:bg-stone-800'
-              }`}
-              title="Chế độ xoay đồ vật"
-            >
-              <span>↻</span>
-              <span>Xoay</span>
-            </button>
-          </div>
-        </div>
-
-        {/* LEFT COLUMN: Floating Dark Card "Hồ sơ gia chủ" & Room Compass Widget */}
-        <div className="absolute top-3 left-3 bottom-3 z-20 flex flex-col justify-between pointer-events-none w-[280px]">
-          <div className="pointer-events-auto min-h-0 flex flex-col max-h-[calc(100%-120px)] overflow-hidden rounded-2xl shadow-2xl">
-            <LeftSidebar
-              userProfile={userProfile}
-              onEditProfile={() => setIsProfileModalOpen(true)}
-              roomDirection={roomConfig.direction}
-            />
-          </div>
-
-          {/* Compass Widget anchored cleanly at bottom-left without collision */}
-          <div className="pointer-events-auto shrink-0 pt-1.5 flex flex-col items-center">
-            <RoomCompassWidget
-              roomDirection={roomConfig.direction}
-              userProfile={userProfile}
-              onChangeRoomDirection={(newDir) => setRoomConfig((prev) => ({ ...prev, direction: newDir }))}
-              onResetCamera={() => {
-                window.dispatchEvent(new CustomEvent('three-camera-reset'));
-              }}
-            />
-          </div>
-        </div>
-
-        {/* BOTTOM DOCK: Shorter & Cleaner "Thư viện nội thất" */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 w-[740px] max-w-[calc(100vw-700px)] pointer-events-auto">
-          <ObjectLibraryDock onAddObject={handleAddObjectFromLibrary} />
-        </div>
-
-        {/* RIGHT COLUMN: Floating Alabaster White Card "Trợ lý Phong Thủy" */}
-        <div className="absolute top-3 right-3 z-20">
-          <RightSidebarPanel
-            userProfile={userProfile}
-            roomConfig={roomConfig}
-            objects={objects}
-            evaluation={evaluation}
-            selectedObjectId={selectedObjectId}
-            onPreviewProposal={handlePreviewProposal}
-            onApplyProposal={handleApplyProposal}
-            onApplyMultipleAdjustments={handleApplyMultipleAdjustments}
-            onExecuteAIAction={handleExecuteAIAction}
-            onExecuteAIActions={handleExecuteAIActions}
-            onOpenOptimizationModal={(prop) => {
-              setActiveOptimizationProposal(prop);
-              setIsComparisonModalOpen(true);
-            }}
-            externalTriggerPrompt={chatTriggerPrompt}
-            onClearExternalTriggerPrompt={() => setChatTriggerPrompt(null)}
-            onFocusObjects={handleFocusObjects}
-            isPreviewingProposal={isPreviewingProposal}
-          />
-        </div>
-
-        {/* Toast Notification Alert */}
-        {toastMessage && (
-          <div className="absolute top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-stone-900/95 backdrop-blur-md text-white text-xs font-semibold shadow-2xl border border-stone-700/80 animate-in fade-in slide-in-from-top-2">
-            {toastMessage}
+            <div className="shrink-0">
+              <RoomCompassWidget
+                roomDirection={roomConfig.direction}
+                userProfile={userProfile}
+                onChangeRoomDirection={(newDir) => setRoomConfig((prev) => ({ ...prev, direction: newDir }))}
+                onResetCamera={() => {
+                  window.dispatchEvent(new CustomEvent('three-camera-reset'));
+                }}
+              />
+            </div>
           </div>
         )}
-      </div>
+
+        {/* -------------------------------------------------------------------
+            COLUMN 2: CENTER WORKSPACE (Toolbar, 3D Canvas, Object Library Dock)
+           ------------------------------------------------------------------- */}
+        <div className="flex-1 min-w-0 h-full relative flex flex-col overflow-hidden rounded-2xl bg-[#181B1E] shadow-2xl border border-stone-800/80">
+          {/* 3D Canvas - fills the entire center workspace */}
+          <div className="absolute inset-0 z-0">
+            <ThreeRoomCanvas
+              roomConfig={roomConfig}
+              objects={objects}
+              userProfile={userProfile}
+              evaluation={evaluation}
+              selectedObjectId={selectedObjectId}
+              onSelectObject={(id) => setSelectedObjectId(id)}
+              onUpdateObjectPosition={handleUpdateObjectPosition}
+              onRotateObject={handleRotateObject}
+              onSetObjectRotation={handleSetObjectRotation}
+              onBeginInteraction={handleBeginInteraction}
+              onDeleteObject={handleDeleteObject}
+              onDuplicateObject={handleDuplicateObject}
+              proposedAdjustment={proposedAdjustment}
+              previewAdjustments={previewAdjustments}
+              isPreviewingProposal={isPreviewingProposal}
+              onApplyPreview={() => {
+                if (previewAdjustments.length > 0) {
+                  handleApplyMultipleAdjustments(previewAdjustments);
+                } else if (proposedAdjustment) {
+                  handleApplyProposal(proposedAdjustment);
+                }
+              }}
+              onCancelPreview={() => {
+                setIsPreviewingProposal(false);
+                setProposedAdjustment(null);
+                setPreviewAdjustments([]);
+              }}
+              cameraViewMode={cameraViewMode}
+              onChangeCameraViewMode={setCameraViewMode}
+              onResetCamera={() => setCameraViewMode('3d')}
+              showFengShuiOverlay={showFengShuiOverlay}
+              onToggleFengShuiOverlay={() => setShowFengShuiOverlay(!showFengShuiOverlay)}
+              transformMode={transformMode}
+              onChangeTransformMode={setTransformMode}
+              onDropFromLibrary={handleDropFromLibrary}
+              activeVisualConnection={activeVisualConnection}
+              onClearVisualConnection={() => setActiveVisualConnection(null)}
+              lightingMode={lightingMode}
+            />
+          </div>
+
+          {/* Top Floating Controls inside Center Workspace */}
+          <div className="absolute top-3 left-3 z-20 flex items-center gap-2 pointer-events-auto">
+            <div className="flex items-center gap-1 p-1 bg-[#1E2124]/90 backdrop-blur-md rounded-xl border border-stone-800 text-xs text-stone-300 shadow-lg">
+              <button
+                onClick={() => setTransformMode('translate')}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  transformMode === 'translate'
+                    ? 'bg-[#005C4A] text-white shadow-xs border border-emerald-500/50'
+                    : 'text-stone-300 hover:text-white hover:bg-stone-800'
+                }`}
+                title="Chế độ di chuyển đồ vật"
+              >
+                <span>✥</span>
+                <span>Di chuyển</span>
+              </button>
+              <button
+                onClick={() => setTransformMode('rotate')}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  transformMode === 'rotate'
+                    ? 'bg-[#005C4A] text-white shadow-xs border border-emerald-500/50'
+                    : 'text-stone-300 hover:text-white hover:bg-stone-800'
+                }`}
+                title="Chế độ xoay đồ vật"
+              >
+                <span>↻</span>
+                <span>Xoay</span>
+              </button>
+
+              <div className="w-[1px] h-4 bg-stone-700/60 mx-1" />
+
+              <button
+                onClick={() => setIsRoomConfigModalOpen(true)}
+                className="px-2.5 sm:px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 text-stone-300 hover:text-white hover:bg-stone-800 transition-all cursor-pointer"
+                title="Tùy chỉnh kích thước phòng, quản lý cửa và lưu/tải bố cục"
+              >
+                <span>⚙</span>
+                <span className="hidden sm:inline">Phòng & Lưu trữ</span>
+                <span className="sm:hidden">Phòng</span>
+              </button>
+
+              <button
+                onClick={handleUndo}
+                disabled={historyPast.length === 0}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-all ${
+                  historyPast.length > 0
+                    ? 'text-stone-300 hover:text-white hover:bg-stone-800 cursor-pointer'
+                    : 'text-stone-600 cursor-not-allowed opacity-50'
+                }`}
+                title="Hoàn tác thao tác vừa thực hiện (Ctrl+Z)"
+              >
+                <span>↩</span>
+                <span className="hidden sm:inline">Hoàn tác</span>
+              </button>
+
+              <button
+                onClick={handleExport3DImage}
+                className="px-2.5 py-1.5 rounded-lg font-semibold flex items-center gap-1 text-stone-300 hover:text-white hover:bg-stone-800 transition-all cursor-pointer"
+                title="Chụp ảnh phối cảnh 3D độ phân giải cao"
+              >
+                <span>📸</span>
+                <span className="hidden md:inline">Chụp 3D</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Object Library Dock: Constrained STRICTLY within Center Workspace! */}
+          <div className="absolute bottom-3 left-3 right-3 z-20 flex justify-center pointer-events-none">
+            <div className="w-full max-w-[680px] pointer-events-auto shadow-2xl">
+              <ObjectLibraryDock onAddObject={handleAddObjectFromLibrary} />
+            </div>
+          </div>
+
+          {/* Toast Notification Alert */}
+          {toastMessage && (
+            <div className="absolute top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-stone-900/95 backdrop-blur-md text-white text-xs font-semibold shadow-2xl border border-stone-700/80 animate-in fade-in slide-in-from-top-2 pointer-events-none">
+              {toastMessage}
+            </div>
+          )}
+        </div>
+
+        {/* -------------------------------------------------------------------
+            COLUMN 3: RIGHT SIDEBAR (Trợ lý Phong Thủy)
+           ------------------------------------------------------------------- */}
+        {isRightPanelOpen && (
+          <div className="w-[340px] md:w-[360px] xl:w-[390px] shrink-0 h-full flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-150">
+            <RightSidebarPanel
+              userProfile={userProfile}
+              roomConfig={roomConfig}
+              objects={objects}
+              evaluation={evaluation}
+              selectedObjectId={selectedObjectId}
+              onPreviewProposal={handlePreviewProposal}
+              onApplyProposal={handleApplyProposal}
+              onApplyMultipleAdjustments={handleApplyMultipleAdjustments}
+              onExecuteAIAction={handleExecuteAIAction}
+              onExecuteAIActions={handleExecuteAIActions}
+              onOpenOptimizationModal={(prop) => {
+                setActiveOptimizationProposal(prop);
+                setIsComparisonModalOpen(true);
+              }}
+              externalTriggerPrompt={chatTriggerPrompt}
+              onClearExternalTriggerPrompt={() => setChatTriggerPrompt(null)}
+              onFocusObjects={handleFocusObjects}
+              isPreviewingProposal={isPreviewingProposal}
+              onClose={() => setIsRightPanelOpen(false)}
+            />
+          </div>
+        )}
+      </main>
 
       {/* =========================================================================
           3. COMPREHENSIVE MODALS & REPORTS
@@ -1013,6 +1116,21 @@ export default function App() {
           setIsRightPanelOpen(true);
           setChatTriggerPrompt('Tối ưu phòng ngủ cho tôi');
         }}
+        onSelectObject={(id) => setSelectedObjectId(id)}
+      />
+
+      {/* Room Dimensions & Layout Storage Modal */}
+      <RoomConfigModal
+        isOpen={isRoomConfigModalOpen}
+        onClose={() => setIsRoomConfigModalOpen(false)}
+        roomConfig={roomConfig}
+        onUpdateRoomConfig={(newConfig) => setRoomConfig(newConfig)}
+        objects={objects}
+        onLoadLayout={handleLoadLayout}
+        userProfile={userProfile}
+        currentScore={evaluation.overallScore}
+        onExport3DImage={handleExport3DImage}
+        onExport2DPlan={handleExport2DPlan}
       />
     </div>
   );

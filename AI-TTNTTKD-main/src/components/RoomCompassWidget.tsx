@@ -77,11 +77,11 @@ export const RoomCompassWidget: React.FC<RoomCompassWidgetProps> = ({
   };
 
   return (
-    <div className="relative flex flex-col items-center gap-1.5 select-none pointer-events-auto" ref={dropdownRef}>
+    <div className="relative w-[280px] bg-[#16191B]/95 backdrop-blur-md rounded-2xl shadow-2xl border border-stone-800/80 p-2.5 flex items-center justify-between gap-3 select-none pointer-events-auto" ref={dropdownRef}>
       {/* Dark Architectural Compass Dial */}
       <div
         onClick={handleCompassClick}
-        className="relative w-16 h-16 rounded-full bg-[#181B1E]/95 backdrop-blur-md shadow-2xl border border-stone-700/80 flex items-center justify-center cursor-pointer transition-all hover:scale-105 hover:border-emerald-500/60 active:scale-95 group"
+        className="relative w-12 h-12 rounded-full bg-[#1F2327] shadow-inner border border-stone-700/80 flex items-center justify-center cursor-pointer transition-all hover:scale-105 hover:border-emerald-500/60 active:scale-95 group shrink-0"
         title="Nhấn để căn chỉnh góc nhìn về hướng Bắc (0°)"
       >
         {/* Subtle graduation ticks around dial */}
@@ -104,7 +104,7 @@ export const RoomCompassWidget: React.FC<RoomCompassWidgetProps> = ({
         ))}
 
         {/* Subtle inner concentric ring */}
-        <div className="absolute inset-2 rounded-full border border-stone-600/40 pointer-events-none" />
+        <div className="absolute inset-1.5 rounded-full border border-stone-600/30 pointer-events-none" />
 
         {/* Room Direction Beacon Indicator on Compass Rim */}
         <div
@@ -118,76 +118,71 @@ export const RoomCompassWidget: React.FC<RoomCompassWidgetProps> = ({
 
         {/* Cardinal Markers (Tiếng Việt: B - Bắc, Đ - Đông, N - Nam, T - Tây) */}
         <span
-          className="absolute top-1 text-[10px] font-black text-rose-500 leading-none drop-shadow-xs transition-colors group-hover:text-rose-400"
+          className="absolute top-0.5 text-[9px] font-black text-rose-500 leading-none drop-shadow-xs transition-colors group-hover:text-rose-400"
           title="Bắc (0°)"
         >
           B
         </span>
         <span
-          className="absolute bottom-1 text-[9px] font-bold text-stone-300 leading-none drop-shadow-xs"
+          className="absolute bottom-0.5 text-[8px] font-bold text-stone-300 leading-none drop-shadow-xs"
           title="Nam (180°)"
         >
           N
         </span>
         <span
-          className="absolute right-1.5 text-[9px] font-bold text-stone-300 leading-none drop-shadow-xs"
+          className="absolute right-1 text-[8px] font-bold text-stone-300 leading-none drop-shadow-xs"
           title="Đông (90°)"
         >
           Đ
         </span>
         <span
-          className="absolute left-1.5 text-[9px] font-bold text-stone-300 leading-none drop-shadow-xs"
+          className="absolute left-1 text-[8px] font-bold text-stone-300 leading-none drop-shadow-xs"
           title="Tây (270°)"
         >
           T
         </span>
 
-        {/* Intercardinal Dots for NE, SE, SW, NW */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="absolute w-[50px] h-[50px] rounded-full">
-            <span className="absolute top-1.5 right-1.5 w-1 h-1 rounded-full bg-stone-600/70" title="Đông Bắc (45°)" />
-            <span className="absolute bottom-1.5 right-1.5 w-1 h-1 rounded-full bg-stone-600/70" title="Đông Nam (135°)" />
-            <span className="absolute bottom-1.5 left-1.5 w-1 h-1 rounded-full bg-stone-600/70" title="Tây Nam (225°)" />
-            <span className="absolute top-1.5 left-1.5 w-1 h-1 rounded-full bg-stone-600/70" title="Tây Bắc (315°)" />
-          </div>
-        </div>
-
         {/* Compass Needle (Rotates smoothly with 3D camera orientation) */}
         <div
-          className="relative w-1.5 h-10 flex flex-col items-center justify-center transition-transform duration-75 ease-out pointer-events-none"
+          className="relative w-1.5 h-7 flex flex-col items-center justify-center transition-transform duration-75 ease-out pointer-events-none"
           style={{ transform: `rotate(${cameraRotation}deg)` }}
         >
           {/* North needle (Red) */}
-          <div className="w-0 h-0 border-l-[3.5px] border-l-transparent border-r-[3.5px] border-r-transparent border-b-[18px] border-b-rose-500 drop-shadow-[0_2px_4px_rgba(244,63,94,0.4)]" />
+          <div className="w-0 h-0 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-b-[13px] border-b-rose-500 drop-shadow-[0_2px_4px_rgba(244,63,94,0.4)]" />
           {/* South needle (Emerald) */}
-          <div className="w-0 h-0 border-l-[3.5px] border-l-transparent border-r-[3.5px] border-r-transparent border-t-[18px] border-t-emerald-600 drop-shadow-[0_2px_4px_rgba(5,150,105,0.4)]" />
+          <div className="w-0 h-0 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-t-[13px] border-t-emerald-600 drop-shadow-[0_2px_4px_rgba(5,150,105,0.4)]" />
           {/* Pivot pin */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white border border-stone-700 shadow-sm z-10" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white border border-stone-700 shadow-sm z-10" />
         </div>
       </div>
 
       {/* Interactive Room Direction Label & Selector */}
-      <button
-        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#181B1E]/90 hover:bg-stone-800 border border-stone-700/80 hover:border-stone-500 text-[11px] font-semibold text-stone-300 hover:text-white transition-all shadow-md group cursor-pointer"
-        title="Nhấp để đổi hướng phòng"
-      >
-        <span>Hướng phòng:</span>
-        <span className="text-white font-bold">{dirName} ({dirAngle}°)</span>
-        <svg
-          className={`w-3 h-3 text-stone-400 group-hover:text-stone-200 transition-transform ${
-            isDropdownOpen ? 'rotate-180 text-emerald-400' : ''
-          }`}
-          viewBox="0 0 20 20"
-          fill="currentColor"
+      <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
+        <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider text-stone-400 px-0.5">
+          <span>Hướng phòng</span>
+          <span className="text-[9px] text-emerald-400 font-normal">Bát Trạch</span>
+        </div>
+        <button
+          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#202428] hover:bg-[#2A2F34] border border-stone-700/70 hover:border-emerald-500/50 text-xs font-bold text-white transition-all shadow-xs group cursor-pointer"
+          title="Nhấp để đổi hướng phòng"
         >
-          <path
-            fillRule="evenodd"
-            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </button>
+          <span className="truncate">{dirName} ({dirAngle}°)</span>
+          <svg
+            className={`w-3.5 h-3.5 text-stone-400 group-hover:text-emerald-400 transition-transform ${
+              isDropdownOpen ? 'rotate-180 text-emerald-400' : ''
+            }`}
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
+      </div>
 
       {/* Floating 8-Direction Selection Popover */}
       {isDropdownOpen && (

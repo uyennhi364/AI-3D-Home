@@ -86,67 +86,6 @@ export async function generateFengShuiConsultation(
   actionHistory?: StructuredActionHistoryEntry[]
 ): Promise<FengShuiConsultationResult> {
   const classified = classifyUserIntent(prompt);
-
-  // 1. Try sending context to server endpoint with timeout
-  try {
-    // Build conversation history (limit to last 4 turns for speed unless full context needed)
-    const rawHistory = chatHistory || [];
-    const slicedHistory = rawHistory.slice(-4);
-    const historyMessages = slicedHistory.map((m) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      content: m.content,
-    }));
-    const messages = [
-      ...historyMessages,
-      { role: 'user', content: prompt },
-    ];
-
-    const localApiKey = typeof window !== 'undefined' ? (localStorage.getItem('gemini_api_key') || '').trim() : '';
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (localApiKey) {
-      headers['x-gemini-api-key'] = localApiKey;
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 7500); // 7.5s hard timeout
-
-    const res = await fetch('/api/gemini/chat', {
-      method: 'POST',
-      headers,
-      signal: controller.signal,
-      body: JSON.stringify({
-        messages,
-        intent: classified.intent,
-        classified,
-        actionHistory,
-        userProfile: classified.needsFengShuiEngine ? userProfile : undefined, // Omit heavy Bát Trạch if simple add/move
-        roomConfig,
-        objects,
-        ruleEngineResult: classified.needsFengShuiEngine ? evaluation : undefined, // Omit full report if not needed
-        selectedObjectId,
-        apiKey: localApiKey || undefined,
-      }),
-    });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      const data = await res.json();
-      // Server returns { success, reply, aiActions, proposedAdjustment, optimizationProposal, isGeminiOnline }
-      if (data && data.success) {
-        return {
-          replyText: data.reply || data.replyText || 'Đã phân tích căn phòng.',
-          actions: data.aiActions?.actions || data.actions,
-          proposal: data.optimizationProposal || data.proposal,
-          proposedAdjustment: data.proposedAdjustment,
-          isGeminiOnline: Boolean(data.isGeminiOnline),
-        };
-      }
-    }
-  } catch (_e) {
-    // Offline, timeout or server error -> proceed seamlessly with intelligent local engine
-  }
-
-  // 2. High-Intelligence Local AI Designer Fallback
   const lowerPrompt = prompt.toLowerCase();
   if (/(^|\s)(undo|hoàn tác|hoàn lại|khôi phục|quay lại như cũ|trở lại như cũ|như lúc trước|bỏ thao tác|huỷ thao tác|hủy thao tác)/.test(lowerPrompt)) {
     return {
@@ -423,6 +362,63 @@ export async function generateFengShuiConsultation(
         };
       }
     }
+  }
+
+  // Remote Gemini Consultation Endpoint for conversational queries & feng shui advice
+  try {
+    const rawHistory = chatHistory || [];
+    const slicedHistory = rawHistory.slice(-4);
+    const historyMessages = slicedHistory.map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      content: m.content,
+    }));
+    const messages = [
+      ...historyMessages,
+      { role: 'user', content: prompt },
+    ];
+
+    const localApiKey = typeof window !== 'undefined' ? (localStorage.getItem('gemini_api_key') || '').trim() : '';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (localApiKey) {
+      headers['x-gemini-api-key'] = localApiKey;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout
+
+    const res = await fetch('/api/gemini/chat', {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        messages,
+        intent: classified.intent,
+        classified,
+        actionHistory,
+        userProfile: classified.needsFengShuiEngine ? userProfile : undefined,
+        roomConfig,
+        objects,
+        ruleEngineResult: classified.needsFengShuiEngine ? evaluation : undefined,
+        selectedObjectId,
+        apiKey: localApiKey || undefined,
+      }),
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success) {
+        return {
+          replyText: data.reply || data.replyText || 'Đã phân tích căn phòng.',
+          actions: data.aiActions?.actions || data.actions,
+          proposal: data.optimizationProposal || data.proposal,
+          proposedAdjustment: data.proposedAdjustment,
+          isGeminiOnline: Boolean(data.isGeminiOnline),
+        };
+      }
+    }
+  } catch (_e) {
+    // Offline, timeout or server error -> fall back to local intent parser
   }
 
   // Build scene state snapshot and delegate to intent parser

@@ -94,7 +94,9 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
   const selectionHelperRef = useRef<THREE.BoxHelper | null>(null);
   const previewMeshesRef = useRef<THREE.Group[]>([]);
   const compassMeshRef = useRef<THREE.Mesh | null>(null);
-  const wallsRef = useRef<{ north?: THREE.Group; west?: THREE.Group; east?: THREE.Group }>({});
+  const wallsRef = useRef<{ north?: THREE.Group; south?: THREE.Group; west?: THREE.Group; east?: THREE.Group }>({});
+  const objectsRef = useRef<RoomObject[]>(objects);
+  objectsRef.current = objects;
   const lightsRef = useRef<{
     sunLight: THREE.DirectionalLight;
     skyFillLight: THREE.HemisphereLight;
@@ -193,6 +195,7 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
       antialias: true,
       powerPreference: 'high-performance',
       alpha: false,
+      preserveDrawingBuffer: true,
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -291,6 +294,18 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
       if (event.value) onBeginInteraction?.();
       if (controlsRef.current) {
         controlsRef.current.enabled = !event.value;
+      }
+      if (!event.value && tControls.object) {
+        // Drag or rotate ended: resync mesh position and rotation exactly with validated React state
+        const targetMesh = tControls.object as THREE.Group;
+        const id = targetMesh.userData?.id;
+        if (id) {
+          const currentObj = objectsRef.current.find((o) => o.id === id);
+          if (currentObj) {
+            targetMesh.position.set(currentObj.position.x, 0, currentObj.position.z);
+            targetMesh.rotation.y = currentObj.rotation.y;
+          }
+        }
       }
     });
 
@@ -423,9 +438,10 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
           });
         };
 
-        updateWallOpacity(wallsRef.current.north, cam.z < -halfL * 0.7);
-        updateWallOpacity(wallsRef.current.west, cam.x < -halfW * 0.7);
-        updateWallOpacity(wallsRef.current.east, cam.x > halfW * 0.7);
+        updateWallOpacity(wallsRef.current.north, cam.z < -halfL * 0.45);
+        updateWallOpacity(wallsRef.current.south, cam.z > halfL * 0.45);
+        updateWallOpacity(wallsRef.current.west, cam.x < -halfW * 0.45);
+        updateWallOpacity(wallsRef.current.east, cam.x > halfW * 0.45);
       }
 
 
@@ -450,11 +466,45 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
     });
     ro.observe(container);
 
+    const handleExport3D = () => {
+      if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return;
+      rendererRef.current.render(sceneRef.current, cameraRef.current);
+      const dataUrl = rendererRef.current.domElement.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `phoi-canh-phong-ngu-3d-${Date.now()}.png`;
+      a.click();
+    };
+
+    const handleExport2D = () => {
+      if (!rendererRef.current || !sceneRef.current || !cameraRef.current || !controlsRef.current) return;
+      const prevPos = cameraRef.current.position.clone();
+      const prevTarget = controlsRef.current.target.clone();
+      cameraRef.current.position.set(0, 14.5, 0.001);
+      controlsRef.current.target.set(0, 0, 0);
+      controlsRef.current.update();
+      rendererRef.current.render(sceneRef.current, cameraRef.current);
+      const dataUrl = rendererRef.current.domElement.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `mat-bang-phong-ngu-2d-${Date.now()}.png`;
+      a.click();
+      cameraRef.current.position.copy(prevPos);
+      controlsRef.current.target.copy(prevTarget);
+      controlsRef.current.update();
+      rendererRef.current.render(sceneRef.current, cameraRef.current);
+    };
+
+    window.addEventListener('three-export-3d-image', handleExport3D);
+    window.addEventListener('three-export-2d-plan', handleExport2D);
+
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', handleResize);
       controls.removeEventListener('change', handleControlsChange);
       window.removeEventListener('three-camera-reset', handleCameraReset);
+      window.removeEventListener('three-export-3d-image', handleExport3D);
+      window.removeEventListener('three-export-2d-plan', handleExport2D);
       ro.disconnect();
       tControls.dispose();
       controls.dispose();
@@ -845,18 +895,19 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
 
     roomGroup.add(eastWallGroup);
 
-    wallsRef.current = {
-      north: northWallGroup,
-      west: westWallGroup,
-      east: eastWallGroup,
-    };
-
     // South Wall (Z = halfL) - Architectural low cutaway wall matching reference photo
     const southWallGroup = new THREE.Group();
     southWallGroup.add(
       createWallSegment(roomConfig.width, cutawayH, wallThick, 0, cutawayH / 2, halfL)
     );
     roomGroup.add(southWallGroup);
+
+    wallsRef.current = {
+      north: northWallGroup,
+      south: southWallGroup,
+      west: westWallGroup,
+      east: eastWallGroup,
+    };
 
     scene.add(roomGroup);
   }, [roomConfig, userProfile, showFengShuiOverlay]);

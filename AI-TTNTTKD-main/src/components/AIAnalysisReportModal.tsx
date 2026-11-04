@@ -20,6 +20,7 @@ interface AIAnalysisReportModalProps {
   onPreviewProposal?: (single: ProposedAdjustment | null, adjustments?: ProposedAdjustment[]) => void;
   onApplyProposal?: (adj: ProposedAdjustment) => void;
   onApplyMultipleAdjustments?: (adjs: ProposedAdjustment[]) => void;
+  onSelectObject?: (id: string) => void;
 }
 
 export const AIAnalysisReportModal: React.FC<AIAnalysisReportModalProps> = ({
@@ -34,10 +35,15 @@ export const AIAnalysisReportModal: React.FC<AIAnalysisReportModalProps> = ({
   onPreviewProposal,
   onApplyProposal,
   onApplyMultipleAdjustments,
+  onSelectObject,
 }) => {
   if (!isOpen) return null;
 
   const currentScore = reportData?.overallScore || evaluation.overallScore || 54;
+  const isOutdated = reportData && (
+    reportData.overallScore !== evaluation.overallScore ||
+    (reportData.objectDetails && reportData.objectDetails.length !== objects.length)
+  );
   const targetScore = Math.min(100, currentScore + 20);
 
   // ── DYNAMIC core issues từ evaluation.items thực tế (không hardcode) ──────────
@@ -152,6 +158,24 @@ export const AIAnalysisReportModal: React.FC<AIAnalysisReportModalProps> = ({
             2. SCROLLABLE REPORT BODY
            ========================================================================= */}
         <div className="p-6 overflow-y-auto space-y-6 text-stone-800 text-xs">
+          {/* Stale State Outdated Alert */}
+          {isOutdated && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center justify-between text-xs text-amber-900 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-amber-800">⚡ Cập nhật:</span>
+                <span>Bố cục đồ vật đã thay đổi sau khi báo cáo này được tạo. Điểm thực tế hiện tại là <strong className="font-mono">{evaluation.overallScore}/100</strong>.</span>
+              </div>
+              {onTriggerOptimization && (
+                <button
+                  onClick={onTriggerOptimization}
+                  className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[11px] shrink-0 transition-colors cursor-pointer"
+                >
+                  Phân tích lại
+                </button>
+              )}
+            </div>
+          )}
+
           {/* A. TỔNG QUAN ĐIỂM SỐ & DỰ BÁO TỐI ƯU */}
           <div className="p-5 rounded-2xl bg-white border border-[#E8DEC8] shadow-xs">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
@@ -298,7 +322,8 @@ export const AIAnalysisReportModal: React.FC<AIAnalysisReportModalProps> = ({
                     <th className="py-2.5 px-3">Cung Bát Trạch</th>
                     <th className="py-2.5 px-3">Tọa độ 3D</th>
                     <th className="py-2.5 px-3">Đánh giá</th>
-                    <th className="py-2.5 px-4 text-right">Tình trạng</th>
+                    <th className="py-2.5 px-3 text-center">Tình trạng</th>
+                    <th className="py-2.5 px-3 text-right">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 text-[11px]">
@@ -323,7 +348,7 @@ export const AIAnalysisReportModal: React.FC<AIAnalysisReportModalProps> = ({
                             ? itemEval.issues[0]
                             : 'Đạt chuẩn thông thủy & tụ khí'}
                         </td>
-                        <td className="py-2.5 px-4 text-right font-bold">
+                        <td className="py-2.5 px-3 text-center font-bold">
                           {isGood ? (
                             <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                               Cát Lợi
@@ -337,6 +362,18 @@ export const AIAnalysisReportModal: React.FC<AIAnalysisReportModalProps> = ({
                               Cần Chỉnh
                             </span>
                           )}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <button
+                            onClick={() => {
+                              onSelectObject?.(obj.id);
+                              onClose();
+                            }}
+                            className="px-2 py-1 bg-stone-200 hover:bg-emerald-600 hover:text-white text-stone-700 rounded-md font-semibold text-[10px] transition-colors cursor-pointer"
+                            title="Chọn và xem đồ vật này trên mô hình 3D"
+                          >
+                            Xem 3D ↗
+                          </button>
                         </td>
                       </tr>
                     );
