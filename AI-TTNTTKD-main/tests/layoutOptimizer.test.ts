@@ -47,7 +47,7 @@ export function runLayoutOptimizerTests(): { passed: number; failed: number } {
     type: 'bed',
     name: 'Giường ngủ Master',
     dimensions: { width: 1.8, length: 2.0, height: 0.9 },
-    position: { x: -1.2, z: -1.5 },
+    position: { x: -1.2, y: 0, z: -1.5 },
     rotation: { x: 0, y: 0, z: 0 },
   };
 
@@ -56,7 +56,7 @@ export function runLayoutOptimizerTests(): { passed: number; failed: number } {
     type: 'wardrobe',
     name: 'Tủ quần áo',
     dimensions: { width: 1.8, length: 0.6, height: 2.2 },
-    position: { x: 1.2, z: -2.0 },
+    position: { x: 1.2, y: 0, z: -2.0 },
     rotation: { x: 0, y: 0, z: 0 },
   };
 
@@ -66,7 +66,7 @@ export function runLayoutOptimizerTests(): { passed: number; failed: number } {
 
   const wardrobeColliding: RoomObject = {
     ...wardrobeObj,
-    position: { x: -1.2, z: -1.5 }, // Same spot as bed
+    position: { x: -1.2, y: 0, z: -1.5 }, // Same spot as bed
   };
   const c1BadConflicts = validateOptimizedLayout([bedObj, wardrobeColliding], { width: standardRoom.width, length: standardRoom.length });
   assert('Test 1b: Phát hiện va chạm khi giường và tủ cùng di chuyển vào một tọa độ', c1BadConflicts.length > 0);
@@ -79,7 +79,7 @@ export function runLayoutOptimizerTests(): { passed: number; failed: number } {
     type: 'desk',
     name: 'Bàn làm việc',
     dimensions: { width: 1.3, length: 0.65, height: 0.75 },
-    position: { x: 1.5, z: 1.0 },
+    position: { x: 1.5, y: 0, z: 1.0 },
     rotation: { x: 0, y: Math.PI, z: 0 },
   };
 
@@ -88,7 +88,7 @@ export function runLayoutOptimizerTests(): { passed: number; failed: number } {
     type: 'chair',
     name: 'Ghế làm việc',
     dimensions: { width: 0.55, length: 0.55, height: 0.85 },
-    position: { x: 1.5, z: 1.6 }, // 0.6m offset along Z
+    position: { x: 1.5, y: 0, z: 1.6 }, // 0.6m offset along Z
     rotation: { x: 0, y: Math.PI, z: 0 },
   };
 
@@ -158,8 +158,8 @@ export function runLayoutOptimizerTests(): { passed: number; failed: number } {
   // Case 6: Nhiều đồ vật tập trung tại một góc phòng
   // -------------------------------------------------------------------------
   const cornerItems: RoomObject[] = [
-    { id: 'c1', type: 'wardrobe', name: 'Tủ', dimensions: { width: 1.0, length: 0.6, height: 2.0 }, position: { x: -1.8, z: -1.8 }, rotation: { x: 0, y: 0, z: 0 } },
-    { id: 'c2', type: 'desk', name: 'Bàn', dimensions: { width: 0.9, length: 0.5, height: 0.75 }, position: { x: -1.8, z: -1.1 }, rotation: { x: 0, y: 0, z: 0 } },
+    { id: 'c1', type: 'wardrobe', name: 'Tủ', dimensions: { width: 1.0, length: 0.6, height: 2.0 }, position: { x: -1.8, y: 0, z: -1.8 }, rotation: { x: 0, y: 0, z: 0 } },
+    { id: 'c2', type: 'desk', name: 'Bàn', dimensions: { width: 0.9, length: 0.5, height: 0.75 }, position: { x: -1.8, y: 0, z: -1.1 }, rotation: { x: 0, y: 0, z: 0 } },
   ];
   const cornerCheck = validatePlacementSafety(
     { x: -1.8, z: -1.5 }, // between c1 and c2
@@ -182,7 +182,7 @@ export function runLayoutOptimizerTests(): { passed: number; failed: number } {
         type: 'wardrobe',
         name: 'Vật cản',
         dimensions: { width: 0.85, length: 0.85, height: 1.0 },
-        position: { x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 },
+        position: { x: Math.round(x * 10) / 10, y: 0, z: Math.round(z * 10) / 10 },
         rotation: { x: 0, y: 0, z: 0 },
       });
     }
