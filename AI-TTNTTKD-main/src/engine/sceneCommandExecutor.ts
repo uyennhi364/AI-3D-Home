@@ -64,10 +64,15 @@ function clampPosition(
   x: number,
   z: number,
   objDims: { width: number; length: number },
-  roomConfig: RoomConfig
+  roomConfig: RoomConfig,
+  rotationY: number = 0
 ): { x: number; z: number } {
-  const hw = roomConfig.width / 2 - objDims.width / 2 - 0.1;
-  const hl = roomConfig.length / 2 - objDims.length / 2 - 0.1;
+  const cos = Math.abs(Math.cos(rotationY));
+  const sin = Math.abs(Math.sin(rotationY));
+  const extentX = (objDims.width / 2) * cos + (objDims.length / 2) * sin;
+  const extentZ = (objDims.width / 2) * sin + (objDims.length / 2) * cos;
+  const hw = Math.max(0, roomConfig.width / 2 - extentX - 0.1);
+  const hl = Math.max(0, roomConfig.length / 2 - extentZ - 0.1);
   return {
     x: Math.max(-hw, Math.min(hw, x)),
     z: Math.max(-hl, Math.min(hl, z)),
@@ -184,7 +189,7 @@ function executeMove(
     }
   }
 
-  const clamped = clampPosition(newX, newZ, target.dimensions, roomConfig);
+  const clamped = clampPosition(newX, newZ, target.dimensions, roomConfig, target.rotation?.y ?? 0);
   const updatedObjects = objects.map((o) =>
     o.id === cmd.object_id
       ? { ...o, position: { ...o.position, x: clamped.x, z: clamped.z } }

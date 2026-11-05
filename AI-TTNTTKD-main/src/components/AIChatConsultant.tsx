@@ -399,16 +399,25 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
 
     if (isOptimizeRequest) {
       const analysisCardData = buildAnalysisCardData(userProfile, roomConfig, objects, evaluation);
-      // Auto-trigger ghost preview in 3D so user immediately sees the proposed layout
-      if (analysisCardData.proposal) {
-        onPreviewProposal(null, analysisCardData.proposal.adjustments);
+      if (analysisCardData.proposal?.adjustments?.length) {
+        onApplyMultipleAdjustments(analysisCardData.proposal.adjustments);
+      }
+      if (onPreviewProposal) {
+        onPreviewProposal(null, []);
       }
 
       const assistantMsg: ChatMessage = {
         id: `a_${Date.now()}`,
         role: 'assistant',
-        content: `Tôi đã lập phương án tối ưu bố cục và phong thủy cho phòng ngủ. Đang hiển thị bóng mờ 3D trên không gian:`,
+        content: `✓ Đã tối ưu hóa bố cục và phong thủy cho phòng ngủ (${analysisCardData.proposal?.adjustments?.length || 0} điều chỉnh). Mô hình 3D đã được sắp xếp lại an toàn theo cung vị cát:`,
         analysisCard: analysisCardData,
+        executedSummary: analysisCardData.proposal
+          ? {
+              changes: analysisCardData.proposal.adjustments.map((adj) => adj.reason),
+              beforeScore: analysisCardData.proposal.beforeScore,
+              afterScore: analysisCardData.proposal.afterScore,
+            }
+          : undefined,
       };
       setMessages((prev) => [...prev, assistantMsg]);
       setIsLoading(false);

@@ -102,11 +102,11 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
       // 10. Long White Calacatta Marble Credenza Console along East wall
       {
         id: 'vanity_east',
-        type: 'kitchen',
+        type: 'storage',
         name: 'Tủ console đá cẩm thạch',
         position: { x: 1.85, y: 0, z: 0.55 },
         rotation: { x: 0, y: -Math.PI / 2, z: 0 },
-        dimensions: { width: 1.6, length: 0.55, height: 0.88 },
+        dimensions: { width: 1.2, length: 0.45, height: 0.85 },
       },
       // 11. Standing Mirror leaning along East wall
       {
