@@ -1031,28 +1031,7 @@ export default function App() {
                 <span className="sm:hidden">Phòng</span>
               </button>
 
-              <button
-                onClick={handleUndo}
-                disabled={historyPast.length === 0}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-all ${
-                  historyPast.length > 0
-                    ? 'text-stone-300 hover:text-white hover:bg-stone-800 cursor-pointer'
-                    : 'text-stone-600 cursor-not-allowed opacity-50'
-                }`}
-                title="Hoàn tác thao tác vừa thực hiện (Ctrl+Z)"
-              >
-                <span>↩</span>
-                <span className="hidden sm:inline">Hoàn tác</span>
-              </button>
 
-              <button
-                onClick={handleExport3DImage}
-                className="px-2.5 py-1.5 rounded-lg font-semibold flex items-center gap-1 text-stone-300 hover:text-white hover:bg-stone-800 transition-all cursor-pointer"
-                title="Chụp ảnh phối cảnh 3D độ phân giải cao"
-              >
-                <span>📸</span>
-                <span className="hidden md:inline">Chụp 3D</span>
-              </button>
             </div>
           </div>
 
