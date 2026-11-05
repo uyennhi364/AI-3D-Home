@@ -119,6 +119,7 @@ export const RoomConfigModal: React.FC<RoomConfigModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            data-testid="room-config-modal-close"
             className="w-7 h-7 rounded-lg hover:bg-stone-800 text-stone-400 hover:text-white flex items-center justify-center text-sm transition-colors cursor-pointer"
           >
             ✕
