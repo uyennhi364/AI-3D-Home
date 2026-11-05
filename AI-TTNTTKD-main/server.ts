@@ -278,7 +278,11 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
   }
 
   // 2. Command: Multi-Action Add Furniture (e.g., "Thêm giường, tủ quần áo, nhà vệ sinh, bàn học")
-  if (lower.includes('thêm') || lower.includes('tạo') || lower.includes('đặt thêm') || lower.includes('mua thêm') || lower.includes('bổ sung')) {
+  // CRITICAL: Guard against "xóa bàn vừa mới thêm" accidentally matching 'thêm'
+  const isDeleteCommandServer = lower.includes('xóa') || lower.includes('bỏ đi') || lower.includes('loại bỏ') || lower.includes('gỡ bỏ') || lower.includes('delete') || lower.includes('gỡ');
+  const isRecentReferenceServer = /(vừa|mới|vừa\s*mới|đã)\s*thêm/.test(lower);
+
+  if (!isDeleteCommandServer && !isRecentReferenceServer && (lower.includes('thêm') || lower.includes('tạo') || lower.includes('đặt thêm') || lower.includes('mua thêm') || lower.includes('bổ sung'))) {
     const extractedItems = extractAllActionItems(lower);
     const itemsToAdd = extractedItems.length > 0 ? extractedItems : [
       {
@@ -450,7 +454,7 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
     // 5A. Context-Aware Reference Deletion ("Xóa những cái vừa tạo", "Xóa chiếc giường vừa thêm", "Xóa cái thứ 2"...)
     const contextRef = detectContextReference(lower);
     if (contextRef) {
-      const resolved = resolveContextTargets(contextRef, actionHistory, objects, selectedObjectId);
+      const resolved = resolveContextTargets(contextRef, actionHistory, objects, selectedObjectId, roomConfig);
       if (resolved.resolved && resolved.targetObjects.length > 0) {
         const targetIds = resolved.targetObjects.map((o: any) => o.id);
         const targetNames = resolved.targetObjects.map((o: any) => o.name).join(', ');

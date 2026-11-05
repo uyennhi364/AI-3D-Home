@@ -153,3 +153,56 @@ export interface StructuredActionHistoryEntry {
   executionStatus: 'SUCCESS' | 'FAILED';
   meta?: Record<string, any>;
 }
+
+export interface NearestWallInfo {
+  wall: 'North' | 'South' | 'East' | 'West';
+  distance: number;
+}
+
+export interface ObjectSpatialDetail {
+  id: string;
+  name: string;
+  type: RoomObjectType;
+  dimensions: { width: number; length: number; height: number };
+  position: { x: number; z: number };
+  rotationDeg: number;
+  distToDoor: number;
+  distToWindow: number;
+  distToWc: number;
+  distToBed?: number;
+  nearestWall: NearestWallInfo;
+  adjacentObjectIds: string[];
+  isFacingBed?: boolean;
+}
+
+export interface DoorCorridorStatus {
+  isBlocked: boolean;
+  blockingObjectIds: string[];
+  blockingObjectNames: string[];
+  clearanceDepth: number;
+}
+
+export interface FloorUtilizationSummary {
+  totalArea: number;
+  occupiedArea: number;
+  freeArea: number;
+  densityPercentage: number;
+}
+
+export interface LargestFreeSpaceZone {
+  areaName: string;
+  bounds: { width: number; length: number };
+  approxCenter: { x: number; z: number };
+  description: string;
+}
+
+export interface GroundTruthSpatialContext {
+  roomDimensions: { width: number; length: number; height: number; areaM2: number };
+  roomOrientation: CompassDirection;
+  doorCorridor: DoorCorridorStatus;
+  floorUtilization: FloorUtilizationSummary;
+  objectSpatialDetails: ObjectSpatialDetail[];
+  largestFreeSpaces: LargestFreeSpaceZone[];
+  formattedAgentPrompt: string;
+}
+

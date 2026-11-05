@@ -5,7 +5,7 @@
 // using Structured Action History and live 3D Scene State.
 // =============================================================================
 
-import { RoomObject, StructuredActionHistoryEntry, RoomObjectType } from '../types/fengshui';
+import { RoomObject, StructuredActionHistoryEntry, RoomObjectType, RoomConfig } from '../types/fengshui';
 import { ContextReferenceInfo } from './intentClassifier';
 
 export interface ResolvedContextTargets {
@@ -21,7 +21,8 @@ export function resolveContextTargets(
   contextRef: ContextReferenceInfo | undefined,
   actionHistory: StructuredActionHistoryEntry[] = [],
   currentObjects: RoomObject[] = [],
-  selectedObjectId: string | null = null
+  selectedObjectId: string | null = null,
+  roomConfig?: RoomConfig
 ): ResolvedContextTargets {
   if (!contextRef) {
     return { resolved: false, targetObjects: [], reason: 'Không có tham chiếu ngữ cảnh.' };
@@ -64,17 +65,26 @@ export function resolveContextTargets(
     };
   }
 
-  // 2. Case: "chiếc giường vừa tạo" / "bàn học vừa thêm"
+  // 2. Case: "chiếc giường vừa tạo" / "bàn học vừa thêm" / "xóa bàn vừa mới thêm"
   if (contextRef.type === 'specific_recent') {
     const targetType = contextRef.targetObjectType;
-    if (!targetType) {
-      return { resolved: false, targetObjects: [], reason: 'Không xác định được loại đồ vật cụ thể.' };
-    }
+    const isDeskOrTable =
+      targetType === 'desk' ||
+      targetType === 'table' ||
+      contextRef.rawPhrase.toLowerCase().includes('bàn');
 
-    // Search backwards in actionHistory for this specific objectType
-    const matchingAdds = actionHistory.filter(
-      (e) => e.actionType === 'add_object' && e.objectType === targetType && e.executionStatus === 'SUCCESS'
-    );
+    // Search backwards in actionHistory for this specific objectType or desk/table group
+    const matchingAdds = actionHistory.filter((e) => {
+      if (e.actionType !== 'add_object' || e.executionStatus !== 'SUCCESS') return false;
+      if (isDeskOrTable) {
+        return (
+          e.objectType === 'desk' ||
+          e.objectType === 'table' ||
+          (e.objectName && e.objectName.toLowerCase().includes('bàn'))
+        );
+      }
+      return e.objectType === targetType;
+    });
 
     if (matchingAdds.length > 0) {
       // Pick the most recent one
@@ -90,23 +100,127 @@ export function resolveContextTargets(
     }
 
     // Fallback: search in current room objects of that type
-    const fallbacks = currentObjects.filter((o) => o.type === targetType);
-    if (fallbacks.length > 0) {
+    const fallbacks = currentObjects.filter((o) => {
+      if (isDeskOrTable) {
+        return o.type === 'desk' || o.type === 'table' || o.name.toLowerCase().includes('bàn');
+      }
+      return o.type === targetType;
+    });
+
+    if (fallbacks.length === 1) {
       return {
         resolved: true,
-        targetObjects: [fallbacks[fallbacks.length - 1]],
-        reason: `Đã xác định được ${fallbacks[fallbacks.length - 1].name} trong phòng.`,
+        targetObjects: [fallbacks[0]],
+        reason: `Đã xác định được ${fallbacks[0].name} trong phòng.`,
+      };
+    } else if (fallbacks.length > 1) {
+      return {
+        resolved: false,
+        targetObjects: [],
+        reason: `Trong phòng hiện có nhiều đồ vật loại này (${fallbacks.map((f) => f.name).join(', ')}). Vui lòng nêu rõ tên đồ vật cụ thể bạn muốn xóa.`,
       };
     }
 
     return {
       resolved: false,
       targetObjects: [],
-      reason: `Không tìm thấy đồ vật loại "${targetType}" nào vừa được tạo trong phòng.`,
+      reason: `Không tìm thấy đồ vật nào phù hợp vừa được tạo trong phòng.`,
     };
   }
 
-  // 3. Case: "cái thứ hai", "cái thứ 2", "cái đầu tiên"
+  // 3. Case: Spatial relation ("Xóa chiếc bàn cạnh cửa sổ", "chiếc bàn cạnh giường", "chắn cửa"...)
+  if (contextRef.type === 'spatial_relation') {
+    const anchor = contextRef.spatialAnchor;
+    const targetType = contextRef.targetObjectType;
+    const isDeskOrTable =
+      targetType === 'desk' ||
+      targetType === 'table' ||
+      contextRef.rawPhrase.toLowerCase().includes('bàn');
+
+    // Filter candidate objects matching the target
+    const candidates = currentObjects.filter((o) => {
+      if (isDeskOrTable) {
+        return o.type === 'desk' || o.type === 'table' || o.name.toLowerCase().includes('bàn');
+      }
+      if (targetType) {
+        return o.type === targetType;
+      }
+      return o.type !== 'door' && o.type !== 'window';
+    });
+
+    if (candidates.length === 0) {
+      return {
+        resolved: false,
+        targetObjects: [],
+        reason: `Không tìm thấy đồ vật nào phù hợp trong phòng để thực hiện thao tác.`,
+      };
+    }
+
+    // Determine anchor coordinate in room
+    let anchorPos: { x: number; z: number } | null = null;
+    const halfW = (roomConfig?.width || 5.0) / 2;
+    const halfL = (roomConfig?.length || 5.2) / 2;
+
+    if (anchor === 'window') {
+      const winObj = currentObjects.find((o) => o.type === 'window');
+      // In master layout window is on West wall (x = -halfW, z = 0) or North (z = -halfL)
+      anchorPos = winObj ? { x: winObj.position.x, z: winObj.position.z } : { x: -halfW + 0.1, z: 0 };
+    } else if (anchor === 'door') {
+      const doorObj = currentObjects.find((o) => o.type === 'door');
+      anchorPos = doorObj ? { x: doorObj.position.x, z: doorObj.position.z } : { x: halfW - 0.1, z: -0.2 };
+    } else if (anchor === 'bed') {
+      const bedObj = currentObjects.find((o) => o.type === 'bed');
+      if (bedObj) anchorPos = { x: bedObj.position.x, z: bedObj.position.z };
+    } else if (anchor === 'wardrobe') {
+      const wardObj = currentObjects.find((o) => o.type === 'wardrobe');
+      if (wardObj) anchorPos = { x: wardObj.position.x, z: wardObj.position.z };
+    } else if (anchor === 'wc') {
+      const wcObj = currentObjects.find((o) => o.type === 'wc');
+      if (wcObj) anchorPos = { x: wcObj.position.x, z: wcObj.position.z };
+    }
+
+    if (!anchorPos) {
+      if (candidates.length === 1) {
+        return {
+          resolved: true,
+          targetObjects: [candidates[0]],
+          reason: `Đã xác định được ${candidates[0].name}.`,
+        };
+      }
+      return {
+        resolved: false,
+        targetObjects: [],
+        reason: `Không xác định được vị trí chuẩn của ${anchor || 'vật mốc'} để so sánh khoảng cách.`,
+      };
+    }
+
+    // Sort candidates by Euclidean distance to anchor
+    const sorted = [...candidates].sort((a, b) => {
+      const distA = Math.hypot(a.position.x - anchorPos!.x, a.position.z - anchorPos!.z);
+      const distB = Math.hypot(b.position.x - anchorPos!.x, b.position.z - anchorPos!.z);
+      return distA - distB;
+    });
+
+    const closest = sorted[0];
+    const anchorLabel =
+      anchor === 'window'
+        ? 'cửa sổ'
+        : anchor === 'door'
+        ? 'cửa'
+        : anchor === 'bed'
+        ? 'giường'
+        : anchor === 'wardrobe'
+        ? 'tủ'
+        : 'nhà vệ sinh';
+
+    return {
+      resolved: true,
+      targetObjects: [closest],
+      reason: `Đã xác định được ${closest.name} ở vị trí gần ${anchorLabel} nhất (cách ~${Math.round(Math.hypot(closest.position.x - anchorPos.x, closest.position.z - anchorPos.z) * 10) / 10}m).`,
+    };
+  }
+
+  // 4. Case: "cái thứ hai", "cái thứ 2", "cái đầu tiên"
   if (contextRef.type === 'ordinal') {
     const idx = contextRef.ordinalIndex ?? 0;
     const addEntries = actionHistory.filter((e) => e.actionType === 'add_object' && e.executionStatus === 'SUCCESS');

@@ -27,9 +27,10 @@ export interface ExtractedActionItem {
 }
 
 export interface ContextReferenceInfo {
-  type: 'recently_created' | 'recently_modified' | 'ordinal' | 'pronoun' | 'specific_recent';
+  type: 'recently_created' | 'recently_modified' | 'ordinal' | 'pronoun' | 'specific_recent' | 'spatial_relation';
   targetObjectType?: RoomObjectType;
   ordinalIndex?: number; // 0-based: 0 for 1st, 1 for 2nd...
+  spatialAnchor?: 'window' | 'door' | 'bed' | 'wardrobe' | 'wc';
   rawPhrase: string;
 }
 
@@ -350,8 +351,8 @@ export function detectContextReference(prompt: string): ContextReferenceInfo | u
     }
   }
 
-  // 2. Specific recent or general recent: "chiếc giường vừa tạo", "những cái vừa tạo"
-  const isRecentPhrase = /(?:vừa\s*tạo|vừa\s*thêm|vừa\s*đặt|mới\s*tạo|mới\s*thêm|vừa\s*rồi|mới\s*rồi|vừa\s*làm)/i.test(p);
+  // 2. Specific recent or general recent: "chiếc giường vừa tạo", "những cái vừa tạo", "xóa bàn vừa mới thêm"
+  const isRecentPhrase = /(?:vừa\s*tạo|vừa\s*thêm|vừa\s*đặt|mới\s*tạo|mới\s*thêm|vừa\s*mới\s*thêm|vừa\s*mới\s*tạo|vừa\s*rồi|mới\s*rồi|vừa\s*làm|đã\s*thêm)/i.test(p);
   if (isRecentPhrase) {
     let targetObj: RoomObjectType | undefined;
     for (const obj of OBJECT_PATTERNS) {
@@ -373,7 +374,37 @@ export function detectContextReference(prompt: string): ContextReferenceInfo | u
     };
   }
 
-  // 3. Pronouns: "nó", "chúng", "chúng nó", "những cái đó", "mấy cái đó", "đồ vật đó"
+  // 3. Spatial relation: "chiếc bàn cạnh cửa sổ", "cạnh giường", "chắn cửa ra vào"...
+  let spatialAnchor: 'window' | 'door' | 'bed' | 'wardrobe' | 'wc' | undefined;
+  if (/(?:cạnh|gần|sát|bên|dưới|phía)\s*(?:cửa\s*sổ|ban\s*công|ô\s*kính|vách\s*kính)/i.test(p)) {
+    spatialAnchor = 'window';
+  } else if (/(?:cạnh|gần|sát|trước|chắn|đối\s*diện)\s*(?:cửa|cửa\s*chính|cửa\s*ra\s*vào|cửa\s*phòng)/i.test(p)) {
+    spatialAnchor = 'door';
+  } else if (/(?:cạnh|gần|sát|đầu|cuối|chân)\s*(?:giường|nệm|đệm)/i.test(p)) {
+    spatialAnchor = 'bed';
+  } else if (/(?:cạnh|gần|sát)\s*(?:tủ|tủ\s*quần\s*áo|tủ\s*áo)/i.test(p)) {
+    spatialAnchor = 'wardrobe';
+  } else if (/(?:cạnh|gần|sát)\s*(?:wc|nhà\s*vệ\s*sinh|phòng\s*vệ\s*sinh|toilet)/i.test(p)) {
+    spatialAnchor = 'wc';
+  }
+
+  if (spatialAnchor) {
+    let targetObj: RoomObjectType | undefined;
+    for (const obj of OBJECT_PATTERNS) {
+      if (obj.patterns.some((pat) => p.includes(pat))) {
+        targetObj = obj.type;
+        break;
+      }
+    }
+    return {
+      type: 'spatial_relation',
+      spatialAnchor,
+      targetObjectType: targetObj,
+      rawPhrase: p,
+    };
+  }
+
+  // 4. Pronouns: "nó", "chúng", "chúng nó", "những cái đó", "mấy cái đó", "đồ vật đó"
   const isPronoun = /(?:^|\s|[.,;!?])(nó|chúng|chúng\s*nó|những\s*cái\s*đó|mấy\s*cái\s*đó|đồ\s*vật\s*đó|những\s*thứ\s*đó)(?:\s|[.,;!?]|$)/i.test(p);
   if (isPronoun) {
     return {
@@ -400,12 +431,21 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
   };
   const matches = (keywords: string[]) => keywords.some((kw) => kw.includes(' ') ? p.includes(kw) : hasWord(kw));
 
+  // Theory question detection (e.g. "Gương đối diện giường có sao không?", "Tại sao nên kê đầu giường sát tường?")
+  const isTheoryQuestion = /(có sao không|có tốt không|có nên|tại sao|vì sao|ảnh hưởng gì|ý nghĩa gì|thế nào|như thế nào|hóa giải thế nào|làm sao để|có bị phạm)/i.test(p);
+
+  // Delete action detection: MUST take precedence over ADD to avoid "vừa mới thêm" matching "thêm"
+  const isDeleteAction = matches([
+    'xóa', 'xoa', 'bỏ', 'loại bỏ', 'bỏ đi', 'vứt bỏ', 'gỡ', 'gỡ bỏ', 'xóa bỏ', 'xoa bo', 'remove', 'delete'
+  ]);
+
   // 1. Check OPTIMIZE_ROOM (Highest priority for room-wide layout command)
   if (
+    !isTheoryQuestion &&
     matches([
       'tối ưu toàn bộ', 'tối ưu phòng', 'tối ưu giúp tôi', 'tối ưu bố cục',
       'sắp xếp lại toàn bộ', 'sap xep lai toan bo', 'tối ưu lại', 'optimize room',
-      'bố trí lại phòng', 'tối ưu không gian'
+      'bố trí lại phòng', 'tối ưu không gian', 'tối ưu phong thủy'
     ])
   ) {
     return {
@@ -420,9 +460,12 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
 
   // 2. Check ANALYZE_ROOM (Explicit report/evaluation request)
   if (
+    !isTheoryQuestion &&
     matches([
       'phân tích toàn bộ', 'báo cáo phong thủy', 'đánh giá toàn bộ',
-      'phân tích phòng', 'điểm phong thủy là bao nhiêu', 'xem báo cáo'
+      'phân tích phòng', 'điểm phong thủy là bao nhiêu', 'xem báo cáo',
+      'phân tích vị trí', 'phân tích bố trí', 'hợp phong thủy không',
+      'có hợp phong thủy không', 'đánh giá phong thủy', 'xem phong thủy'
     ])
   ) {
     return {
@@ -513,8 +556,47 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
     };
   }
 
-  // 4. Check ADD_OBJECT
+  // 4. Check DELETE_OBJECT (CRITICAL: MUST RUN BEFORE ADD_OBJECT to handle "xóa bàn vừa mới thêm")
+  if (isDeleteAction) {
+    const contextRef = detectContextReference(p);
+    const allItems = extractAllActionItems(p);
+
+    let summaryText = '';
+    if (contextRef?.type === 'recently_created') {
+      summaryText = 'những đồ vật vừa tạo';
+    } else if (contextRef?.type === 'specific_recent') {
+      summaryText = `${detectedName || 'đồ vật'} vừa tạo`;
+    } else if (contextRef?.type === 'spatial_relation') {
+      const anchorName = contextRef.spatialAnchor === 'window' ? 'cạnh cửa sổ' : contextRef.spatialAnchor === 'door' ? 'cạnh cửa' : contextRef.spatialAnchor === 'bed' ? 'cạnh giường' : 'ở vị trí chỉ định';
+      summaryText = `${detectedName || 'đồ vật'} ${anchorName}`;
+    } else if (contextRef?.type === 'ordinal') {
+      summaryText = `đồ vật thứ ${(contextRef.ordinalIndex ?? 0) + 1}`;
+    } else if (allItems.length > 1) {
+      summaryText = allItems.map((it) => `${it.quantity > 1 ? `${it.quantity} ` : ''}${it.name}`).join(', ');
+    } else {
+      const qtyText = extractedQuantity > 1 ? `${extractedQuantity} ` : '';
+      summaryText = `${qtyText}${detectedName || 'đồ vật'}`;
+    }
+
+    return {
+      intent: 'DELETE_OBJECT',
+      confidence: 0.95,
+      loadingMessage: `Đang xóa ${summaryText} khỏi phòng...`,
+      extractedObjectType: allItems[0]?.type || detectedType,
+      extractedObjectName: allItems[0]?.name || detectedName,
+      extractedQuantity: allItems[0]?.quantity || extractedQuantity,
+      extractedItems: allItems.length > 0 ? allItems : undefined,
+      contextReference: contextRef,
+      needsFengShuiEngine: false,
+      needsLayoutOptimizer: false,
+      needs3DExecution: true,
+    };
+  }
+
+  // 5. Check ADD_OBJECT (Strictly guarded against delete action and "vừa mới thêm" phrases)
   if (
+    !isDeleteAction &&
+    !/(vừa|mới|vừa\s*mới|đã)\s*thêm/i.test(p) &&
     matches(['thêm', 'them', 'tạo thêm', 'đặt thêm', 'dat them', 'kê thêm', 'ke them', 'bổ sung', 'mua thêm', 'add'])
   ) {
     const allItems = extractAllActionItems(p);
@@ -538,42 +620,6 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
       extractedQuantity: itemQty,
       extractedItems: allItems.length > 0 ? allItems : undefined,
       needsFengShuiEngine: false, // Critical: do NOT run full Bát Trạch report
-      needsLayoutOptimizer: false,
-      needs3DExecution: true,
-    };
-  }
-
-  // 5. Check DELETE_OBJECT
-  if (
-    matches(['xóa', 'xoa', 'bỏ', 'gỡ', 'xóa bỏ', 'xoa bo', 'remove', 'delete'])
-  ) {
-    const contextRef = detectContextReference(p);
-    const allItems = extractAllActionItems(p);
-
-    let summaryText = '';
-    if (contextRef?.type === 'recently_created') {
-      summaryText = 'những đồ vật vừa tạo';
-    } else if (contextRef?.type === 'specific_recent') {
-      summaryText = `${detectedName || 'đồ vật'} vừa tạo`;
-    } else if (contextRef?.type === 'ordinal') {
-      summaryText = `đồ vật thứ ${(contextRef.ordinalIndex ?? 0) + 1}`;
-    } else if (allItems.length > 1) {
-      summaryText = allItems.map((it) => `${it.quantity > 1 ? `${it.quantity} ` : ''}${it.name}`).join(', ');
-    } else {
-      const qtyText = extractedQuantity > 1 ? `${extractedQuantity} ` : '';
-      summaryText = `${qtyText}${detectedName || 'đồ vật'}`;
-    }
-
-    return {
-      intent: 'DELETE_OBJECT',
-      confidence: 0.95,
-      loadingMessage: `Đang xóa ${summaryText} khỏi phòng...`,
-      extractedObjectType: allItems[0]?.type || detectedType,
-      extractedObjectName: allItems[0]?.name || detectedName,
-      extractedQuantity: allItems[0]?.quantity || extractedQuantity,
-      extractedItems: allItems.length > 0 ? allItems : undefined,
-      contextReference: contextRef,
-      needsFengShuiEngine: false,
       needsLayoutOptimizer: false,
       needs3DExecution: true,
     };
@@ -622,8 +668,9 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
     };
   }
 
-  // 8. Check FENG_SHUI_CONSULT (Specific Feng Shui theory questions)
+  // 8. Check FENG_SHUI_CONSULT (Specific Feng Shui theory questions, e.g. "Gương đối diện giường có sao không?")
   if (
+    isTheoryQuestion ||
     matches([
       'phong thủy', 'bát trạch', 'quái mệnh', 'ngũ hành', 'sinh khí', 'thiên y',
       'diên niên', 'phục vị', 'tuyệt mệnh', 'ngũ quỷ', 'lục sát', 'họa hại',

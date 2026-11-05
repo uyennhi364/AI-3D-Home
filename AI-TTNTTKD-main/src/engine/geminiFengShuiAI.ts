@@ -109,6 +109,104 @@ export async function generateFengShuiConsultation(
     };
   }
 
+  // Fast path for DELETE_OBJECT (supports multi-item delete & context references)
+  // CRITICAL: Checked BEFORE ADD_OBJECT so "xóa bàn vừa mới thêm" is never misclassified as ADD
+  if (classified.intent === 'DELETE_OBJECT') {
+    // A. Context-aware deletion: "Xóa những cái vừa tạo", "Xóa chiếc giường vừa thêm", "Xóa cái thứ 2"...
+    if (classified.contextReference) {
+      const resolvedContext = resolveContextTargets(
+        classified.contextReference,
+        actionHistory,
+        objects,
+        selectedObjectId,
+        roomConfig
+      );
+
+      if (resolvedContext.resolved && resolvedContext.targetObjects.length > 0) {
+        const toDeleteIds = resolvedContext.targetObjects.map((o) => o.id);
+        const toDeleteNames = resolvedContext.targetObjects.map((o) => o.name).join(', ');
+        const reports = resolvedContext.targetObjects.map((o) => `• ${o.name}: ✓ SUCCESS (Đã xóa thành công)`);
+
+        return {
+          replyText: `Đã thực thi yêu cầu xóa theo ngữ cảnh:\n\n${reports.join('\n')}\n\nĐã xóa toàn bộ ${toDeleteIds.length} đồ vật phù hợp khỏi không gian 3D.`,
+          actions: [
+            {
+              type: 'delete_object',
+              objectId: toDeleteIds[0],
+              objectIds: toDeleteIds,
+              description: `Xóa ${toDeleteNames}`,
+            },
+          ],
+        };
+      } else {
+        return {
+          replyText: `Chưa thể xóa: ${resolvedContext.reason}\n\nBạn có thể chỉ rõ tên đồ vật cần xóa (ví dụ: "Xóa giường", "Xóa bàn học").`,
+        };
+      }
+    }
+
+    // B. Multi-item lexical deletion: "Xóa giường, tủ quần áo, cây"
+    const itemsToDelete = (classified.extractedItems && classified.extractedItems.length > 0)
+      ? classified.extractedItems
+      : [
+          {
+            type: classified.extractedObjectType || ('desk' as RoomObjectType),
+            name: classified.extractedObjectName || 'đồ vật',
+            quantity: classified.extractedQuantity || 1,
+          },
+        ];
+
+    let currentObjects = [...objects];
+    const allDeletedIds: string[] = [];
+    const reports: string[] = [];
+
+    for (const item of itemsToDelete) {
+      const matching = currentObjects.filter((o) => o.type === item.type);
+      const reqQty = item.quantity || 1;
+
+      if (matching.length === 0) {
+        reports.push(`• ${item.name}: ✕ FAILED (Không tìm thấy đồ vật này trong phòng ngủ)`);
+        continue;
+      }
+
+      const qtyToDelete = itemsToDelete.length > 1 && reqQty === 1
+        ? Math.min(matching.length, 1)
+        : Math.min(matching.length, reqQty);
+
+      const targets = matching.slice(0, qtyToDelete);
+      const targetIds = targets.map((t) => t.id);
+
+      allDeletedIds.push(...targetIds);
+      currentObjects = currentObjects.filter((o) => !targetIds.includes(o.id));
+
+      reports.push(`• ${item.name}: ✓ SUCCESS (Đã xóa thành công ${targets.length}/${matching.length})`);
+    }
+
+    const successCount = reports.filter((r) => r.includes('SUCCESS')).length;
+    const totalCount = reports.length;
+
+    let replyText = '';
+    if (successCount === totalCount && totalCount > 0) {
+      replyText = `Đã thực thi xóa thành công toàn bộ ${totalCount} loại đồ vật theo yêu cầu:\n\n${reports.join('\n')}\n\nMô hình 3D đã được cập nhật đồng bộ.`;
+    } else if (successCount > 0) {
+      replyText = `Kết quả thực thi yêu cầu xóa (${successCount}/${totalCount} loại thành công):\n\n${reports.join('\n')}\n\nMô hình 3D đã cập nhật các đồ vật được xóa thành công.`;
+    } else {
+      replyText = `Không thể thực hiện yêu cầu xóa:\n\n${reports.join('\n')}\n\nVui lòng kiểm tra lại danh sách đồ vật hiện có trong phòng.`;
+    }
+
+    return {
+      replyText,
+      actions: allDeletedIds.length > 0 ? [
+        {
+          type: 'delete_object',
+          objectId: allDeletedIds[0],
+          objectIds: allDeletedIds,
+          description: `Xóa ${allDeletedIds.length} đồ vật`,
+        },
+      ] : undefined,
+    };
+  }
+
   // Fast path for ADD_OBJECT in offline fallback (supports multi-action commands)
   if (classified.intent === 'ADD_OBJECT') {
     const itemsToAdd = (classified.extractedItems && classified.extractedItems.length > 0)
@@ -222,109 +320,14 @@ export async function generateFengShuiConsultation(
     };
   }
 
-  // Fast path for DELETE_OBJECT (supports multi-item delete & context references)
-  if (classified.intent === 'DELETE_OBJECT') {
-    // A. Context-aware deletion: "Xóa những cái vừa tạo", "Xóa chiếc giường vừa thêm", "Xóa cái thứ 2"...
-    if (classified.contextReference) {
-      const resolvedContext = resolveContextTargets(
-        classified.contextReference,
-        actionHistory,
-        objects,
-        selectedObjectId
-      );
-
-      if (resolvedContext.resolved && resolvedContext.targetObjects.length > 0) {
-        const toDeleteIds = resolvedContext.targetObjects.map((o) => o.id);
-        const toDeleteNames = resolvedContext.targetObjects.map((o) => o.name).join(', ');
-        const reports = resolvedContext.targetObjects.map((o) => `• ${o.name}: ✓ SUCCESS (Đã xóa thành công)`);
-
-        return {
-          replyText: `Đã thực thi yêu cầu xóa theo ngữ cảnh:\n\n${reports.join('\n')}\n\nĐã xóa toàn bộ ${toDeleteIds.length} đồ vật phù hợp khỏi không gian 3D.`,
-          actions: [
-            {
-              type: 'delete_object',
-              objectId: toDeleteIds[0],
-              objectIds: toDeleteIds,
-              description: `Xóa ${toDeleteNames}`,
-            },
-          ],
-        };
-      } else {
-        return {
-          replyText: `Chưa thể xóa: ${resolvedContext.reason}\n\nBạn có thể chỉ rõ tên đồ vật cần xóa (ví dụ: "Xóa giường", "Xóa bàn học").`,
-        };
-      }
-    }
-
-    // B. Multi-item lexical deletion: "Xóa giường, tủ quần áo, cây"
-    const itemsToDelete = (classified.extractedItems && classified.extractedItems.length > 0)
-      ? classified.extractedItems
-      : [
-          {
-            type: classified.extractedObjectType || ('desk' as RoomObjectType),
-            name: classified.extractedObjectName || 'đồ vật',
-            quantity: classified.extractedQuantity || 1,
-          },
-        ];
-
-    let currentObjects = [...objects];
-    const allDeletedIds: string[] = [];
-    const reports: string[] = [];
-
-    for (const item of itemsToDelete) {
-      const matching = currentObjects.filter((o) => o.type === item.type);
-      const reqQty = item.quantity || 1;
-
-      if (matching.length === 0) {
-        reports.push(`• ${item.name}: ✕ FAILED (Không tìm thấy đồ vật này trong phòng ngủ)`);
-        continue;
-      }
-
-      const qtyToDelete = itemsToDelete.length > 1 && reqQty === 1
-        ? Math.min(matching.length, 1)
-        : Math.min(matching.length, reqQty);
-
-      const targets = matching.slice(0, qtyToDelete);
-      const targetIds = targets.map((t) => t.id);
-
-      allDeletedIds.push(...targetIds);
-      currentObjects = currentObjects.filter((o) => !targetIds.includes(o.id));
-
-      reports.push(`• ${item.name}: ✓ SUCCESS (Đã xóa thành công ${targets.length}/${matching.length})`);
-    }
-
-    const successCount = reports.filter((r) => r.includes('SUCCESS')).length;
-    const totalCount = reports.length;
-
-    let replyText = '';
-    if (successCount === totalCount && totalCount > 0) {
-      replyText = `Đã thực thi xóa thành công toàn bộ ${totalCount} loại đồ vật theo yêu cầu:\n\n${reports.join('\n')}\n\nMô hình 3D đã được cập nhật đồng bộ.`;
-    } else if (successCount > 0) {
-      replyText = `Kết quả thực thi yêu cầu xóa (${successCount}/${totalCount} loại thành công):\n\n${reports.join('\n')}\n\nMô hình 3D đã cập nhật các đồ vật được xóa thành công.`;
-    } else {
-      replyText = `Không thể thực hiện yêu cầu xóa:\n\n${reports.join('\n')}\n\nVui lòng kiểm tra lại danh sách đồ vật hiện có trong phòng.`;
-    }
-
-    return {
-      replyText,
-      actions: allDeletedIds.length > 0 ? [
-        {
-          type: 'delete_object',
-          objectId: allDeletedIds[0],
-          objectIds: allDeletedIds,
-          description: `Xóa ${allDeletedIds.length} đồ vật`,
-        },
-      ] : undefined,
-    };
-  }
-
   // Fast path for MOVE_OBJECT / ROTATE_OBJECT with context reference
   if (classified.contextReference && (classified.intent === 'MOVE_OBJECT' || classified.intent === 'ROTATE_OBJECT')) {
     const resolvedContext = resolveContextTargets(
       classified.contextReference,
       actionHistory,
       objects,
-      selectedObjectId
+      selectedObjectId,
+      roomConfig
     );
 
     if (resolvedContext.resolved && resolvedContext.targetObjects.length > 0) {

@@ -1,4 +1,9 @@
-import { checkOBBCollision, createOBBFromObject, clampOBBInsideRoom } from '../src/engine/geometryEngine';
+import {
+  checkOBBCollision,
+  createOBBFromObject,
+  clampOBBInsideRoom,
+  buildGroundTruthSpatialContext,
+} from '../src/engine/geometryEngine';
 import { RoomConfig, RoomObject } from '../src/types/fengshui';
 
 export function runGeometryEngineTests() {
@@ -72,6 +77,51 @@ export function runGeometryEngineTests() {
   assert(
     'clampOBBInsideRoom giữ vật thể nằm trọn vẹn trong biên phòng',
     clamped.x < halfW && clamped.x > -halfW && clamped.z < halfL && clamped.z > -halfL
+  );
+
+  // 4. Ground-Truth Spatial Context calculation
+  const spatialNormal = buildGroundTruthSpatialContext([bed, deskFar], roomConfig);
+  assert(
+    'buildGroundTruthSpatialContext tính chính xác diện tích phòng (4.2m × 5.0m = 21m²)',
+    spatialNormal.roomDimensions.areaM2 === 21.0
+  );
+  assert(
+    'Hành lang cửa chính thông thoáng khi không có vật cản',
+    spatialNormal.doorCorridor.isBlocked === false
+  );
+  assert(
+    'Tường gần nhất của giường tại (0,0) trong phòng 4.2m×5.0m là tường Tây (cách 2.1m)',
+    spatialNormal.objectSpatialDetails.find((o) => o.id === 'bed_test')?.nearestWall.distance === 2.1
+  );
+
+  // 5. Door corridor obstruction detection
+  const doorObj: RoomObject = {
+    id: 'door_main',
+    type: 'door',
+    name: 'Cửa ra vào',
+    dimensions: { width: 0.9, length: 0.1, height: 2.1 },
+    position: { x: halfW - 0.1, y: 0, z: -0.2 },
+    rotation: { x: 0, y: 0, z: 0 },
+  };
+  const deskBlockingDoor: RoomObject = {
+    id: 'desk_blocker',
+    type: 'desk',
+    name: 'Bàn chắn cửa',
+    dimensions: { width: 1.2, length: 0.8, height: 0.75 },
+    position: { x: halfW - 0.5, y: 0, z: -0.2 }, // right inside door corridor
+    rotation: { x: 0, y: 0, z: 0 },
+  };
+
+  const spatialBlocked = buildGroundTruthSpatialContext([bed, doorObj, deskBlockingDoor], roomConfig);
+  assert(
+    'Phát hiện chính xác vật cản hành lang cửa (doorCorridor.isBlocked = true)',
+    spatialBlocked.doorCorridor.isBlocked === true &&
+    spatialBlocked.doorCorridor.blockingObjectIds.includes('desk_blocker')
+  );
+  assert(
+    'Bản tóm tắt formattedAgentPrompt chứa cảnh báo vật cản lối đi thực tế',
+    spatialBlocked.formattedAgentPrompt.includes('LỐI ĐI BỊ CHẮN') &&
+    spatialBlocked.formattedAgentPrompt.includes('Bàn chắn cửa')
   );
 
   return { passed, failed };
