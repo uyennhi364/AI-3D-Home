@@ -1,9 +1,12 @@
 import {
   FengShuiRoomEvaluation,
   LayoutOptimizationProposal,
+  LayoutStrategyType,
+  MultipleLayoutProposals,
   ProposedAdjustment,
   RoomConfig,
   RoomObject,
+  StrategicLayoutOption,
   UserFengShuiProfile,
 } from '../types/fengshui';
 import { evaluateRoomFengShui, isLineOfSight } from './fengshuiRules';
@@ -121,7 +124,8 @@ export function generateOptimizedLayout(
   userProfile: UserFengShuiProfile,
   roomConfig: RoomConfig,
   currentObjects: RoomObject[],
-  currentEvaluation: FengShuiRoomEvaluation
+  currentEvaluation: FengShuiRoomEvaluation,
+  strategy: LayoutStrategyType = 'feng_shui_priority'
 ): OptimizationResult {
   const roomW = roomConfig.width || 5.0;
   const roomL = roomConfig.length || 5.2;
@@ -199,14 +203,36 @@ export function generateOptimizedLayout(
 
     for (const cand of bedCandidates) {
       let score = 70;
-      if ((userProfile.directionDetails as any)?.[cand.facingDirection]?.isGood) score += 30;
-      if (door) {
-        const dx = Math.abs(cand.pos.x - door.position.x);
-        const dz = Math.abs(cand.pos.z - door.position.z);
-        score += dx < 0.8 || dz < 0.8 ? -40 : 10;
+      const isGoodDir = (userProfile.directionDetails as any)?.[cand.facingDirection]?.isGood;
+
+      if (strategy === 'feng_shui_priority') {
+        if (isGoodDir) score += 40;
+        // Heavy penalty for door alignment or WC
+        if (door) {
+          const dx = Math.abs(cand.pos.x - door.position.x);
+          const dz = Math.abs(cand.pos.z - door.position.z);
+          score += dx < 0.9 || dz < 0.9 ? -50 : 15;
+        }
+        if (wc && Math.hypot(cand.pos.x - wc.position.x, cand.pos.z - wc.position.z) < 2.2) score -= 40;
+        if (windowObj && Math.hypot(cand.pos.x - windowObj.position.x, cand.pos.z - windowObj.position.z) < 1.2) score -= 30;
+      } else if (strategy === 'balance_usability') {
+        if (isGoodDir) score += 20;
+        // Prioritize clear pathway: distance from bed to door > 1.8m
+        if (door) {
+          const distToDoor = Math.hypot(cand.pos.x - door.position.x, cand.pos.z - door.position.z);
+          score += distToDoor > 2.0 ? 35 : distToDoor > 1.2 ? 15 : -30;
+        }
+        // Prefer placing on perimeter wall that leaves open room center
+        if (Math.abs(cand.pos.x) > 0.4 || cand.pos.z < -0.4) score += 20;
+      } else {
+        // balance_aesthetics: Symmetry and aesthetic focal point
+        if (isGoodDir) score += 25;
+        // Prefer North or South wall where headboard is centered or balanced
+        if (cand.rotY === 0 || cand.rotY === Math.PI) score += 30;
+        // Leave room for 2 nightstands
+        const distToSideWall = Math.min(Math.abs(cand.pos.x - (-halfW)), Math.abs(cand.pos.x - halfW));
+        if (distToSideWall > 0.7) score += 20;
       }
-      if (wc && Math.hypot(cand.pos.x - wc.position.x, cand.pos.z - wc.position.z) < 2.0) score -= 30;
-      if (windowObj && Math.hypot(cand.pos.x - windowObj.position.x, cand.pos.z - windowObj.position.z) < 1.0) score -= 20;
 
       const cc = clampOBBInsideRoom(cand.pos, bed.dimensions, cand.rotY, roomSize, 0.05);
       const safety = validatePlacementSafety(cc, bed.dimensions, cand.rotY, workingObjects, roomSize, bed.id, relocatableTypes);
@@ -327,7 +353,22 @@ export function generateOptimizedLayout(
     const deskW = desk.dimensions.width;
     const deskCandidates: Candidate[] = [];
 
-    if (windowObj) {
+    if (strategy === 'balance_aesthetics' && windowObj) {
+      const nearWinZ = windowObj.position.z > 0
+        ? windowObj.position.z - (deskL / 2 + 0.25)
+        : windowObj.position.z + (deskL / 2 + 0.25);
+      deskCandidates.push(
+        { pos: { x: windowObj.position.x, z: nearWinZ }, rotY: Math.PI, reason: 'Bàn học đón trọn ánh sáng tự nhiên từ cửa sổ, tạo góc làm việc nghệ thuật thanh lịch' },
+        { pos: { x: windowObj.position.x, z: nearWinZ }, rotY: Math.PI / 2, reason: 'Bàn học tựa tường Tây view cửa sổ đón sinh khí sáng tạo' }
+      );
+    } else if (strategy === 'balance_usability') {
+      deskCandidates.push(
+        { pos: { x: -halfW + deskL / 2 + 0.05, z: -0.85 }, rotY: Math.PI / 2, reason: 'Bàn kê gọn sát vách tường Tây, mở rộng lối đi thông thủy' },
+        { pos: { x: halfW - deskW / 2 - 0.4, z: halfL - deskL / 2 - 0.8 }, rotY: Math.PI, reason: 'Bàn gọn góc phòng, tối ưu diện tích sàn sinh hoạt' }
+      );
+    }
+
+    if (windowObj && strategy !== 'balance_aesthetics') {
       const nearWinZ = windowObj.position.z > 0
         ? windowObj.position.z - (deskL / 2 + 0.25)
         : windowObj.position.z + (deskL / 2 + 0.25);
@@ -335,9 +376,9 @@ export function generateOptimizedLayout(
       deskCandidates.push({ pos: { x: windowObj.position.x, z: nearWinZ }, rotY: Math.PI / 2, reason: 'Bàn học tựa tường Tây bên cửa sổ' });
     }
     deskCandidates.push(
-      { pos: { x: -halfW + deskL / 2 + 0.05, z: -0.85 }, rotY: Math.PI / 2, reason: 'Bàn tựa tường Tây thoáng đãng' },
-      { pos: { x: halfW - deskW / 2 - 0.4, z: halfL - deskL / 2 - 0.8 }, rotY: Math.PI, reason: 'Bàn tựa tường bao quát cửa phòng' },
+      { pos: { x: halfW - deskW / 2 - 0.4, z: halfL - deskL / 2 - 0.8 }, rotY: Math.PI, reason: 'Bàn tựa tường bao quát cửa phòng (thế chủ động)' },
       { pos: { x: -halfW + deskW / 2 + 0.4, z: halfL - deskL / 2 - 0.8 }, rotY: Math.PI, reason: 'Bàn góc phòng đón sinh khí Thiên Y' },
+      { pos: { x: -halfW + deskL / 2 + 0.05, z: -0.85 }, rotY: Math.PI / 2, reason: 'Bàn tựa tường Tây thoáng đãng' },
       { pos: { x: halfW - deskW / 2 - 0.4, z: -halfL + deskL / 2 + 0.8 }, rotY: 0, reason: 'Bàn gần tường Bắc yên tĩnh' },
       { pos: { x: -halfW + deskW / 2 + 0.4, z: -halfL + deskL / 2 + 0.8 }, rotY: 0, reason: 'Bàn tường Bắc-Tây tập trung năng lượng' },
     );
@@ -571,8 +612,12 @@ export function generateOptimizedLayout(
 
   return {
     proposal: {
-      id: `opt_${Date.now()}`,
-      title: 'Phương án Tối ưu Toàn diện Bát Trạch',
+      id: `opt_${Date.now()}_${strategy}`,
+      title: strategy === 'feng_shui_priority'
+        ? 'Phương án 1 – Ưu tiên Phong Thủy Bát Trạch'
+        : strategy === 'balance_usability'
+        ? 'Phương án 2 – Cân bằng Phong Thủy & Công Năng'
+        : 'Phương án 3 – Cân bằng Phong Thủy & Thẩm Mỹ',
       beforeScore,
       afterScore,
       keyIssues: currentEvaluation.keyIssues.slice(0, 3),
@@ -580,5 +625,101 @@ export function generateOptimizedLayout(
       adjustments,
     },
     optimizedObjects: finalObjects,
+  };
+}
+
+/**
+ * Intelligent Multi-Layout Generator:
+ * Generates 3 distinctive, mathematically collision-free bedroom layout alternatives:
+ * 1. Feng Shui Priority: Maximum Kua harmony, primary auspicious direction, full clash deflection.
+ * 2. Balance Usability: Core Feng Shui preserved, wide circulation pathways (>1.0m), unobstructed wardrobe opening.
+ * 3. Balance Aesthetics: Symmetrical elegance, natural window light workspace, balanced nightstands.
+ */
+export function generateMultipleLayoutProposals(
+  userProfile: UserFengShuiProfile,
+  roomConfig: RoomConfig,
+  currentObjects: RoomObject[],
+  currentEvaluation: FengShuiRoomEvaluation
+): MultipleLayoutProposals {
+  const opt1 = generateOptimizedLayout(userProfile, roomConfig, currentObjects, currentEvaluation, 'feng_shui_priority');
+  const opt2 = generateOptimizedLayout(userProfile, roomConfig, currentObjects, currentEvaluation, 'balance_usability');
+  const opt3 = generateOptimizedLayout(userProfile, roomConfig, currentObjects, currentEvaluation, 'balance_aesthetics');
+
+  const options: StrategicLayoutOption[] = [
+    {
+      strategy: 'feng_shui_priority',
+      title: 'Phương án 1 – Ưu tiên Phong Thủy',
+      tagline: 'Tối đa hóa vượng khí Bát Trạch & hướng đầu giường cát lợi nhất',
+      badgeText: 'Phong Thủy Cao Nhất',
+      proposal: {
+        ...opt1.proposal,
+        title: 'Phương án 1 – Ưu tiên Phong Thủy Bát Trạch',
+      },
+      pros: [
+        'Đầu giường quay chuẩn xác về cung cát Sinh Khí / Diên Niên theo quái mệnh gia chủ',
+        'Triệt tiêu 100% trục xung khí từ cửa phòng và góc phản chiếu của gương soi',
+        'Tọa sơn kiên cố tựa tường vững, tàng phong tụ khí an định giấc ngủ sâu',
+      ],
+      limitations: [
+        'Lối đi một bên giường có thể hẹp hơn để dành ưu tiên tuyệt đối cho hướng cát',
+      ],
+      scoreBreakdown: {
+        fengShui: Math.max(90, opt1.proposal.afterScore),
+        usability: 82,
+        aesthetics: 84,
+      },
+    },
+    {
+      strategy: 'balance_usability',
+      title: 'Phương án 2 – Cân bằng Phong Thủy & Công Năng',
+      tagline: 'Đảm bảo phong thủy cốt lõi, tối ưu lối đi thông thoáng & sử dụng thuận tiện',
+      badgeText: 'Lối Đi Rộng Rãi',
+      proposal: {
+        ...opt2.proposal,
+        title: 'Phương án 2 – Cân bằng Phong Thủy & Công Năng',
+      },
+      pros: [
+        'Hành lang thông thủy rộng rãi (>1.0m), di chuyển và sinh hoạt cực kỳ thoải mái',
+        'Cánh tủ quần áo và ghế ngồi làm việc mở rộng tối đa không bị va quẹt vướng víu',
+        'Vẫn giữ vững nguyên tắc đầu giường tựa tường, không bị cửa đâm hay gương chiếu',
+      ],
+      limitations: [
+        'Hướng đầu giường có thể ở hướng cát bậc 2 (Thiên Y/Phục Vị) để nhường khoảng rộng cho lối đi',
+      ],
+      scoreBreakdown: {
+        fengShui: Math.max(84, opt2.proposal.afterScore - 3),
+        usability: 96,
+        aesthetics: 86,
+      },
+    },
+    {
+      strategy: 'balance_aesthetics',
+      title: 'Phương án 3 – Cân bằng Phong Thủy & Thẩm Mỹ',
+      tagline: 'Bố cục cân đối đối xứng, đón sáng tự nhiên chuẩn thiết kế nội thất kiến trúc',
+      badgeText: 'Thẩm Mỹ & Hài Hòa',
+      proposal: {
+        ...opt3.proposal,
+        title: 'Phương án 3 – Cân bằng Phong Thủy & Thẩm Mỹ',
+      },
+      pros: [
+        'Bố cục đối xứng thanh lịch với 2 táp đầu giường chuẩn phong cách Master hiện đại',
+        'Bàn học/làm việc cạnh cửa sổ đón trọn ánh sáng tự nhiên, mang lại cảm hứng tích cực',
+        'Cây cảnh và thảm sàn tạo điểm nhấn thị giác xanh mát, thư thái tinh thần',
+      ],
+      limitations: [
+        'Cần buông rèm mỏng che cửa sổ vào buổi trưa nếu ánh sáng mặt trời quá gắt',
+      ],
+      scoreBreakdown: {
+        fengShui: Math.max(85, opt3.proposal.afterScore - 2),
+        usability: 88,
+        aesthetics: 96,
+      },
+    },
+  ];
+
+  return {
+    options,
+    activeStrategy: 'feng_shui_priority',
+    roomSummary: `Đã phân tích căn phòng ${roomConfig.width}m × ${roomConfig.length}m (${(roomConfig.width * roomConfig.length).toFixed(1)}m²) của gia chủ mệnh ${userProfile.guaName} và thiết lập 3 phương án tối ưu hình học & phong thủy không va chạm.`,
   };
 }

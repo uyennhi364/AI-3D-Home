@@ -2,6 +2,7 @@ import { runBatTrachTests } from './batTrach.test';
 import { runGeometryEngineTests } from './geometryEngine.test';
 import { runIntentClassifierTests } from './intentClassifier.test';
 import { runLayoutOptimizerTests } from './layoutOptimizer.test';
+import { runThreeNewFeaturesTests } from './threeNewFeatures.test';
 
 console.log('====================================================');
 console.log('   AI-TTNTTKD AUTOMATED COMPREHENSIVE TEST SUITE    ');
@@ -11,9 +12,10 @@ const t1 = runBatTrachTests();
 const t2 = runGeometryEngineTests();
 const t3 = runIntentClassifierTests();
 const t4 = runLayoutOptimizerTests();
+const t5 = runThreeNewFeaturesTests();
 
-const totalPassed = t1.passed + t2.passed + t3.passed + t4.passed;
-const totalFailed = t1.failed + t2.failed + t3.failed + t4.failed;
+const totalPassed = t1.passed + t2.passed + t3.passed + t4.passed + t5.passed;
+const totalFailed = t1.failed + t2.failed + t3.failed + t4.failed + t5.failed;
 
 console.log('\n====================================================');
 console.log(`TỔNG KẾT KIỂM THỬ: ${totalPassed} Passed, ${totalFailed} Failed`);

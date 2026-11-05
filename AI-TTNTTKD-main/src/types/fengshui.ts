@@ -206,3 +206,52 @@ export interface GroundTruthSpatialContext {
   formattedAgentPrompt: string;
 }
 
+// =========================================================================
+// 3 NÂNG CẤP MỚI: MULTI-STRATEGY PROPOSALS & EXPLAINABLE FENG SHUI
+// =========================================================================
+
+export type LayoutStrategyType = 'feng_shui_priority' | 'balance_usability' | 'balance_aesthetics';
+
+export interface StrategicLayoutOption {
+  strategy: LayoutStrategyType;
+  title: string;
+  tagline: string;
+  badgeText: string;
+  proposal: LayoutOptimizationProposal;
+  pros: string[];
+  limitations: string[];
+  scoreBreakdown: {
+    fengShui: number;
+    usability: number;
+    aesthetics: number;
+  };
+}
+
+export interface MultipleLayoutProposals {
+  options: StrategicLayoutOption[];
+  activeStrategy: LayoutStrategyType;
+  roomSummary: string;
+}
+
+export interface ExplainableRuleDetail {
+  ruleCode: string;
+  ruleName: string;
+  targetObjectId: string;
+  targetObjectName: string;
+  status: 'passed' | 'violation' | 'warning';
+  severity: 'high' | 'medium' | 'low';
+  geometricEvidence: string;
+  fengShuiPrinciple: string;
+  negativeImpact: string;
+  remedyAction: string;
+}
+
+export interface ExplainableRoomAnalysis {
+  roomOverallScore: number;
+  statusText: string;
+  kuaSummary: string;
+  rulesEvaluated: ExplainableRuleDetail[];
+  recommendationsSummary: string[];
+}
+
+

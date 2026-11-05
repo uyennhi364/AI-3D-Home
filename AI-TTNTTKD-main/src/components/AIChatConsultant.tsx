@@ -1,20 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   AIActionCommand,
+  ExplainableRoomAnalysis,
   FengShuiRoomEvaluation,
   LayoutOptimizationProposal,
+  LayoutStrategyType,
+  MultipleLayoutProposals,
   ProposedAdjustment,
   RoomConfig,
   RoomObject,
+  StrategicLayoutOption,
   UserFengShuiProfile,
 } from '../types/fengshui';
 import type { StructuredActionHistoryEntry } from '../types/fengshui';
 import { generateFengShuiConsultation } from '../engine/geminiFengShuiAI';
 import type { ChatHistoryMessage } from '../engine/geminiFengShuiAI';
 import { classifyUserIntent } from '../engine/intentClassifier';
-import { generateOptimizedLayout } from '../engine/layoutOptimizer';
+import { generateOptimizedLayout, generateMultipleLayoutProposals } from '../engine/layoutOptimizer';
 import { DIRECTION_NAMES_VI } from '../engine/batTrach';
 import { getBedHeadboardDirection, getFloorDistance } from '../engine/fengshuiRules';
+import { generateExplainableFengShuiReport, generateExplainableAnswer } from '../engine/explainableFengShui';
 
 export interface AnalysisIssueItem {
   id: string;
@@ -26,6 +31,10 @@ export interface AnalysisIssueItem {
   focusDist?: string;
   suggestPrompt?: string;
   evidence?: string;
+  ruleName?: string;
+  fengShuiPrinciple?: string;
+  negativeImpact?: string;
+  remedyAction?: string;
 }
 
 export interface AnalysisCardData {
@@ -34,6 +43,7 @@ export interface AnalysisCardData {
   statusLevel: 'excellent' | 'good' | 'neutral' | 'poor';
   issues: AnalysisIssueItem[];
   proposal?: LayoutOptimizationProposal;
+  explainableAnalysis?: ExplainableRoomAnalysis;
 }
 
 export interface ChatMessage {
@@ -49,6 +59,8 @@ export interface ChatMessage {
     afterScore?: number;
   };
   analysisCard?: AnalysisCardData;
+  multipleProposals?: MultipleLayoutProposals;
+  explainableAnalysis?: ExplainableRoomAnalysis;
 }
 
 export interface AIChatConsultantProps {
@@ -76,11 +88,11 @@ export interface AIChatConsultantProps {
 
 const QUICK_FEATURE_BADGES = [
   { label: '🔍 Phân tích phong thủy', prompt: 'Phân tích phong thủy chi tiết phòng ngủ hiện tại' },
-  { label: '✨ Tối ưu phòng ngủ', prompt: 'Tối ưu phòng ngủ cho tôi' },
+  { label: '📐 3 Phương án bố trí', prompt: 'Đề xuất các phương án bố trí phòng ngủ theo phong thủy' },
+  { label: '✨ Tối ưu phòng ngủ', prompt: 'Tối ưu phong thủy phòng ngủ cho tôi' },
+  { label: '💡 Tại sao dời giường?', prompt: 'Tại sao lại đề xuất di chuyển giường ngủ?' },
   { label: '🛏 Xoay hướng giường', prompt: 'Hãy xoay đầu giường về hướng hợp mệnh gia chủ nhất và cập nhật trên 3D.' },
   { label: '🪞 Xử lý gương soi', prompt: 'Làm sao xử lý việc gương đối diện giường? Hãy gợi ý cách khắc phục và di chuyển trên 3D.' },
-  { label: '🌿 Thêm cây xanh', prompt: 'Thêm 2 cây cảnh phong thủy vào phòng' },
-  { label: '📐 Sắp xếp nội thất', prompt: 'Sắp xếp lại nội thất phòng ngủ cho gọn gàng và hợp phong thủy' },
 ];
 
 function buildAnalysisCardData(
@@ -89,6 +101,7 @@ function buildAnalysisCardData(
   objects: RoomObject[],
   evaluation: FengShuiRoomEvaluation
 ): AnalysisCardData {
+  const explainableAnalysis = generateExplainableFengShuiReport(userProfile, roomConfig, objects, evaluation);
   const issues: AnalysisIssueItem[] = [];
 
   const mirror = objects.find((o) => o.type === 'mirror');
@@ -97,6 +110,7 @@ function buildAnalysisCardData(
 
   // Check 1: Mirror facing bed
   const mirrorEval = evaluation.items.find((i) => i.type === 'mirror');
+  const mirrorRule = explainableAnalysis.rulesEvaluated.find((r) => r.ruleCode === 'RULE_QUANG_SAT_GUONG');
   const hasMirrorConflict = Boolean(
     mirrorEval?.hasDirectConflict ||
     (mirror && bed && Math.abs(mirror.position.z - bed.position.z) < 1.6)
@@ -111,15 +125,20 @@ function buildAnalysisCardData(
       focusLabel: 'Gương đối diện giường',
       focusDist: mirror && bed ? `${getFloorDistance(mirror.position, bed.position).toFixed(1)}m` : '1.4m',
       suggestPrompt: 'Làm sao xử lý việc gương đối diện giường? Hãy gợi ý cách khắc phục và di chuyển trên 3D.',
-      evidence: 'Khoảng cách trực diện < 1.6m, xung sát chiếu thẳng vào giường.',
+      evidence: mirrorRule?.geometricEvidence || 'Khoảng cách trực diện < 1.6m, xung sát chiếu thẳng vào giường.',
+      ruleName: mirrorRule?.ruleName || 'Quy tắc Triệt Tiêu Quang Sát',
+      fengShuiPrinciple: mirrorRule?.fengShuiPrinciple,
+      negativeImpact: mirrorRule?.negativeImpact,
+      remedyAction: mirrorRule?.remedyAction,
     });
   }
 
   // Check 2: Bed headboard direction
   if (bed) {
+    const bedRule = explainableAnalysis.rulesEvaluated.find((r) => r.ruleCode === 'RULE_TOA_SON_HUONG_CAT' && r.targetObjectId === bed.id);
     const headboardDir = getBedHeadboardDirection(bed.rotation.y);
     const isGood = userProfile.auspiciousDirections.includes(headboardDir);
-    if (!isGood) {
+    if (!isGood || (bedRule && bedRule.status !== 'passed')) {
       issues.push({
         id: bed.id,
         title: 'Hướng đầu giường chưa tối ưu',
@@ -128,17 +147,22 @@ function buildAnalysisCardData(
         focusLabel: `Hướng đầu giường: ${DIRECTION_NAMES_VI[headboardDir] || headboardDir}`,
         focusDist: 'Chưa tối ưu',
         suggestPrompt: 'Hãy xoay đầu giường về hướng hợp mệnh gia chủ nhất và cập nhật trên 3D.',
-        evidence: `Gia chủ hợp các hướng: ${userProfile.auspiciousDirections.map((d) => DIRECTION_NAMES_VI[d] || d).join(', ')}.`,
+        evidence: bedRule?.geometricEvidence || `Gia chủ hợp các hướng: ${userProfile.auspiciousDirections.map((d) => DIRECTION_NAMES_VI[d] || d).join(', ')}.`,
+        ruleName: bedRule?.ruleName || 'Quy tắc Tọa Sơn Hướng Cát',
+        fengShuiPrinciple: bedRule?.fengShuiPrinciple,
+        negativeImpact: bedRule?.negativeImpact,
+        remedyAction: bedRule?.remedyAction,
       });
     }
   }
 
   // Check 3: Desk position & circulation
   if (desk) {
+    const deskRule = explainableAnalysis.rulesEvaluated.find((r) => r.ruleCode === 'RULE_DESK_COMMAND_POSITION' && r.targetObjectId === desk.id);
     const halfW = roomConfig.width / 2;
     const halfL = roomConfig.length / 2;
     const isNearCenter = Math.abs(desk.position.x) < halfW * 0.35 && Math.abs(desk.position.z) < halfL * 0.35;
-    if (isNearCenter) {
+    if (isNearCenter || (deskRule && deskRule.status !== 'passed')) {
       issues.push({
         id: desk.id,
         title: 'Bàn học có thể tối ưu',
@@ -147,7 +171,11 @@ function buildAnalysisCardData(
         focusLabel: 'Vị trí bàn học',
         focusDist: 'Gần tâm phòng',
         suggestPrompt: 'Hãy di chuyển bàn học về vị trí phong thủy tốt nhất cho học tập và làm việc.',
-        evidence: 'Tọa lạc gần Trung Cung gây cản trở dòng khí lưu thông xuyên suốt phòng.',
+        evidence: deskRule?.geometricEvidence || 'Tọa lạc gần Trung Cung gây cản trở dòng khí lưu thông xuyên suốt phòng.',
+        ruleName: deskRule?.ruleName || 'Quy tắc Tọa Sơn Quan Thủy',
+        fengShuiPrinciple: deskRule?.fengShuiPrinciple,
+        negativeImpact: deskRule?.negativeImpact,
+        remedyAction: deskRule?.remedyAction,
       });
     }
   }
@@ -175,6 +203,7 @@ function buildAnalysisCardData(
     statusLevel: evaluation.statusLevel,
     issues,
     proposal,
+    explainableAnalysis,
   };
 }
 
@@ -207,6 +236,8 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
   const [apiKeyInput, setApiKeyInput] = useState<string>(() =>
     typeof window !== 'undefined' ? localStorage.getItem('gemini_api_key') || '' : ''
   );
+  const [activeStrategies, setActiveStrategies] = useState<Record<string, LayoutStrategyType>>({});
+  const [expandedIssueMap, setExpandedIssueMap] = useState<Record<string, boolean>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Check Gemini online status on mount
@@ -290,6 +321,53 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
           content: '✓ Đã tắt xem trước bóng mờ 3D và khôi phục hiển thị bình thường.',
         },
       ]);
+      setIsLoading(false);
+      return;
+    }
+
+    // Check if this is an explicit Multiple Layout Proposals Request
+    const isMultiProposalRequest =
+      /(các phương án|nhiều phương án|các lựa chọn|so sánh phương án|phương án 1|phương án 2|phương án 3|3 phương án|đề xuất các phương án|nhiều bố cục|các bố cục)/i.test(
+        promptText
+      );
+
+    // Check if this is an Explainable Feng Shui Question ("Tại sao", "Vì sao", "Nguyên nhân"...)
+    const isExplainableQuestion =
+      /(tại sao|vì sao|nguyên nhân|ảnh hưởng gì|giải thích|quy tắc phong thủy|căn cứ nào|lý do gì)/i.test(
+        promptText
+      );
+
+    if (isMultiProposalRequest) {
+      const multiProposals = generateMultipleLayoutProposals(userProfile, roomConfig, objects, evaluation);
+      const primaryOpt = multiProposals.options[0];
+      if (primaryOpt?.proposal?.adjustments) {
+        onPreviewProposal(null, primaryOpt.proposal.adjustments);
+      }
+
+      const msgId = `a_${Date.now()}`;
+      setActiveStrategies((prev) => ({ ...prev, [msgId]: 'feng_shui_priority' }));
+
+      const assistantMsg: ChatMessage = {
+        id: msgId,
+        role: 'assistant',
+        content: `Tôi đã lập **3 phương án bố trí phòng ngủ** dựa trên dữ liệu phòng thực tế của gia chủ mệnh ${userProfile.guaName}. Bạn có thể chọn từng phương án để xem trước bóng mờ 3D và áp dụng:`,
+        multipleProposals: multiProposals,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+      setIsLoading(false);
+      return;
+    }
+
+    if (isExplainableQuestion) {
+      const explainReport = generateExplainableFengShuiReport(userProfile, roomConfig, objects, evaluation);
+      const answer = generateExplainableAnswer(promptText, explainReport, userProfile, roomConfig);
+      const assistantMsg: ChatMessage = {
+        id: `a_${Date.now()}`,
+        role: 'assistant',
+        content: answer,
+        explainableAnalysis: explainReport,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
       setIsLoading(false);
       return;
     }
@@ -690,7 +768,53 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
                                   Xem trên 3D
                                 </button>
                               )}
+                              {issue.ruleName && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const key = `${m.id}_${idx}`;
+                                    setExpandedIssueMap((prev) => ({ ...prev, [key]: !prev[key] }));
+                                  }}
+                                  className="text-[10px] text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer underline decoration-dotted"
+                                >
+                                  {expandedIssueMap[`${m.id}_${idx}`] ? 'Ẩn quy tắc' : 'Chi tiết quy tắc'}
+                                </button>
+                              )}
                             </div>
+
+                            {/* Expandable Explainable Feng Shui Rule Detail */}
+                            {expandedIssueMap[`${m.id}_${idx}`] && issue.ruleName && (
+                              <div className="mt-2 p-2 bg-emerald-50/60 rounded-lg border border-emerald-200/70 text-[10px] space-y-1 animate-in fade-in">
+                                <div>
+                                  <span className="font-bold text-emerald-900">Quy tắc áp dụng: </span>
+                                  <span className="text-stone-800">{issue.ruleName}</span>
+                                </div>
+                                {issue.evidence && (
+                                  <div>
+                                    <span className="font-bold text-emerald-900">Căn cứ hình học: </span>
+                                    <span className="text-stone-700">{issue.evidence}</span>
+                                  </div>
+                                )}
+                                {issue.fengShuiPrinciple && (
+                                  <div>
+                                    <span className="font-bold text-emerald-900">Nguyên lý cổ truyền: </span>
+                                    <span className="text-stone-700">{issue.fengShuiPrinciple}</span>
+                                  </div>
+                                )}
+                                {issue.negativeImpact && (
+                                  <div>
+                                    <span className="font-bold text-rose-800">Tác hại / Xung sát: </span>
+                                    <span className="text-stone-700">{issue.negativeImpact}</span>
+                                  </div>
+                                )}
+                                {issue.remedyAction && (
+                                  <div>
+                                    <span className="font-bold text-emerald-900">Hướng hóa giải: </span>
+                                    <span className="text-emerald-800 font-medium">{issue.remedyAction}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -779,6 +903,150 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* CARD TYPE 1B: MULTIPLE FENG SHUI LAYOUT RECOMMENDATIONS CARD */}
+              {m.multipleProposals && (
+                <div className="mt-3 p-3 bg-white rounded-2xl border border-emerald-400/90 shadow-sm space-y-3 animate-in fade-in zoom-in-95">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-stone-100">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm">📐</span>
+                      <span className="font-bold text-emerald-950 text-xs">
+                        3 Phương Án Bố Trí Phong Thủy
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                      Không va chạm OBB SAT
+                    </span>
+                  </div>
+
+                  {/* 3 Strategy Tabs */}
+                  <div className="flex items-center gap-1 p-1 bg-stone-100/90 rounded-xl">
+                    {m.multipleProposals.options.map((opt, optIdx) => {
+                      const activeStrat = activeStrategies[m.id] || 'feng_shui_priority';
+                      const isActive = activeStrat === opt.strategy;
+                      return (
+                        <button
+                          key={opt.strategy}
+                          type="button"
+                          onClick={() => {
+                            setActiveStrategies((prev) => ({ ...prev, [m.id]: opt.strategy }));
+                            // Automatically update ghost preview to match active strategy
+                            if (opt.proposal?.adjustments) {
+                              onPreviewProposal(null, opt.proposal.adjustments);
+                            }
+                          }}
+                          className={`flex-1 py-1.5 px-1.5 rounded-lg text-[10px] font-bold transition-all text-center cursor-pointer ${
+                            isActive
+                              ? 'bg-[#00705a] text-white shadow-xs'
+                              : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/60'
+                          }`}
+                        >
+                          <span>{optIdx === 0 ? 'PA 1: Phong Thủy' : optIdx === 1 ? 'PA 2: Công Năng' : 'PA 3: Thẩm Mỹ'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Content of the Active Option */}
+                  {(() => {
+                    const activeStrat = activeStrategies[m.id] || 'feng_shui_priority';
+                    const activeOpt = m.multipleProposals.options.find((o) => o.strategy === activeStrat) || m.multipleProposals.options[0];
+                    if (!activeOpt) return null;
+
+                    return (
+                      <div className="space-y-2.5">
+                        <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-200/80 flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-emerald-950">{activeOpt.title}</span>
+                              <span className="text-[9px] font-bold text-[#00705a] bg-white px-1.5 py-0.5 rounded border border-emerald-300">
+                                {activeOpt.badgeText}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-stone-600 mt-0.5">{activeOpt.tagline}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-[9px] text-stone-400 block">Dự kiến</span>
+                            <span className="text-sm font-extrabold text-[#00705a] font-mono">
+                              {activeOpt.proposal.afterScore}/100
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 3 Metric Pills */}
+                        <div className="grid grid-cols-3 gap-1.5 text-center">
+                          <div className="p-1.5 bg-stone-50 rounded-lg border border-stone-200/80">
+                            <span className="text-[9px] text-stone-500 block">Phong Thủy</span>
+                            <span className="text-xs font-bold text-emerald-800">{activeOpt.scoreBreakdown.fengShui}đ</span>
+                          </div>
+                          <div className="p-1.5 bg-stone-50 rounded-lg border border-stone-200/80">
+                            <span className="text-[9px] text-stone-500 block">Công Năng</span>
+                            <span className="text-xs font-bold text-sky-800">{activeOpt.scoreBreakdown.usability}đ</span>
+                          </div>
+                          <div className="p-1.5 bg-stone-50 rounded-lg border border-stone-200/80">
+                            <span className="text-[9px] text-stone-500 block">Thẩm Mỹ</span>
+                            <span className="text-xs font-bold text-amber-800">{activeOpt.scoreBreakdown.aesthetics}đ</span>
+                          </div>
+                        </div>
+
+                        {/* Pros */}
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold text-emerald-900 block">✓ Ưu điểm nổi bật:</span>
+                          {activeOpt.pros.map((p, i) => (
+                            <div key={i} className="text-[10px] text-stone-700 flex items-start gap-1">
+                              <span className="text-emerald-600 font-bold shrink-0">•</span>
+                              <span>{p}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Limitations */}
+                        {activeOpt.limitations.length > 0 && (
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-stone-600 block">ℹ Lưu ý / Hạn chế:</span>
+                            {activeOpt.limitations.map((l, i) => (
+                              <div key={i} className="text-[10px] text-stone-500 flex items-start gap-1">
+                                <span className="text-stone-400 font-bold shrink-0">•</span>
+                                <span>{l}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Action Buttons: Preview 3D & Apply */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isPreviewingProposal) {
+                                onPreviewProposal(null, []);
+                              } else {
+                                onPreviewProposal(null, activeOpt.proposal.adjustments);
+                              }
+                            }}
+                            className={`flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-2xs active:scale-95 cursor-pointer ${
+                              isPreviewingProposal
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-300/80'
+                            }`}
+                          >
+                            <span>{isPreviewingProposal ? '✕' : '👁'}</span>
+                            <span>{isPreviewingProposal ? 'Tắt xem trước' : 'Xem trước 3D'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApplyProposalWithFeedback(activeOpt.proposal)}
+                            className="flex-1 py-1.5 px-2.5 bg-[#00705a] hover:bg-[#005c4a] active:scale-95 text-white font-bold rounded-xl text-xs transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <span>✦</span>
+                            <span>Áp dụng phương án này</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
