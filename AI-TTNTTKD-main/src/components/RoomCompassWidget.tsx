@@ -77,12 +77,12 @@ export const RoomCompassWidget: React.FC<RoomCompassWidgetProps> = ({
   };
 
   return (
-    <div className="relative w-full bg-[#16191B]/95 backdrop-blur-md rounded-2xl shadow-2xl border border-stone-800/80 p-2.5 flex items-center justify-between gap-3 select-none pointer-events-auto" ref={dropdownRef}>
-      {/* Dark Architectural Compass Dial */}
+    <div className="relative w-full bg-[#16191B]/95 backdrop-blur-md rounded-2xl shadow-2xl border border-stone-800/80 p-3 flex items-center justify-between gap-3.5 select-none pointer-events-auto" ref={dropdownRef}>
+      {/* Dark Architectural Compass Dial — Enlarged for clarity & high visibility */}
       <div
         onClick={handleCompassClick}
-        className="relative w-12 h-12 rounded-full bg-[#1F2327] shadow-inner border border-stone-700/80 flex items-center justify-center cursor-pointer transition-all hover:scale-105 hover:border-emerald-500/60 active:scale-95 group shrink-0"
-        title="Nhấn để căn chỉnh góc nhìn về hướng Bắc (0°)"
+        className="relative w-20 h-20 rounded-full bg-gradient-to-b from-[#24292E] to-[#171A1D] shadow-[inset_0_2px_6px_rgba(0,0,0,0.6),0_4px_12px_rgba(0,0,0,0.5)] border-2 border-stone-600/90 flex items-center justify-center cursor-pointer transition-all hover:scale-105 hover:border-emerald-400 active:scale-95 group shrink-0 ring-1 ring-black/40"
+        title="Nhấn vào la bàn để căn chỉnh góc nhìn camera 3D về hướng chính Bắc (0°)"
       >
         {/* Subtle graduation ticks around dial */}
         {DIAL_TICKS.map((deg) => (
@@ -92,19 +92,20 @@ export const RoomCompassWidget: React.FC<RoomCompassWidgetProps> = ({
             style={{ transform: `rotate(${deg}deg)` }}
           >
             <div
-              className={`w-[1px] ${
+              className={`w-[1.5px] ${
                 deg % 90 === 0
-                  ? 'h-1.5 bg-stone-500/80'
+                  ? 'h-2 bg-stone-300'
                   : deg % 45 === 0
-                  ? 'h-1 bg-stone-600/70'
-                  : 'h-0.5 bg-stone-700/50'
+                  ? 'h-1.5 bg-stone-500'
+                  : 'h-1 bg-stone-600/70'
               }`}
             />
           </div>
         ))}
 
-        {/* Subtle inner concentric ring */}
-        <div className="absolute inset-1.5 rounded-full border border-stone-600/30 pointer-events-none" />
+        {/* Inner concentric ring */}
+        <div className="absolute inset-2 rounded-full border border-stone-600/40 pointer-events-none" />
+        <div className="absolute inset-4 rounded-full border border-stone-700/30 pointer-events-none" />
 
         {/* Room Direction Beacon Indicator on Compass Rim */}
         <div
@@ -113,30 +114,30 @@ export const RoomCompassWidget: React.FC<RoomCompassWidgetProps> = ({
           title={`Hướng phòng: ${dirName} (${dirAngle}°)`}
         >
           {/* Glowing Amber/Emerald beacon pin on edge */}
-          <div className="absolute top-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] ring-1 ring-emerald-300" />
+          <div className="absolute top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,1)] ring-1.5 ring-emerald-300" />
         </div>
 
         {/* Cardinal Markers (Tiếng Việt: B - Bắc, Đ - Đông, N - Nam, T - Tây) */}
         <span
-          className="absolute top-0.5 text-[9px] font-black text-rose-500 leading-none drop-shadow-xs transition-colors group-hover:text-rose-400"
+          className="absolute top-1 text-[11px] font-black text-rose-500 leading-none drop-shadow-md transition-colors group-hover:text-rose-400"
           title="Bắc (0°)"
         >
           B
         </span>
         <span
-          className="absolute bottom-0.5 text-[8px] font-bold text-stone-300 leading-none drop-shadow-xs"
+          className="absolute bottom-1 text-[10px] font-bold text-stone-200 leading-none drop-shadow-md"
           title="Nam (180°)"
         >
           N
         </span>
         <span
-          className="absolute right-1 text-[8px] font-bold text-stone-300 leading-none drop-shadow-xs"
+          className="absolute right-1.5 text-[10px] font-bold text-stone-200 leading-none drop-shadow-md"
           title="Đông (90°)"
         >
           Đ
         </span>
         <span
-          className="absolute left-1 text-[8px] font-bold text-stone-300 leading-none drop-shadow-xs"
+          className="absolute left-1.5 text-[10px] font-bold text-stone-200 leading-none drop-shadow-md"
           title="Tây (270°)"
         >
           T
@@ -144,32 +145,32 @@ export const RoomCompassWidget: React.FC<RoomCompassWidgetProps> = ({
 
         {/* Compass Needle (Rotates smoothly with 3D camera orientation) */}
         <div
-          className="relative w-1.5 h-7 flex flex-col items-center justify-center transition-transform duration-75 ease-out pointer-events-none"
+          className="relative w-2.5 h-11 flex flex-col items-center justify-center transition-transform duration-75 ease-out pointer-events-none"
           style={{ transform: `rotate(${cameraRotation}deg)` }}
         >
           {/* North needle (Red) */}
-          <div className="w-0 h-0 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-b-[13px] border-b-rose-500 drop-shadow-[0_2px_4px_rgba(244,63,94,0.4)]" />
+          <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[20px] border-b-rose-500 drop-shadow-[0_2px_6px_rgba(244,63,94,0.6)]" />
           {/* South needle (Emerald) */}
-          <div className="w-0 h-0 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-t-[13px] border-t-emerald-600 drop-shadow-[0_2px_4px_rgba(5,150,105,0.4)]" />
+          <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[20px] border-t-emerald-500 drop-shadow-[0_2px_6px_rgba(16,185,129,0.5)]" />
           {/* Pivot pin */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white border border-stone-700 shadow-sm z-10" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white border border-stone-800 shadow-sm z-10" />
         </div>
       </div>
 
       {/* Interactive Room Direction Label & Selector */}
-      <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
-        <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider text-stone-400 px-0.5">
+      <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
+        <div className="flex items-center justify-between text-[11px] uppercase font-bold tracking-wider text-stone-300 px-0.5">
           <span>Hướng phòng</span>
-          <span className="text-[9px] text-emerald-400 font-normal">Bát Trạch</span>
+          <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/60">Bát Trạch</span>
         </div>
         <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#202428] hover:bg-[#2A2F34] border border-stone-700/70 hover:border-emerald-500/50 text-xs font-bold text-white transition-all shadow-xs group cursor-pointer"
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-[#202428] hover:bg-[#2A2F34] border border-stone-700/80 hover:border-emerald-500/60 text-xs font-bold text-white transition-all shadow-sm group cursor-pointer"
           title="Nhấp để đổi hướng phòng"
         >
           <span className="truncate">{dirName} ({dirAngle}°)</span>
           <svg
-            className={`w-3.5 h-3.5 text-stone-400 group-hover:text-emerald-400 transition-transform ${
+            className={`w-4 h-4 text-stone-400 group-hover:text-emerald-400 transition-transform ${
               isDropdownOpen ? 'rotate-180 text-emerald-400' : ''
             }`}
             viewBox="0 0 20 20"

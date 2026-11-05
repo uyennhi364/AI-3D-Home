@@ -125,7 +125,8 @@ export function generateOptimizedLayout(
   roomConfig: RoomConfig,
   currentObjects: RoomObject[],
   currentEvaluation: FengShuiRoomEvaluation,
-  strategy: LayoutStrategyType = 'feng_shui_priority'
+  strategy: LayoutStrategyType = 'feng_shui_priority',
+  pinnedObjectIds: string[] = []
 ): OptimizationResult {
   const roomW = roomConfig.width || 5.0;
   const roomL = roomConfig.length || 5.2;
@@ -166,11 +167,22 @@ export function generateOptimizedLayout(
   if (door) commit(door, door.position, door.rotation.y);
   if (wc) commit(wc, wc.position, wc.rotation.y);
 
+  // Commit any user-pinned objects upfront to placedList and preserve their exact coordinates
+  for (const pid of pinnedObjectIds) {
+    const pObj = workingObjects.find((o) => o.id === pid);
+    if (pObj) {
+      commit(pObj, pObj.position, pObj.rotation.y);
+    }
+  }
+
   // =========================================================================
   // 1. BED
   // =========================================================================
   const bed = workingObjects.find((o) => o.type === 'bed');
-  if (bed) {
+  if (bed && pinnedObjectIds.includes(bed.id)) {
+    commit(bed, bed.position, bed.rotation.y);
+    improvements.push(`Giữ nguyên vị trí ${bed.name} theo yêu cầu của gia chủ`);
+  } else if (bed) {
     const bedW = bed.dimensions.width;
     const bedL = bed.dimensions.length;
 
@@ -313,7 +325,10 @@ export function generateOptimizedLayout(
   // 2. WARDROBE
   // =========================================================================
   const wardrobe = workingObjects.find((o) => o.type === 'wardrobe');
-  if (wardrobe) {
+  if (wardrobe && pinnedObjectIds.includes(wardrobe.id)) {
+    commit(wardrobe, wardrobe.position, wardrobe.rotation.y);
+    improvements.push(`Giữ nguyên vị trí ${wardrobe.name} theo yêu cầu của gia chủ`);
+  } else if (wardrobe) {
     const wardW = wardrobe.dimensions.width;
     const wardL = wardrobe.dimensions.length;
     const wardCandidates: Candidate[] = [
@@ -348,7 +363,10 @@ export function generateOptimizedLayout(
   // 3. DESK + CHAIR
   // =========================================================================
   const desk = workingObjects.find((o) => o.type === 'desk');
-  if (desk) {
+  if (desk && pinnedObjectIds.includes(desk.id)) {
+    commit(desk, desk.position, desk.rotation.y);
+    improvements.push(`Giữ nguyên vị trí ${desk.name} theo yêu cầu của gia chủ`);
+  } else if (desk) {
     const deskL = desk.dimensions.length;
     const deskW = desk.dimensions.width;
     const deskCandidates: Candidate[] = [];
@@ -639,11 +657,12 @@ export function generateMultipleLayoutProposals(
   userProfile: UserFengShuiProfile,
   roomConfig: RoomConfig,
   currentObjects: RoomObject[],
-  currentEvaluation: FengShuiRoomEvaluation
+  currentEvaluation: FengShuiRoomEvaluation,
+  pinnedObjectIds: string[] = []
 ): MultipleLayoutProposals {
-  const opt1 = generateOptimizedLayout(userProfile, roomConfig, currentObjects, currentEvaluation, 'feng_shui_priority');
-  const opt2 = generateOptimizedLayout(userProfile, roomConfig, currentObjects, currentEvaluation, 'balance_usability');
-  const opt3 = generateOptimizedLayout(userProfile, roomConfig, currentObjects, currentEvaluation, 'balance_aesthetics');
+  const opt1 = generateOptimizedLayout(userProfile, roomConfig, currentObjects, currentEvaluation, 'feng_shui_priority', pinnedObjectIds);
+  const opt2 = generateOptimizedLayout(userProfile, roomConfig, currentObjects, currentEvaluation, 'balance_usability', pinnedObjectIds);
+  const opt3 = generateOptimizedLayout(userProfile, roomConfig, currentObjects, currentEvaluation, 'balance_aesthetics', pinnedObjectIds);
 
   const options: StrategicLayoutOption[] = [
     {

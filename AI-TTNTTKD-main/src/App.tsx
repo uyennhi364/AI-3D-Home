@@ -175,6 +175,16 @@ export default function App() {
     return evaluateRoomFengShui(userProfile, roomConfig, objects);
   }, [roomConfig, objects, userProfile]);
 
+  // Expose live state to window for ground-truth verification and automated QA inspection
+  useEffect(() => {
+    (window as any).__STUDIO_STATE__ = {
+      objects,
+      roomConfig,
+      evaluation,
+      selectedObjectId,
+    };
+  }, [objects, roomConfig, evaluation, selectedObjectId]);
+
   // Toast auto-clear
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -555,7 +565,16 @@ export default function App() {
       if (deleteIds.length > 0 && selectedObjectId && deleteIds.includes(selectedObjectId)) {
         setSelectedObjectId(null);
       }
-      if (lastAddedId) setSelectedObjectId(lastAddedId);
+      // Đồng bộ focus vào đồ vật vừa được thao tác gần nhất (thêm, di chuyển hoặc xoay)
+      // Giúp duy trì ngữ cảnh cho các lệnh tiếp theo ("Xoay nó", "Dịch nó sang trái...")
+      const lastInteractedId =
+        lastAddedId ||
+        (rotations.length > 0 ? rotations[rotations.length - 1].id : null) ||
+        (moves.length > 0 ? moves[moves.length - 1].id : null);
+
+      if (lastInteractedId) {
+        setSelectedObjectId(lastInteractedId);
+      }
     }
 
     return { successCount, failCount, executedEntries };

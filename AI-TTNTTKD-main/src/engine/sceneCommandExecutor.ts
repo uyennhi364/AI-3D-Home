@@ -166,7 +166,10 @@ function executeMove(
     newX = coords.x;
     newZ = coords.z;
   } else if (cmd.target_direction) {
-    const step = 0.85;
+    // Dùng khoảng cách chính xác nếu có, mặc định 0.5m (50cm) nếu không có
+    const step = typeof cmd.target_direction_meters === 'number' && cmd.target_direction_meters > 0
+      ? cmd.target_direction_meters
+      : 0.5;
     switch (cmd.target_direction) {
       case 'left': newX = Math.max(-(roomConfig.width / 2) + 0.5, newX - step); break;
       case 'right': newX = Math.min(roomConfig.width / 2 - 0.5, newX + step); break;

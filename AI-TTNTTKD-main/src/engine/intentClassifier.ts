@@ -45,7 +45,10 @@ export interface ClassifiedIntent {
   extractedItems?: ExtractedActionItem[];
   contextReference?: ContextReferenceInfo;
   targetDirection?: 'left' | 'right' | 'forward' | 'backward';
+  distanceMeters?: number;
   rotationDegrees?: number;
+  pinnedObjectType?: RoomObjectType;
+  pinnedPhrase?: string;
   needsFengShuiEngine: boolean;
   needsLayoutOptimizer: boolean;
   needs3DExecution: boolean;
@@ -431,6 +434,36 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
   };
   const matches = (keywords: string[]) => keywords.some((kw) => kw.includes(' ') ? p.includes(kw) : hasWord(kw));
 
+  // Tách vế giữ nguyên/cố định và vế thao tác mục tiêu
+  // Ví dụ: "Giữ nguyên tủ, chỉ điều chỉnh giường", "Giữ nguyên vị trí đó và di chuyển tủ sang phải"
+  let actionText = p;
+  let pinnedType: RoomObjectType | undefined;
+  let pinnedPhrase: string | undefined;
+
+  const keepMatch = p.match(/(?:giữ\s*nguyên|cố\s*định|không\s*thay\s*đổi|không\s*đổi|đừng\s*thay\s*đổi|đừng\s*di\s*chuyển)\s+([^,;.]+?)(?:[,;]|\bvà\b|\bchỉ\b|\bnhưng\b|\brồi\b|$)/i);
+  if (keepMatch) {
+    pinnedPhrase = keepMatch[1].trim();
+    for (const obj of OBJECT_PATTERNS) {
+      if (obj.patterns.some((pat) => pinnedPhrase!.includes(pat))) {
+        pinnedType = obj.type;
+        break;
+      }
+    }
+    actionText = p.replace(keepMatch[0], ' ').trim() || p;
+  } else {
+    const revMatch = p.match(/(?:nhưng|chỉ|đồng\s*thời)\s+(?:giữ\s*nguyên|không\s*thay\s*đổi|không\s*đổi|cố\s*định)\s+([^,;.]+)/i);
+    if (revMatch) {
+      pinnedPhrase = revMatch[1].trim();
+      for (const obj of OBJECT_PATTERNS) {
+        if (obj.patterns.some((pat) => pinnedPhrase!.includes(pat))) {
+          pinnedType = obj.type;
+          break;
+        }
+      }
+      actionText = p.replace(revMatch[0], ' ').trim() || p;
+    }
+  }
+
   // Theory question detection (e.g. "Gương đối diện giường có sao không?", "Tại sao nên kê đầu giường sát tường?")
   const isTheoryQuestion = /(có sao không|có tốt không|có nên|tại sao|vì sao|ảnh hưởng gì|ý nghĩa gì|thế nào|như thế nào|hóa giải thế nào|làm sao để|có bị phạm)/i.test(p);
 
@@ -452,6 +485,8 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
       intent: 'OPTIMIZE_ROOM',
       confidence: 0.95,
       loadingMessage: 'Đang tối ưu bố cục phòng ngủ theo chuẩn Bát Trạch...',
+      pinnedObjectType: pinnedType,
+      pinnedPhrase,
       needsFengShuiEngine: true,
       needsLayoutOptimizer: true,
       needs3DExecution: true,
@@ -478,15 +513,25 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
     };
   }
 
-  // Detect object type and specific dimensions if present
+  // Detect object type and specific dimensions if present - Ưu tiên tìm trong actionText trước
   let detectedType: RoomObjectType | undefined;
   let detectedName: string | undefined;
 
   for (const obj of OBJECT_PATTERNS) {
-    if (obj.patterns.some((pat) => pat.includes(' ') ? p.includes(pat) : hasWord(pat))) {
+    if (obj.patterns.some((pat) => pat.includes(' ') ? actionText.includes(pat) : (new RegExp(`(^|\\s|[.,;!?])${pat.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(\\s|[.,;!?]|$)`, 'i')).test(actionText))) {
       detectedType = obj.type;
       detectedName = obj.name;
       break;
+    }
+  }
+
+  if (!detectedType) {
+    for (const obj of OBJECT_PATTERNS) {
+      if (obj.patterns.some((pat) => pat.includes(' ') ? p.includes(pat) : hasWord(pat))) {
+        detectedType = obj.type;
+        detectedName = obj.name;
+        break;
+      }
     }
   }
 
@@ -535,7 +580,9 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
     matches(['xoay', 'quay', 'đổi hướng', 'doi huong', 'rotate'])
   ) {
     let deg = 90;
-    if (p.includes('180')) deg = 180;
+    const degMatch = p.match(/(\d+)\s*(?:độ|degree|deg)/i);
+    if (degMatch) deg = Math.min(360, Math.max(1, parseInt(degMatch[1], 10)));
+    else if (p.includes('180')) deg = 180;
     else if (p.includes('270')) deg = 270;
     else if (p.includes('45')) deg = 45;
 
@@ -544,12 +591,14 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
     return {
       intent: 'ROTATE_OBJECT',
       confidence: 0.95,
-      loadingMessage: `Đang xoay ${detectedName || 'đồ vật'} ${deg} độ...`,
+      loadingMessage: `Đang xoay ${detectedName || (contextRef ? 'đồ vật' : 'đồ vật')} ${deg} độ...`,
       extractedObjectType: detectedType,
       extractedObjectName: detectedName,
       extractedQuantity,
       rotationDegrees: deg,
       contextReference: contextRef,
+      pinnedObjectType: pinnedType,
+      pinnedPhrase,
       needsFengShuiEngine: false,
       needsLayoutOptimizer: false,
       needs3DExecution: true,
@@ -587,6 +636,8 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
       extractedQuantity: allItems[0]?.quantity || extractedQuantity,
       extractedItems: allItems.length > 0 ? allItems : undefined,
       contextReference: contextRef,
+      pinnedObjectType: pinnedType,
+      pinnedPhrase,
       needsFengShuiEngine: false,
       needsLayoutOptimizer: false,
       needs3DExecution: true,
@@ -619,6 +670,8 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
       extractedDimensions: itemDims,
       extractedQuantity: itemQty,
       extractedItems: allItems.length > 0 ? allItems : undefined,
+      pinnedObjectType: pinnedType,
+      pinnedPhrase,
       needsFengShuiEngine: false, // Critical: do NOT run full Bát Trạch report
       needsLayoutOptimizer: false,
       needs3DExecution: true,
@@ -627,13 +680,22 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
 
   // 6. Check MOVE_OBJECT
   if (
-    matches(['di chuyển', 'chuyển', 'dời', 'kê sang', 'kéo sang', 'đẩy sang', 'dịch', 'move'])
+    matches(['di chuyển', 'chuyển', 'dời', 'kê sang', 'kéo sang', 'đẩy sang', 'dịch', 'move', 'điều chỉnh', 'dieu chinh', 'dịch chuyển', 'sửa vị trí'])
   ) {
     let dir: 'left' | 'right' | 'forward' | 'backward' | undefined;
     if (p.includes('trái') || p.includes('trai')) dir = 'left';
     else if (p.includes('phải') || p.includes('phai')) dir = 'right';
     else if (p.includes('lên') || p.includes('trên') || p.includes('sau')) dir = 'forward';
     else if (p.includes('xuống') || p.includes('dưới') || p.includes('trước')) dir = 'backward';
+
+    // Trích xuất khoảng cách di chuyển chính xác (cm hoặc m)
+    let distMeters = 0.5;
+    const cmMatch = p.match(/(\d+(?:[.,]\d+)?)\s*cm/i);
+    const mMatch = p.match(/(\d+(?:[.,]\d+)?)\s*m(?!ét)/i);
+    if (cmMatch) distMeters = parseFloat(cmMatch[1].replace(',', '.')) / 100;
+    else if (mMatch) distMeters = parseFloat(mMatch[1].replace(',', '.'));
+    else if (p.includes('một chút') || p.includes('một ít') || p.includes('nhẹ') || p.includes('nhích')) distMeters = 0.3;
+    else if (p.includes('nhiều') || p.includes('xa')) distMeters = 1.0;
 
     const contextRef = detectContextReference(p);
 
@@ -645,7 +707,10 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
       extractedObjectName: detectedName,
       extractedQuantity,
       targetDirection: dir,
+      distanceMeters: distMeters,
       contextReference: contextRef,
+      pinnedObjectType: pinnedType,
+      pinnedPhrase,
       needsFengShuiEngine: false,
       needsLayoutOptimizer: false,
       needs3DExecution: true,

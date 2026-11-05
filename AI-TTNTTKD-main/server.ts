@@ -398,51 +398,170 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
     };
   }
 
-  // 3. Command: "Xoay" (Xoay giường, xoay bàn, xoay 90 độ)
+  // 3. Command: "Xoay" (Xoay giường, xoay bàn, xoay 90 độ, xoay nó...)
   if (lower.includes('xoay') || lower.includes('rotate')) {
-    const target = selectedObjectId ? objects.find((o) => o.id === selectedObjectId) : objects.find((o) => lower.includes(o.name.toLowerCase()) || lower.includes(o.type));
-    const targetObj = target || objects.find((o) => o.type === 'bed') || objects[0];
+    let targetObj: any = null;
 
-    const angle = lower.includes('180') ? Math.PI : Math.PI / 2;
+    // 1st priority: context reference ("nó", "đồ vật đó", "vừa điều chỉnh"...)
+    const contextRef = detectContextReference(lower);
+    if (contextRef) {
+      const resolved = resolveContextTargets(contextRef, actionHistory, objects, selectedObjectId, roomConfig);
+      if (resolved.resolved && resolved.targetObjects.length > 0) {
+        targetObj = resolved.targetObjects[0];
+      }
+    }
+
+    // 2nd priority: selected object
+    if (!targetObj && selectedObjectId) {
+      targetObj = objects.find((o: any) => o.id === selectedObjectId);
+    }
+
+    // 3rd priority: match name/type in prompt
+    if (!targetObj) {
+      const sortedByNameLen = [...objects].sort((a: any, b: any) => b.name.length - a.name.length);
+      for (const o of sortedByNameLen) {
+        if (lower.includes(o.name.toLowerCase()) || lower.includes(o.type.toLowerCase())) {
+          targetObj = o;
+          break;
+        }
+      }
+    }
+
+    if (!targetObj) {
+      return {
+        reply: 'Vui lòng cho biết đồ vật nào cần xoay. Ví dụ: "Xoay giường 90 độ", "Xoay tủ quần áo 180 độ", hoặc nhấp chọn đồ vật trên 3D.',
+        aiActions: null,
+      };
+    }
+
+    // Trích xuất góc xoay chính xác từ câu
+    let deg = 90;
+    const degMatch = lower.match(/(\d+)\s*(?:độ|degree|deg)/);
+    if (degMatch) deg = Math.min(360, Math.max(1, parseInt(degMatch[1], 10)));
+    else if (lower.includes('180')) deg = 180;
+    else if (lower.includes('270')) deg = 270;
+    else if (lower.includes('45')) deg = 45;
+
+    const angle = (deg * Math.PI) / 180;
+    const newRotDeg = Math.round(((targetObj.rotation?.y || 0) + angle) * 180 / Math.PI) % 360;
 
     return {
-      reply: `Đã thực hiện xoay ${targetObj.name} góc 90°. Hướng đón khí trường mới giúp cải thiện luồng lưu thông năng lượng trong phòng.`,
+      reply: `Đã xoay **${targetObj.name}** ${deg}°. Góc xoay hiện tại: ${newRotDeg}°. Hướng đón khí trường mới giúp tối ưu trường khí trong phòng.`,
       aiActions: {
         actions: [
           {
             type: 'rotate_object',
             objectId: targetObj.id,
             rotationDelta: angle,
-            description: `Xoay ${targetObj.name}`,
+            description: `Xoay ${targetObj.name} ${deg}°`,
           },
         ],
       },
     };
   }
 
-  // 4. Command: "Di chuyển" / "Dời" / "Kê"
-  if (lower.includes('di chuyển') || lower.includes('kê') || lower.includes('dời') || lower.includes('dịch')) {
-    const target = selectedObjectId ? objects.find((o) => o.id === selectedObjectId) : objects.find((o) => lower.includes(o.name.toLowerCase()) || lower.includes(o.type));
-    const targetObj = target || objects[0];
+  // 4. Command: "Di chuyển" / "Dời" / "Kê" / "Dịch" / "Điều chỉnh"
+  if (lower.includes('di chuyển') || lower.includes('kê') || lower.includes('dời') || lower.includes('dịch') || lower.includes('điều chỉnh')) {
+    let targetObj: any = null;
+
+    // 1st priority: context reference ("nó", "đồ vật đó", "vừa xoay"...)
+    const contextRef = detectContextReference(lower);
+    if (contextRef) {
+      const resolved = resolveContextTargets(contextRef, actionHistory, objects, selectedObjectId, roomConfig);
+      if (resolved.resolved && resolved.targetObjects.length > 0) {
+        targetObj = resolved.targetObjects[0];
+      }
+    }
+
+    // 2nd priority: selected object
+    if (!targetObj && selectedObjectId) {
+      targetObj = objects.find((o: any) => o.id === selectedObjectId);
+    }
+
+    // 3rd priority: match name/type in prompt (bỏ qua đồ vật sau vế "giữ nguyên")
+    if (!targetObj) {
+      // Tách vế giữ nguyên nếu có
+      let actionPortion = lower;
+      const keepMatch = lower.match(/(?:giữ\s*nguyên|cố\s*định|không\s*thay\s*đổi|không\s*đổi)\s+([^,;.]+?)(?:[,;]|\bvà\b|\bchỉ\b|\bnhưng\b|$)/i);
+      if (keepMatch) {
+        actionPortion = lower.replace(keepMatch[0], ' ');
+      }
+
+      const sortedByNameLen = [...objects].sort((a: any, b: any) => b.name.length - a.name.length);
+      for (const o of sortedByNameLen) {
+        if (actionPortion.includes(o.name.toLowerCase()) || actionPortion.includes(o.type.toLowerCase())) {
+          targetObj = o;
+          break;
+        }
+      }
+      // Fallback nếu không thấy trong actionPortion
+      if (!targetObj) {
+        for (const o of sortedByNameLen) {
+          if (lower.includes(o.name.toLowerCase()) || lower.includes(o.type.toLowerCase())) {
+            targetObj = o;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!targetObj) {
+      return {
+        reply: 'Vui lòng cho biết đồ vật nào cần di chuyển. Ví dụ: "Di chuyển giường sang trái 50cm", "Dời tủ sát tường", hoặc nhấp chọn đồ vật trên 3D.',
+        aiActions: null,
+      };
+    }
 
     let newX = targetObj.position.x;
     let newZ = targetObj.position.z;
 
-    if (lower.includes('trái')) newX = Math.max(-halfW + 0.6, newX - 0.8);
-    else if (lower.includes('phải')) newX = Math.min(halfW - 0.6, newX + 0.8);
+    // Trích xuất khoảng cách cm/m từ câu (ví dụ: "50 cm", "0.5m", "1m", "một chút")
+    let shiftAmount = 0.5; // mặc định 50cm nếu không có số cụ thể
+    const cmMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*cm/);
+    const mMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*m(?!ét)/);
+    if (cmMatch) shiftAmount = parseFloat(cmMatch[1].replace(',', '.')) / 100;
+    else if (mMatch) shiftAmount = parseFloat(mMatch[1].replace(',', '.'));
+    else if (lower.includes('một chút') || lower.includes('một ít') || lower.includes('nhẹ') || lower.includes('nhích')) shiftAmount = 0.3;
+    else if (lower.includes('nhiều') || lower.includes('xa')) shiftAmount = 1.0;
 
-    if (lower.includes('tường') || lower.includes('sát tường')) newZ = -halfL + (targetObj.dimensions.length / 2 + 0.2);
-    else if (lower.includes('cửa sổ')) newX = halfW - 1.0;
+    // Áp dụng hướng di chuyển
+    if (lower.includes('trái') || lower.includes('bên trái')) {
+      newX = Math.max(-halfW + (targetObj.dimensions?.width || 0.5) / 2 + 0.1, newX - shiftAmount);
+    } else if (lower.includes('phải') || lower.includes('bên phải')) {
+      newX = Math.min(halfW - (targetObj.dimensions?.width || 0.5) / 2 - 0.1, newX + shiftAmount);
+    } else if (lower.includes('lên') || lower.includes('phía trên') || lower.includes('về phía trước')) {
+      newZ = Math.max(-halfL + (targetObj.dimensions?.length || 0.5) / 2 + 0.1, newZ - shiftAmount);
+    } else if (lower.includes('xuống') || lower.includes('phía dưới') || lower.includes('về phía sau')) {
+      newZ = Math.min(halfL - (targetObj.dimensions?.length || 0.5) / 2 - 0.1, newZ + shiftAmount);
+    }
+
+    // Vị trí đặc biệt
+    if (lower.includes('sát tường') || lower.includes('tựa tường')) {
+      newZ = -halfL + (targetObj.dimensions?.length || 1) / 2 + 0.1;
+    } else if (lower.includes('cửa sổ')) {
+      newX = halfW - (targetObj.dimensions?.width || 1) / 2 - 0.2;
+    } else if (lower.includes('giữa') || lower.includes('trung tâm')) {
+      newX = 0; newZ = 0;
+    } else if (lower.includes('góc trái')) {
+      newX = -halfW + (targetObj.dimensions?.width || 1) / 2 + 0.1;
+      newZ = -halfL + (targetObj.dimensions?.length || 1) / 2 + 0.1;
+    } else if (lower.includes('góc phải')) {
+      newX = halfW - (targetObj.dimensions?.width || 1) / 2 - 0.1;
+      newZ = -halfL + (targetObj.dimensions?.length || 1) / 2 + 0.1;
+    }
+
+    const finalX = Math.round(newX * 100) / 100;
+    const finalZ = Math.round(newZ * 100) / 100;
 
     return {
-      reply: `Đã di chuyển ${targetObj.name} đến tọa độ mới [X=${newX.toFixed(1)}m, Z=${newZ.toFixed(1)}m]. Vị trí mới giúp căn phòng gọn gàng, tăng cường khoảng tụ khí.`,
+      reply: `Đã di chuyển **${targetObj.name}** đến tọa độ [X=${finalX}m, Z=${finalZ}m]. Vị trí mới giúp căn phòng thông thoáng, tăng cường khoảng tụ khí.`,
       aiActions: {
         actions: [
           {
             type: 'move_object',
             objectId: targetObj.id,
-            position: { x: Math.round(newX * 10) / 10, z: Math.round(newZ * 10) / 10 },
-            description: `Di chuyển ${targetObj.name}`,
+            position: { x: finalX, z: finalZ },
+            description: `Di chuyển ${targetObj.name} sang vị trí mới`,
           },
         ],
       },

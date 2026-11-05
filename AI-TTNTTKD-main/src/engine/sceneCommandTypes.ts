@@ -47,6 +47,7 @@ export interface MoveCommand extends BaseCommand {
   object_id: string;
   target_region?: 'left_corner' | 'right_corner' | 'center' | 'near_window' | 'near_door' | 'against_wall';
   target_direction?: 'left' | 'right' | 'forward' | 'backward';
+  target_direction_meters?: number; // khoảng cách chính xác tính bằng mét (ví dụ 0.5 = 50cm)
   target_object_proximity?: string; // ID of nearby reference object
 }
 

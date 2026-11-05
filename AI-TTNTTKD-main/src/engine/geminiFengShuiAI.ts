@@ -94,15 +94,31 @@ export async function generateFengShuiConsultation(
     };
   }
   if (classified.intent === 'OPTIMIZE_ROOM' || lowerPrompt.includes('tối ưu') || lowerPrompt.includes('optimize') || lowerPrompt.includes('sắp xếp lại')) {
-    const { proposal } = generateOptimizedLayout(userProfile, roomConfig, objects, evaluation);
+    const pinnedIds: string[] = [];
+    if (classified.pinnedObjectType) {
+      const matchPinned = objects.filter((o) => o.type === classified.pinnedObjectType);
+      pinnedIds.push(...matchPinned.map((o) => o.id));
+    }
+    const { proposal } = generateOptimizedLayout(
+      userProfile,
+      roomConfig,
+      objects,
+      evaluation,
+      'feng_shui_priority',
+      pinnedIds
+    );
+    const pinnedNote = pinnedIds.length > 0
+      ? ` (Đã giữ nguyên vị trí của ${objects.filter((o) => pinnedIds.includes(o.id)).map((o) => o.name).join(', ')} theo yêu cầu)`
+      : '';
+
     return {
-      replyText: `Tôi đã phân tích toàn bộ bố cục phòng ${roomConfig.width}m × ${roomConfig.length}m của gia chủ mệnh ${userProfile.guaName} (${userProfile.element}) và tạo phương án tối ưu nâng điểm phong thủy từ ${proposal.beforeScore} lên ${proposal.afterScore}/100.\n\nCác cải tiến:\n${proposal.improvements.map((imp, i) => `${i + 1}. ${imp}`).join('\n')}\n\nBạn có thể bấm Xem trước để kiểm tra bóng mờ 3D hoặc Áp dụng ngay!`,
+      replyText: `Tôi đã phân tích toàn bộ bố cục phòng ${roomConfig.width}m × ${roomConfig.length}m của gia chủ mệnh ${userProfile.guaName} (${userProfile.element}) và tạo phương án tối ưu nâng điểm phong thủy từ ${proposal.beforeScore} lên ${proposal.afterScore}/100${pinnedNote}.\n\nCác cải tiến:\n${proposal.improvements.map((imp, i) => `${i + 1}. ${imp}`).join('\n')}\n\nBạn có thể bấm Xem trước để kiểm tra bóng mờ 3D hoặc Áp dụng ngay!`,
       proposal,
       proposedAdjustment: proposal.adjustments[0] || null,
       actions: [
         {
           type: 'optimize_room',
-          description: 'Tối ưu toàn bộ bố cục phòng ngủ theo Bát Trạch',
+          description: `Tối ưu toàn bộ bố cục phòng ngủ theo Bát Trạch${pinnedNote}`,
           adjustments: proposal.adjustments,
         },
       ],
@@ -320,50 +336,103 @@ export async function generateFengShuiConsultation(
     };
   }
 
-  // Fast path for MOVE_OBJECT / ROTATE_OBJECT with context reference
-  if (classified.contextReference && (classified.intent === 'MOVE_OBJECT' || classified.intent === 'ROTATE_OBJECT')) {
-    const resolvedContext = resolveContextTargets(
-      classified.contextReference,
-      actionHistory,
-      objects,
-      selectedObjectId,
-      roomConfig
-    );
+  // Fast path for MOVE_OBJECT / ROTATE_OBJECT (both context-aware & direct named target)
+  if (classified.intent === 'MOVE_OBJECT' || classified.intent === 'ROTATE_OBJECT') {
+    let target: RoomObject | undefined;
 
-    if (resolvedContext.resolved && resolvedContext.targetObjects.length > 0) {
-      const target = resolvedContext.targetObjects[0];
-      if (classified.intent === 'ROTATE_OBJECT') {
-        const deg = classified.rotationDegrees || 90;
-        const rad = (deg * Math.PI) / 180;
-        return {
-          replyText: `Đã xoay ${target.name} góc ${deg}° theo yêu cầu.`,
-          actions: [
-            {
-              type: 'rotate_object',
-              objectId: target.id,
-              rotationDelta: rad,
-              description: `Xoay ${target.name} ${deg}°`,
-            },
-          ],
-        };
-      } else if (classified.intent === 'MOVE_OBJECT') {
-        const dir = classified.targetDirection || 'left';
-        const shiftAmount = 0.5;
-        const newX = dir === 'left' ? target.position.x - shiftAmount : dir === 'right' ? target.position.x + shiftAmount : target.position.x;
-        const newZ = dir === 'forward' ? target.position.z - shiftAmount : dir === 'backward' ? target.position.z + shiftAmount : target.position.z;
-
-        return {
-          replyText: `Đã di chuyển ${target.name} sang ${dir === 'left' ? 'bên trái' : dir === 'right' ? 'bên phải' : dir === 'forward' ? 'phía trên' : 'phía dưới'} theo yêu cầu.`,
-          actions: [
-            {
-              type: 'move_object',
-              objectId: target.id,
-              position: { x: Number(newX.toFixed(2)), z: Number(newZ.toFixed(2)) },
-              description: `Di chuyển ${target.name}`,
-            },
-          ],
-        };
+    // 1. Context reference priority ("nó", "vừa điều chỉnh", "đồ vật đó", "cạnh cửa sổ"...)
+    if (classified.contextReference) {
+      const resolvedContext = resolveContextTargets(
+        classified.contextReference,
+        actionHistory,
+        objects,
+        selectedObjectId,
+        roomConfig
+      );
+      if (resolvedContext.resolved && resolvedContext.targetObjects.length > 0) {
+        target = resolvedContext.targetObjects[0];
       }
+    }
+
+    // 2. Direct name/type priority ("giường", "tủ quần áo", "bàn làm việc"...)
+    if (!target && classified.extractedObjectType) {
+      target = objects.find((o) => o.type === classified.extractedObjectType);
+    }
+    if (!target && classified.extractedObjectName) {
+      target = objects.find((o) => o.name.toLowerCase().includes(classified.extractedObjectName!.toLowerCase()));
+    }
+    if (!target && selectedObjectId) {
+      target = objects.find((o) => o.id === selectedObjectId);
+    }
+
+    if (!target) {
+      const actionName = classified.intent === 'ROTATE_OBJECT' ? 'xoay' : 'di chuyển';
+      return {
+        replyText: `Chưa xác định được đồ vật cần ${actionName}. Bạn vui lòng chỉ rõ tên đồ vật (ví dụ: "${actionName === 'xoay' ? 'Xoay giường 90 độ' : 'Di chuyển giường sang trái 50cm'}") hoặc nhấp chọn đồ vật trên mô hình 3D.`,
+      };
+    }
+
+    if (classified.intent === 'ROTATE_OBJECT') {
+      const deg = classified.rotationDegrees || 90;
+      const rad = (deg * Math.PI) / 180;
+      const newRotDeg = Math.round((((target.rotation?.y || 0) + rad) * 180) / Math.PI) % 360;
+
+      return {
+        replyText: `Đã thực thi xoay **${target.name}** góc ${deg}°. Góc xoay hiện tại: ${newRotDeg}°. Hướng đón khí trường mới giúp tối ưu trường khí trong phòng.`,
+        actions: [
+          {
+            type: 'rotate_object',
+            objectId: target.id,
+            rotationDelta: rad,
+            description: `Xoay ${target.name} ${deg}°`,
+          },
+        ],
+      };
+    } else if (classified.intent === 'MOVE_OBJECT') {
+      const dir = classified.targetDirection || 'left';
+      const shiftAmount = classified.distanceMeters || 0.5;
+      const halfW = (roomConfig.width || 5.0) / 2;
+      const halfL = (roomConfig.length || 5.2) / 2;
+
+      let newX = target.position.x;
+      let newZ = target.position.z;
+
+      if (lowerPrompt.includes('góc trái')) {
+        newX = -halfW + target.dimensions.width / 2 + 0.1;
+        newZ = -halfL + target.dimensions.length / 2 + 0.1;
+      } else if (lowerPrompt.includes('góc phải')) {
+        newX = halfW - target.dimensions.width / 2 - 0.1;
+        newZ = -halfL + target.dimensions.length / 2 + 0.1;
+      } else if (lowerPrompt.includes('sát tường') || lowerPrompt.includes('tựa tường')) {
+        newZ = -halfL + target.dimensions.length / 2 + 0.1;
+      } else if (lowerPrompt.includes('cửa sổ')) {
+        newX = halfW - target.dimensions.width / 2 - 0.2;
+      } else if (lowerPrompt.includes('giữa') || lowerPrompt.includes('trung tâm')) {
+        newX = 0; newZ = 0;
+      } else {
+        if (dir === 'left') newX = Math.max(-halfW + target.dimensions.width / 2 + 0.1, newX - shiftAmount);
+        else if (dir === 'right') newX = Math.min(halfW - target.dimensions.width / 2 - 0.1, newX + shiftAmount);
+        else if (dir === 'forward') newZ = Math.max(-halfL + target.dimensions.length / 2 + 0.1, newZ - shiftAmount);
+        else if (dir === 'backward') newZ = Math.min(halfL - target.dimensions.length / 2 - 0.1, newZ + shiftAmount);
+      }
+
+      const finalX = Math.round(newX * 100) / 100;
+      const finalZ = Math.round(newZ * 100) / 100;
+      const distLabel = shiftAmount >= 1 ? `${shiftAmount}m` : `${Math.round(shiftAmount * 100)}cm`;
+      const dirLabel = dir === 'left' ? 'sang bên trái' : dir === 'right' ? 'sang bên phải' : dir === 'forward' ? 'về phía trên' : 'về phía dưới';
+      const pinnedNote = classified.pinnedPhrase ? ` (Đã giữ nguyên ${classified.pinnedPhrase})` : '';
+
+      return {
+        replyText: `Đã di chuyển **${target.name}** ${dirLabel} ${distLabel} đến tọa độ [X=${finalX}m, Z=${finalZ}m]${pinnedNote}. Vị trí mới đảm bảo không gian thông thủy và cải thiện trường khí phòng ngủ.`,
+        actions: [
+          {
+            type: 'move_object',
+            objectId: target.id,
+            position: { x: finalX, z: finalZ },
+            description: `Di chuyển ${target.name} ${dirLabel} ${distLabel}`,
+          },
+        ],
+      };
     }
   }
 

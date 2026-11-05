@@ -168,6 +168,21 @@ function detectMoveDirection(p: string): MoveCommand['target_direction'] | undef
 }
 
 // ---------------------------------------------------------------------------
+// Helper: trích xuất khoảng cách di chuyển chính xác (cm hoặc m)
+// Ví dụ: "50 cm" → 0.5m; "1.5m" → 1.5m; "một chút" → 0.3m
+// ---------------------------------------------------------------------------
+function detectMoveDistanceMeters(p: string): number {
+  const cmMatch = p.match(/(\d+(?:[.,]\d+)?)\s*cm/);
+  if (cmMatch) return parseFloat(cmMatch[1].replace(',', '.')) / 100;
+  const mMatch = p.match(/(\d+(?:[.,]\d+)?)\s*m(?!ét)/);
+  if (mMatch) return parseFloat(mMatch[1].replace(',', '.'));
+  // Mô tả định tính
+  if (p.includes('một chút') || p.includes('một ít') || p.includes('nhẹ') || p.includes('nhích')) return 0.3;
+  if (p.includes('nhiều') || p.includes('xa hơn') || p.includes('hơn')) return 1.0;
+  return 0.5; // mặc định 50cm
+}
+
+// ---------------------------------------------------------------------------
 // Helper: detect rotation degrees from prompt
 // ---------------------------------------------------------------------------
 function detectRotationDegrees(p: string): number {
@@ -454,6 +469,7 @@ export function parseIntent(
     const candidates = findCandidates(detectedType, detectedAttrs, p, objects, selectedObjectId);
     const region = detectMoveRegion(p);
     const direction = detectMoveDirection(p);
+    const distanceMeters = detectMoveDistanceMeters(p);
 
     if (candidates.length === 0) {
       const clarify: ClarifyCommand = {
@@ -471,13 +487,14 @@ export function parseIntent(
         object_id: candidates[0].id,
         target_region: region,
         target_direction: direction,
+        target_direction_meters: distanceMeters,
         confidence: region || direction ? 0.85 : 0.6,
-        reason: `Di chuyển ${candidates[0].name} tới ${region || direction || 'vị trí mới'}`,
+        reason: `Di chuyển ${candidates[0].name} ${direction ? `sang ${direction} ${distanceMeters}m` : region ? `tới ${region}` : 'vị trí mới'}`,
       };
       return {
-        replyText: `✓ Đã di chuyển **${candidates[0].name}** tới vị trí mới hợp phong thủy.`,
+        replyText: `✓ Đã di chuyển **${candidates[0].name}** ${direction ? `sang ${direction === 'left' ? 'bên trái' : direction === 'right' ? 'bên phải' : direction === 'forward' ? 'phía trên' : 'phía dưới'} ${distanceMeters >= 1 ? `${distanceMeters}m` : `${Math.round(distanceMeters * 100)}cm`}` : 'tới vị trí mới'}.`,
         commands: [cmd],
-        requiresPreview: true,
+        requiresPreview: false,
         requiresClarification: false,
       };
     }

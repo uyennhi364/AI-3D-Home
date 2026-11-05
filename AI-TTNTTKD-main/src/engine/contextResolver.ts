@@ -266,7 +266,7 @@ export function resolveContextTargets(
     };
   }
 
-  // 4. Case: "nó", "chúng", "đồ vật đó"
+  // 4. Case: "nó", "chúng", "đồ vật đó", "vị trí đó"
   if (contextRef.type === 'pronoun') {
     // 1st priority: currently selected object
     if (selectedObjectId) {
@@ -280,8 +280,24 @@ export function resolveContextTargets(
       }
     }
 
-    // 2nd priority: items from latest batch
-    const addEntries = actionHistory.filter((e) => e.actionType === 'add_object' && e.executionStatus === 'SUCCESS');
+    // 2nd priority: the most recent successfully modified/moved/rotated/added object in actionHistory
+    const validHistory = actionHistory.filter(
+      (e) => (e.executionStatus === 'SUCCESS' || !e.executionStatus) && e.actionType !== 'delete_object'
+    );
+    if (validHistory.length > 0) {
+      const latestEntry = validHistory[validHistory.length - 1];
+      const foundInScene = currentObjects.find((o) => o.id === latestEntry.objectId);
+      if (foundInScene) {
+        return {
+          resolved: true,
+          targetObjects: [foundInScene],
+          reason: `Đã áp dụng cho ${foundInScene.name} vừa được thao tác (${latestEntry.actionType}) gần nhất.`,
+        };
+      }
+    }
+
+    // 3rd priority: items from latest add_object batch
+    const addEntries = actionHistory.filter((e) => e.actionType === 'add_object' && (e.executionStatus === 'SUCCESS' || !e.executionStatus));
     if (addEntries.length > 0) {
       const latestBatchId = addEntries[addEntries.length - 1].batchGroupId;
       const latestBatch = addEntries.filter((e) => e.batchGroupId === latestBatchId);
@@ -290,9 +306,19 @@ export function resolveContextTargets(
         return {
           resolved: true,
           targetObjects: existing,
-          reason: `Đã áp dụng cho ${existing.length} đồ vật vừa được thao tác (${existing.map((o) => o.name).join(', ')}).`,
+          reason: `Đã áp dụng cho ${existing.length} đồ vật vừa được tạo (${existing.map((o) => o.name).join(', ')}).`,
         };
       }
+    }
+
+    // 4th priority: if only one non-structural object exists (e.g. only 1 bed), resolve to it
+    const movableObjects = currentObjects.filter((o) => o.type !== 'door' && o.type !== 'window');
+    if (movableObjects.length === 1) {
+      return {
+        resolved: true,
+        targetObjects: [movableObjects[0]],
+        reason: `Đã áp dụng cho đồ vật duy nhất trong phòng: ${movableObjects[0].name}.`,
+      };
     }
 
     return {
