@@ -25,7 +25,6 @@ import { RoomCompassWidget } from './components/RoomCompassWidget';
 import { UserProfileModal } from './components/UserProfileModal';
 import { LayoutComparisonModal } from './components/LayoutComparisonModal';
 import { AIAnalysisReportModal } from './components/AIAnalysisReportModal';
-import { RoomConfigModal } from './components/RoomConfigModal';
 import { validateAICommand } from './services/aiCommandHandler';
 import {
   clampOBBInsideRoom,
@@ -89,7 +88,6 @@ export default function App() {
   const [activeOptimizationProposal, setActiveOptimizationProposal] = useState<LayoutOptimizationProposal | null>(null);
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
-  const [isRoomConfigModalOpen, setIsRoomConfigModalOpen] = useState<boolean>(false);
   const [isAiAnalyzing, setIsAiAnalyzing] = useState<boolean>(false);
   const [aiReportData, setAiReportData] = useState<any>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -1037,20 +1035,6 @@ export default function App() {
                 <span>↻</span>
                 <span>Xoay</span>
               </button>
-
-              <div className="w-[1px] h-4 bg-stone-700/60 mx-1" />
-
-              <button
-                onClick={() => setIsRoomConfigModalOpen(true)}
-                className="px-2.5 sm:px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 text-stone-300 hover:text-white hover:bg-stone-800 transition-all cursor-pointer"
-                title="Tùy chỉnh kích thước phòng, quản lý cửa và lưu/tải bố cục"
-              >
-                <span>⚙</span>
-                <span className="hidden sm:inline">Phòng & Lưu trữ</span>
-                <span className="sm:hidden">Phòng</span>
-              </button>
-
-
             </div>
           </div>
 
@@ -1136,20 +1120,6 @@ export default function App() {
           setChatTriggerPrompt('Tối ưu phòng ngủ cho tôi');
         }}
         onSelectObject={(id) => setSelectedObjectId(id)}
-      />
-
-      {/* Room Dimensions & Layout Storage Modal */}
-      <RoomConfigModal
-        isOpen={isRoomConfigModalOpen}
-        onClose={() => setIsRoomConfigModalOpen(false)}
-        roomConfig={roomConfig}
-        onUpdateRoomConfig={(newConfig) => setRoomConfig(newConfig)}
-        objects={objects}
-        onLoadLayout={handleLoadLayout}
-        userProfile={userProfile}
-        currentScore={evaluation.overallScore}
-        onExport3DImage={handleExport3DImage}
-        onExport2DPlan={handleExport2DPlan}
       />
     </div>
   );
