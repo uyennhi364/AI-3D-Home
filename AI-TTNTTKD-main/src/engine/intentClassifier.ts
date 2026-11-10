@@ -5,6 +5,7 @@
 // =============================================================================
 
 import { RoomObjectType } from '../types/fengshui';
+import { evaluateIntentSafety } from '../services/intentGuard';
 
 export type UserIntentType =
   | 'CHAT_GENERAL'              // 1. General conversation, greetings, knowledge
@@ -55,7 +56,7 @@ export interface ClassifiedIntent {
 }
 
 // Vietnamese keywords for object types - PRIORITY ORDER IS CRITICAL:
-// Compound words like 'đèn bàn', 'bàn học' must match before generic 'bàn'
+// Compound words like 'đèn bàn', 'bàn học', 'tủ đầu giường' must match before generic 'bàn', 'tủ', 'giường'
 const OBJECT_PATTERNS: Array<{ type: RoomObjectType; name: string; patterns: string[] }> = [
   {
     type: 'wc',
@@ -63,24 +64,34 @@ const OBJECT_PATTERNS: Array<{ type: RoomObjectType; name: string; patterns: str
     patterns: ['nhà vệ sinh', 'nha ve sinh', 'phòng vệ sinh', 'phong ve sinh', 'toilet', 'wc', 'bồn cầu', 'bon cau'],
   },
   {
+    type: 'nightstand',
+    name: 'Táp đầu giường',
+    patterns: ['tủ đầu giường', 'tu dau giuong', 'táp đầu giường', 'tap dau giuong', 'kệ đầu giường', 'ke dau giuong', 'táp', 'tab', 'nightstand'],
+  },
+  {
+    type: 'bookshelf',
+    name: 'Kệ sách',
+    patterns: ['kệ sách', 'ke sach', 'giá sách', 'gia sach', 'tủ sách', 'tu sach', 'bookshelf'],
+  },
+  {
     type: 'lamp',
     name: 'Đèn ngủ',
-    patterns: ['đèn ngủ', 'den ngu', 'đèn đầu giường', 'đèn để bàn', 'đèn bàn', 'den ban', 'đèn học', 'den hoc', 'đèn cây', 'đèn sàn', 'đèn đứng', 'đèn', 'den', 'lamp'],
+    patterns: ['đèn đầu giường', 'đèn để bàn', 'đèn bàn', 'den ban', 'đèn học', 'den hoc', 'đèn ngủ', 'den ngu', 'đèn cây', 'đèn sàn', 'đèn đứng', 'đèn', 'den', 'lamp'],
   },
   {
     type: 'desk',
     name: 'Bàn làm việc',
-    patterns: ['bàn học', 'ban hoc', 'bàn làm việc', 'ban lam viec', 'bàn vi tính', 'bàn máy tính', 'desk'],
+    patterns: ['bàn làm việc', 'ban lam viec', 'bàn học', 'ban hoc', 'bàn vi tính', 'bàn máy tính', 'desk'],
+  },
+  {
+    type: 'wardrobe',
+    name: 'Tủ quần áo',
+    patterns: ['tủ quần áo', 'tu quan ao', 'tủ áo', 'tu ao', 'tủ đồ', 'tu do', 'wardrobe', 'tủ'],
   },
   {
     type: 'bed',
     name: 'Giường ngủ',
     patterns: ['giường', 'giuong', 'nệm', 'đệm', 'bed'],
-  },
-  {
-    type: 'wardrobe',
-    name: 'Tủ quần áo',
-    patterns: ['tủ quần áo', 'tu quan ao', 'tủ áo', 'tủ đồ', 'wardrobe', 'tủ'],
   },
   {
     type: 'table',
@@ -103,19 +114,9 @@ const OBJECT_PATTERNS: Array<{ type: RoomObjectType; name: string; patterns: str
     patterns: ['cây xanh', 'cay xanh', 'chậu cây', 'cây cảnh', 'plant', 'cây'],
   },
   {
-    type: 'nightstand',
-    name: 'Táp đầu giường',
-    patterns: ['táp', 'tab', 'tủ đầu giường', 'kệ đầu giường', 'nightstand'],
-  },
-  {
     type: 'sofa',
     name: 'Sofa',
     patterns: ['sofa', 'ghế bành', 'couch'],
-  },
-  {
-    type: 'bookshelf',
-    name: 'Kệ sách',
-    patterns: ['kệ sách', 'giá sách', 'tủ sách', 'bookshelf'],
   },
   {
     type: 'tv',
@@ -128,6 +129,69 @@ const OBJECT_PATTERNS: Array<{ type: RoomObjectType; name: string; patterns: str
     patterns: ['thảm', 'tham', 'rug', 'carpet'],
   },
 ];
+
+/**
+ * Robust object detector that matches all keywords in text and prioritizes
+ * the longest/most specific pattern to prevent collisions (e.g. "tủ đầu giường" vs "tủ quần áo" vs "giường").
+ */
+export function detectObjectTypeFromText(
+  text: string
+): { type: RoomObjectType; name: string; matchedPattern: string } | undefined {
+  if (!text) return undefined;
+  const lower = text.toLowerCase().trim();
+
+  const matches: Array<{
+    type: RoomObjectType;
+    name: string;
+    matchedPattern: string;
+    start: number;
+    length: number;
+  }> = [];
+
+  for (const obj of OBJECT_PATTERNS) {
+    for (const pat of obj.patterns) {
+      if (pat.includes(' ')) {
+        let idx = lower.indexOf(pat);
+        while (idx !== -1) {
+          matches.push({
+            type: obj.type,
+            name: obj.name,
+            matchedPattern: pat,
+            start: idx,
+            length: pat.length,
+          });
+          idx = lower.indexOf(pat, idx + pat.length);
+        }
+      } else {
+        const escaped = pat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const rx = new RegExp(`(?:^|\\s|[.,;!?])(${escaped})(?:\\s|[.,;!?]|$)`, 'gi');
+        let m;
+        while ((m = rx.exec(lower)) !== null) {
+          const matchStart = m.index + m[0].indexOf(m[1]);
+          matches.push({
+            type: obj.type,
+            name: obj.name,
+            matchedPattern: pat,
+            start: matchStart,
+            length: pat.length,
+          });
+          rx.lastIndex = matchStart + pat.length;
+        }
+      }
+    }
+  }
+
+  if (matches.length === 0) return undefined;
+
+  // Longest pattern match takes absolute precedence
+  matches.sort((a, b) => b.length - a.length);
+
+  return {
+    type: matches[0].type,
+    name: matches[0].name,
+    matchedPattern: matches[0].matchedPattern,
+  };
+}
 
 /**
  * Extracts numeric quantity from Vietnamese prompt (e.g., '2 cái bàn', 'hai chiếc đèn', '3 ghế')
@@ -338,17 +402,11 @@ export function detectContextReference(prompt: string): ContextReferenceInfo | u
   ];
   for (const { pattern, idx } of ordinalMap) {
     if (pattern.test(p)) {
-      let targetObj: RoomObjectType | undefined;
-      for (const obj of OBJECT_PATTERNS) {
-        if (obj.patterns.some((pat) => p.includes(pat))) {
-          targetObj = obj.type;
-          break;
-        }
-      }
+      const detected = detectObjectTypeFromText(p);
       return {
         type: 'ordinal',
         ordinalIndex: idx,
-        targetObjectType: targetObj,
+        targetObjectType: detected?.type,
         rawPhrase: p,
       };
     }
@@ -357,17 +415,11 @@ export function detectContextReference(prompt: string): ContextReferenceInfo | u
   // 2. Specific recent or general recent: "chiếc giường vừa tạo", "những cái vừa tạo", "xóa bàn vừa mới thêm"
   const isRecentPhrase = /(?:vừa\s*tạo|vừa\s*thêm|vừa\s*đặt|mới\s*tạo|mới\s*thêm|vừa\s*mới\s*thêm|vừa\s*mới\s*tạo|vừa\s*rồi|mới\s*rồi|vừa\s*làm|đã\s*thêm)/i.test(p);
   if (isRecentPhrase) {
-    let targetObj: RoomObjectType | undefined;
-    for (const obj of OBJECT_PATTERNS) {
-      if (obj.patterns.some((pat) => p.includes(pat))) {
-        targetObj = obj.type;
-        break;
-      }
-    }
-    if (targetObj) {
+    const detected = detectObjectTypeFromText(p);
+    if (detected) {
       return {
         type: 'specific_recent',
-        targetObjectType: targetObj,
+        targetObjectType: detected.type,
         rawPhrase: p,
       };
     }
@@ -392,17 +444,11 @@ export function detectContextReference(prompt: string): ContextReferenceInfo | u
   }
 
   if (spatialAnchor) {
-    let targetObj: RoomObjectType | undefined;
-    for (const obj of OBJECT_PATTERNS) {
-      if (obj.patterns.some((pat) => p.includes(pat))) {
-        targetObj = obj.type;
-        break;
-      }
-    }
+    const detected = detectObjectTypeFromText(p);
     return {
       type: 'spatial_relation',
       spatialAnchor,
-      targetObjectType: targetObj,
+      targetObjectType: detected?.type,
       rawPhrase: p,
     };
   }
@@ -443,29 +489,43 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
   const keepMatch = p.match(/(?:giữ\s*nguyên|cố\s*định|không\s*thay\s*đổi|không\s*đổi|đừng\s*thay\s*đổi|đừng\s*di\s*chuyển)\s+([^,;.]+?)(?:[,;]|\bvà\b|\bchỉ\b|\bnhưng\b|\brồi\b|$)/i);
   if (keepMatch) {
     pinnedPhrase = keepMatch[1].trim();
-    for (const obj of OBJECT_PATTERNS) {
-      if (obj.patterns.some((pat) => pinnedPhrase!.includes(pat))) {
-        pinnedType = obj.type;
-        break;
-      }
-    }
+    pinnedType = detectObjectTypeFromText(pinnedPhrase)?.type;
     actionText = p.replace(keepMatch[0], ' ').trim() || p;
   } else {
     const revMatch = p.match(/(?:nhưng|chỉ|đồng\s*thời)\s+(?:giữ\s*nguyên|không\s*thay\s*đổi|không\s*đổi|cố\s*định)\s+([^,;.]+)/i);
     if (revMatch) {
       pinnedPhrase = revMatch[1].trim();
-      for (const obj of OBJECT_PATTERNS) {
-        if (obj.patterns.some((pat) => pinnedPhrase!.includes(pat))) {
-          pinnedType = obj.type;
-          break;
-        }
-      }
+      pinnedType = detectObjectTypeFromText(pinnedPhrase)?.type;
       actionText = p.replace(revMatch[0], ' ').trim() || p;
     }
   }
 
-  // Theory question detection (e.g. "Gương đối diện giường có sao không?", "Tại sao nên kê đầu giường sát tường?")
-  const isTheoryQuestion = /(có sao không|có tốt không|có nên|tại sao|vì sao|ảnh hưởng gì|ý nghĩa gì|thế nào|như thế nào|hóa giải thế nào|làm sao để|có bị phạm)/i.test(p);
+  // Detect object type and specific dimensions if present - Ưu tiên tìm trong actionText trước
+  let detectedType: RoomObjectType | undefined;
+  let detectedName: string | undefined;
+
+  const foundObj = detectObjectTypeFromText(actionText) || detectObjectTypeFromText(p);
+  if (foundObj) {
+    detectedType = foundObj.type;
+    detectedName = foundObj.name;
+  }
+
+  // Safety guard evaluation: Theory/advisory queries must NEVER trigger 3D execution
+  const guard = evaluateIntentSafety(prompt, Boolean(detectedType));
+  if (guard.isAdvisoryOrQuestion || guard.executionMode === 'THEORY' || guard.executionMode === 'PROPOSE') {
+    return {
+      intent: 'FENG_SHUI_CONSULT',
+      confidence: 0.95,
+      loadingMessage: 'Đang tra cứu cơ sở lý thuyết phong thủy Bát Trạch & Loan Đầu...',
+      extractedObjectType: detectedType,
+      extractedObjectName: detectedName,
+      pinnedObjectType: pinnedType,
+      pinnedPhrase,
+      needsFengShuiEngine: true,
+      needsLayoutOptimizer: false,
+      needs3DExecution: false,
+    };
+  }
 
   // Delete action detection: MUST take precedence over ADD to avoid "vừa mới thêm" matching "thêm"
   const isDeleteAction = matches([
@@ -474,7 +534,6 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
 
   // 1. Check OPTIMIZE_ROOM (Highest priority for room-wide layout command)
   if (
-    !isTheoryQuestion &&
     matches([
       'tối ưu toàn bộ', 'tối ưu phòng', 'tối ưu giúp tôi', 'tối ưu bố cục',
       'sắp xếp lại toàn bộ', 'sap xep lai toan bo', 'tối ưu lại', 'optimize room',
@@ -495,7 +554,6 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
 
   // 2. Check ANALYZE_ROOM (Explicit report/evaluation request)
   if (
-    !isTheoryQuestion &&
     matches([
       'phân tích toàn bộ', 'báo cáo phong thủy', 'đánh giá toàn bộ',
       'phân tích phòng', 'điểm phong thủy là bao nhiêu', 'xem báo cáo',
@@ -511,28 +569,6 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
       needsLayoutOptimizer: false,
       needs3DExecution: false,
     };
-  }
-
-  // Detect object type and specific dimensions if present - Ưu tiên tìm trong actionText trước
-  let detectedType: RoomObjectType | undefined;
-  let detectedName: string | undefined;
-
-  for (const obj of OBJECT_PATTERNS) {
-    if (obj.patterns.some((pat) => pat.includes(' ') ? actionText.includes(pat) : (new RegExp(`(^|\\s|[.,;!?])${pat.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(\\s|[.,;!?]|$)`, 'i')).test(actionText))) {
-      detectedType = obj.type;
-      detectedName = obj.name;
-      break;
-    }
-  }
-
-  if (!detectedType) {
-    for (const obj of OBJECT_PATTERNS) {
-      if (obj.patterns.some((pat) => pat.includes(' ') ? p.includes(pat) : hasWord(pat))) {
-        detectedType = obj.type;
-        detectedName = obj.name;
-        break;
-      }
-    }
   }
 
   // Extract dimensions (e.g. 1m6, 1.6m, 1m2, 1m8, 2m, 1.4m)
@@ -735,7 +771,7 @@ export function classifyUserIntent(prompt: string): ClassifiedIntent {
 
   // 8. Check FENG_SHUI_CONSULT (Specific Feng Shui theory questions, e.g. "Gương đối diện giường có sao không?")
   if (
-    isTheoryQuestion ||
+    guard.isAdvisoryOrQuestion ||
     matches([
       'phong thủy', 'bát trạch', 'quái mệnh', 'ngũ hành', 'sinh khí', 'thiên y',
       'diên niên', 'phục vị', 'tuyệt mệnh', 'ngũ quỷ', 'lục sát', 'họa hại',

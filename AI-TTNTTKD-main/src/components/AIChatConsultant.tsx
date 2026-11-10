@@ -20,6 +20,7 @@ import { generateOptimizedLayout, generateMultipleLayoutProposals } from '../eng
 import { DIRECTION_NAMES_VI } from '../engine/batTrach';
 import { getBedHeadboardDirection, getFloorDistance } from '../engine/fengshuiRules';
 import { generateExplainableFengShuiReport, generateExplainableAnswer } from '../engine/explainableFengShui';
+import { evaluateIntentSafety } from '../services/intentGuard';
 
 export interface AnalysisIssueItem {
   id: string;
@@ -310,8 +311,8 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
     if (!textToSend) setInput('');
     setIsLoading(true);
 
-    // Cancel Ghost Preview if user explicitly requests cancel/undo preview
-    if (/(^|\s)(hủy|huy|tắt xem trước|tat xem truoc|bỏ xem trước|bo xem truoc|dừng xem trước)(\s|$)/i.test(promptText)) {
+    // Cancel Ghost Preview if user explicitly requests cancel preview (distinct from Undo history)
+    if (/(?:tắt|bỏ|đóng|dừng|hủy|huy)\s*(?:xem\s*trước|bóng\s*mờ|preview)/i.test(promptText)) {
       onPreviewProposal(null, []);
       setMessages((prev) => [
         ...prev,
@@ -319,6 +320,45 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
           id: `a_${Date.now()}`,
           role: 'assistant',
           content: '✓ Đã tắt xem trước bóng mờ 3D và khôi phục hiển thị bình thường.',
+        },
+      ]);
+      setIsLoading(false);
+      return;
+    }
+
+    // Safety guard evaluation
+    const guardSafety = evaluateIntentSafety(promptText, Boolean(selectedObjectId));
+
+    // Handle ambiguous command targets: NEVER default to objects[0]
+    if (guardSafety.requiresTargetClarification) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `a_${Date.now()}`,
+          role: 'assistant',
+          content: 'Vui lòng cho biết bạn muốn thao tác với đồ vật nào cụ thể trong phòng ngủ (ví dụ: giường, bàn học, tủ quần áo, táp đầu giường,...) hoặc nhấp chọn đồ vật trên không gian 3D.',
+        },
+      ]);
+      setIsLoading(false);
+      return;
+    }
+
+    // Questions about optimization ("Có nên tối ưu phòng không?") must NEVER trigger 3D execution
+    const isOptimizeQuestion = /(?:có\s*nên\s*(?:tối\s*ưu|sắp\s*xếp|bố\s*trí)|tối\s*ưu\s*(?:thế\s*nào|như\s*thế\s*nào|ra\s*sao|có\s*tốt\s*không|được\s*không)|làm\s*sao\s*để\s*tối\s*ưu)/i.test(promptText);
+    if (isOptimizeQuestion) {
+      const explainReport = generateExplainableFengShuiReport(userProfile, roomConfig, objects, evaluation);
+      const answer = `Hiện tại phòng ngủ của gia chủ mệnh **${userProfile.guaName}** (${userProfile.element} - ${userProfile.group}) đạt **${evaluation.overallScore}/100 điểm** (${evaluation.statusText}).\n\n${
+        evaluation.keyIssues.length > 0
+          ? `Trong phòng đang tồn tại ${evaluation.keyIssues.length} điểm cần cải thiện:\n${evaluation.keyIssues.map((iss, i) => `${i + 1}. ${iss}`).join('\n')}\n\n**Lời khuyên:** Gia chủ **rất nên tối ưu hóa phòng** để đưa đầu giường vào các cung vị cát (Sinh Khí, Thiên Y, Diên Niên, Phục Vị) và triệt tiêu các xung sát. Bạn có thể bấm nút **Tối ưu phòng** hoặc yêu cầu *"Tối ưu phòng cho tôi"* để hệ thống tính toán và xem trước phương án tốt nhất.`
+          : 'Phòng ngủ của bạn hiện đã bố trí rất hài hòa và không có xung sát lớn. Nếu muốn tinh chỉnh thêm, bạn có thể xem các phương án bố trí gợi ý.'
+      }`;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `a_${Date.now()}`,
+          role: 'assistant',
+          content: answer,
+          explainableAnalysis: explainReport,
         },
       ]);
       setIsLoading(false);
@@ -379,10 +419,12 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
         promptText
       );
 
-    // Check if this is an explicit Optimization Request
+    // Check if this is an explicit Optimization Request (must NOT be an advisory question)
     const isOptimizeRequest =
-      intentInfo.intent === 'OPTIMIZE_ROOM' ||
-      /(tối ưu phòng|tối ưu bố cục|sắp xếp lại|optimize|tối ưu phong thủy|tối ưu cho tôi|tối ưu giúp tôi)/i.test(promptText);
+      !guardSafety.isAdvisoryOrQuestion &&
+      guardSafety.isSafeToExecute &&
+      (intentInfo.intent === 'OPTIMIZE_ROOM' ||
+        /(?:tối\s*ưu\s*(?:toàn\s*bộ|phòng|bố\s*cục|phong\s*thủy)|sắp\s*xếp\s*lại\s*toàn\s*bộ|optimize\s*room)/i.test(promptText));
 
     if (isAnalysisRequest) {
       const analysisCardData = buildAnalysisCardData(userProfile, roomConfig, objects, evaluation);

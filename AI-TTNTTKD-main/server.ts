@@ -5,8 +5,26 @@ import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { generateOptimizedLayout } from './src/engine/layoutOptimizer';
 import { resolveSafePlacement, validatePlacementSafety, findSmartPlacement } from './src/engine/geometryEngine';
-import { extractAllActionItems, detectContextReference } from './src/engine/intentClassifier';
+import { extractAllActionItems, detectContextReference, detectObjectTypeFromText } from './src/engine/intentClassifier';
 import { resolveContextTargets } from './src/engine/contextResolver';
+import { evaluateIntentSafety } from './src/services/intentGuard';
+import {
+  evaluateGeminiFunctionCalls,
+  createDestructiveProposal,
+  confirmProposal,
+  computeSceneVersion,
+  pendingConfirmations,
+  PROPOSAL_TTL_MS,
+} from './src/services/serverGuard';
+
+export {
+  evaluateGeminiFunctionCalls,
+  createDestructiveProposal,
+  confirmProposal,
+  computeSceneVersion,
+  pendingConfirmations,
+  PROPOSAL_TTL_MS,
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,12 +39,20 @@ const port = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
+let mockGenAIClient: any = null;
+export function setMockGenAIClient(client: any) {
+  mockGenAIClient = client;
+}
+
 /**
  * Helper to obtain an active GoogleGenAI client from either:
  * 1. Request header 'x-gemini-api-key' or body 'apiKey' (configured from UI)
  * 2. Server environment GEMINI_API_KEY (.env.local or .env)
  */
 function getGenAIClient(customKey?: string): GoogleGenAI | null {
+  if (mockGenAIClient) {
+    return mockGenAIClient;
+  }
   const key = (customKey || process.env.GEMINI_API_KEY || '').trim();
   if (!key || key.includes('MY_GEMINI_API_KEY')) {
     return null;
@@ -194,11 +220,46 @@ function handleLocalAIChat(userText: string, userProfile: any, roomConfig: any, 
   const halfW = roomConfig.width / 2;
   const halfL = roomConfig.length / 2;
 
+  // Evaluate intent safety and execution mode
+  const guard = evaluateIntentSafety(userText, objects.length > 0);
+
   // 00. Undo request (works without Gemini): the client executes 'undo_action' against its history stack
-  if (/(^|\s)(undo|hoàn tác|hoàn lại|khôi phục|quay lại như cũ|trở lại như cũ|như lúc trước|bỏ thao tác|huỷ thao tác|hủy thao tác)/.test(lower)) {
+  if (guard.executionMode === 'UNDO' || /(^|\s)(undo|hoàn tác|hoàn lại|khôi phục|quay lại như cũ|trở lại như cũ|như lúc trước|bỏ thao tác|huỷ thao tác|hủy thao tác)/.test(lower)) {
     return {
       reply: 'Tôi sẽ hoàn tác thao tác gần nhất trên mô hình 3D. Nếu không còn thao tác nào để hoàn tác, hệ thống sẽ báo cho bạn.',
       aiActions: { actions: [{ type: 'undo_action', description: 'Hoàn tác thao tác trước đó' }] },
+    };
+  }
+
+  // 00b. Theory & Advisory Safety Guard:
+  // Questions containing "tại sao", "có sao không", "có nên không", "làm sao để xử lý" MUST NEVER execute 3D mutations!
+  if (guard.isAdvisoryOrQuestion || guard.executionMode === 'THEORY' || guard.executionMode === 'PROPOSE') {
+    // Mirror facing bed inquiry ("Gương đối diện giường có sao không?", "Làm sao xử lý việc gương...")
+    if (lower.includes('gương')) {
+      return {
+        reply: `Theo nguyên lý phong thủy Bát Trạch & Loan Đầu, **gương soi đối diện giường ngủ là một đại kỵ** vì phạm thế **Quang Sát**.\n\n• **Tác hại:** Gương phản xạ trường khí hỗn loạn và ánh sáng, dễ gây giật mình khi thức giấc giữa đêm, ngủ chập chờn, mộng mị, hao tổn thần khí và ảnh hưởng xấu đến tâm lý, sức khỏe.\n• **Cách khắc phục chuẩn phong thủy:**\n  1. Di chuyển gương sang vị trí vuông góc với đầu giường hoặc xoay tránh chiếu thẳng vào nệm ngủ.\n  2. Bố trí gương ở mặt trong cánh tủ quần áo (khi cần dùng mới mở ra).\n  3. Che phủ rèm hoặc khăn mềm lên mặt gương khi đi ngủ nếu không thể di chuyển vị trí.\n\n*(Hệ thống giữ nguyên bố cục 3D để bạn cân nhắc và không tự ý di chuyển khi gia chủ chỉ hỏi tư vấn).*`,
+        aiActions: null,
+      };
+    }
+
+    // Optimization inquiry ("Có nên tối ưu phòng không?")
+    const isOptimizeInquiry = /(?:có\s*nên\s*(?:tối\s*ưu|sắp\s*xếp|bố\s*trí)|tối\s*ưu\s*(?:thế\s*nào|như\s*thế\s*nào|ra\s*sao|có\s*tốt\s*không|được\s*không)|làm\s*sao\s*để\s*tối\s*ưu)/i.test(lower);
+    if (isOptimizeInquiry) {
+      const issues = ruleEngineResult.keyIssues || [];
+      return {
+        reply: `Hiện tại phòng ngủ của gia chủ mệnh **${userProfile.guaName}** (${userProfile.element} - ${userProfile.group}) đạt **${ruleEngineResult.overallScore}/100 điểm** (${ruleEngineResult.statusText}).\n\n${
+          issues.length > 0
+            ? `Các điểm cần cải thiện phát hiện được:\n${issues.map((iss: string, i: number) => `• ${iss}`).join('\n')}\n\n**Lời khuyên:** Gia chủ **rất nên tối ưu hóa phòng** để đưa giường ngủ về cung vị cát (Sinh Khí, Thiên Y, Diên Niên, Phục Vị), đồng thời đảm bảo khoảng cách an toàn thông thủy. Nếu bạn muốn tôi bắt đầu tối ưu, hãy bấm nút **Tối ưu phòng** hoặc gõ lệnh *"Tối ưu phòng cho tôi"*!`
+            : 'Bố cục phòng ngủ hiện tại đã rất hài hòa và chuẩn phong thủy Bát Trạch.'
+        }`,
+        aiActions: null,
+      };
+    }
+
+    // General theoretical inquiry
+    return {
+      reply: `Đây là câu hỏi tư vấn phong thủy lý thuyết. Để đảm bảo an toàn, hệ thống giữ nguyên hiện trạng mô hình 3D:\n\n• Đầu giường ngủ cần kê tựa vào tường vững chắc (Huyền Vũ tọa thực), tránh tựa vào vách kính hoặc kê giữa phòng (thế cô lập).\n• Giường không nên đối diện trực tiếp cửa ra vào (Hạ môn xung sát) hoặc cửa sổ lớn.\n• Bàn làm việc nên hướng về các hướng cát của gia chủ mệnh ${userProfile.guaName} (${userProfile.auspiciousDirections?.join(', ') || 'Đông tứ trạch / Tây tứ trạch'}).\n\nBạn có thể yêu cầu tôi thực thi một lệnh cụ thể (ví dụ: *"Xoay giường 90 độ"*, *"Di chuyển giường sang trái 50cm"*) khi đã sẵn sàng.`,
+      aiActions: null,
     };
   }
 
@@ -229,6 +290,7 @@ function handleLocalAIChat(userText: string, userProfile: any, roomConfig: any, 
     const issues = ruleEngineResult.keyIssues || [];
     return {
       reply: `**Điểm phong thủy hiện tại: ${ruleEngineResult.overallScore}/100** — ${ruleEngineResult.statusText}.\n\n${issues.length > 0 ? `**Các vấn đề phát hiện:**\n${issues.map((is: string, i: number) => `${i + 1}. ${is}`).join('\n')}` : 'Không có xung sát nghiêm trọng.'}\n\nBạn có muốn tôi **tối ưu tự động** để nâng điểm không?`,
+      aiActions: null,
     };
   }
 
@@ -416,11 +478,19 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
       targetObj = objects.find((o: any) => o.id === selectedObjectId);
     }
 
-    // 3rd priority: match name/type in prompt
+    // 3rd priority: match via detectObjectTypeFromText
+    if (!targetObj) {
+      const detected = detectObjectTypeFromText(lower);
+      if (detected) {
+        targetObj = objects.find((o: any) => o.type === detected.type);
+      }
+    }
+
+    // 4th priority: match by raw name in prompt
     if (!targetObj) {
       const sortedByNameLen = [...objects].sort((a: any, b: any) => b.name.length - a.name.length);
       for (const o of sortedByNameLen) {
-        if (lower.includes(o.name.toLowerCase()) || lower.includes(o.type.toLowerCase())) {
+        if (lower.includes(o.name.toLowerCase())) {
           targetObj = o;
           break;
         }
@@ -478,7 +548,7 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
       targetObj = objects.find((o: any) => o.id === selectedObjectId);
     }
 
-    // 3rd priority: match name/type in prompt (bỏ qua đồ vật sau vế "giữ nguyên")
+    // 3rd priority: match via detectObjectTypeFromText in actionPortion
     if (!targetObj) {
       // Tách vế giữ nguyên nếu có
       let actionPortion = lower;
@@ -487,17 +557,15 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
         actionPortion = lower.replace(keepMatch[0], ' ');
       }
 
-      const sortedByNameLen = [...objects].sort((a: any, b: any) => b.name.length - a.name.length);
-      for (const o of sortedByNameLen) {
-        if (actionPortion.includes(o.name.toLowerCase()) || actionPortion.includes(o.type.toLowerCase())) {
-          targetObj = o;
-          break;
-        }
+      const detected = detectObjectTypeFromText(actionPortion) || detectObjectTypeFromText(lower);
+      if (detected) {
+        targetObj = objects.find((o: any) => o.type === detected.type);
       }
-      // Fallback nếu không thấy trong actionPortion
+
       if (!targetObj) {
+        const sortedByNameLen = [...objects].sort((a: any, b: any) => b.name.length - a.name.length);
         for (const o of sortedByNameLen) {
-          if (lower.includes(o.name.toLowerCase()) || lower.includes(o.type.toLowerCase())) {
+          if (actionPortion.includes(o.name.toLowerCase())) {
             targetObj = o;
             break;
           }
@@ -602,15 +670,13 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
 
     // 5B. Multi-Item Lexical Deletion ("Xóa giường, tủ quần áo, cây" / "Xóa bàn học")
     const extractedDeleteItems = extractAllActionItems(lower);
-    const itemsToDelete = extractedDeleteItems.length > 0
-      ? extractedDeleteItems
-      : [
-          {
-            type: 'desk' as any,
-            name: 'đồ vật',
-            quantity: extractLocalQuantity(lower),
-          },
-        ];
+    if (extractedDeleteItems.length === 0) {
+      return {
+        reply: 'Vui lòng cho biết đồ vật nào cần xóa (ví dụ: "Xóa bàn học", "Xóa tủ quần áo", "Xóa tủ đầu giường") hoặc nhấp chọn đồ vật trên không gian 3D.',
+        aiActions: null,
+      };
+    }
+    const itemsToDelete = extractedDeleteItems;
 
     let workingCurrentObjects = [...objects];
     const allDeletedIds: string[] = [];
@@ -768,6 +834,22 @@ const GEMINI_TOOLS = [
   },
 ];
 
+// =============================================================================
+// API: Confirm a pending destructive proposal (delete / optimize)
+// POST /api/chat/confirm  { proposalId, sceneVersion }
+// =============================================================================
+app.post('/api/chat/confirm', (req, res) => {
+  const { proposalId, sceneVersion } = req.body || {};
+  if (!proposalId || typeof proposalId !== 'string') {
+    return res.status(400).json({ success: false, error: 'proposalId is required.' });
+  }
+  const result = confirmProposal(proposalId, sceneVersion || '');
+  if (!result.success) {
+    return res.status(409).json({ success: false, error: result.reason });
+  }
+  return res.json({ success: true, proposalId });
+});
+
 // API: Check Gemini AI Status
 app.get('/api/gemini/status', (req, res) => {
   const customKey = req.headers['x-gemini-api-key'] as string | undefined;
@@ -863,8 +945,8 @@ Trả về dưới định dạng JSON với cấu trúc:
   }
 });
 
-// API: Conversational Chat with Feng Shui Master
-app.post('/api/gemini/chat', async (req, res) => {
+// API: Conversational Chat with Feng Shui Master (Supports /api/gemini/chat and /api/chat)
+app.post(['/api/gemini/chat', '/api/chat'], async (req, res) => {
   try {
     const { intent, messages, userProfile, roomConfig, objects, ruleEngineResult, selectedObjectId, apiKey, actionHistory } = req.body || {};
     if (!Array.isArray(messages) || messages.length === 0 || typeof messages[messages.length - 1]?.content !== 'string') {
@@ -947,9 +1029,100 @@ HÃY GỌI TOOL THÍCH HỢP ĐỂ THỰC THI THAO TÁC.`;
           let workingObjects = [...safeObjects];
           const rConfig = { width: Number(safeRoom.width) || 5.0, length: Number(safeRoom.length) || 5.2 };
 
+        // =========================================================
+        // SERVER-SIDE INTENT GUARD — Gemini Function-Calling Path
+        // Re-evaluate raw user message BEFORE executing any call.
+        // Never trust client-sent intent labels or Gemini reasoning.
+        // =========================================================
+        if (req.body?.proposalId) {
           for (const call of rawFunctionCalls) {
+            if (call.args && !call.args.proposalId) {
+              call.args.proposalId = req.body.proposalId;
+            }
+          }
+        }
+
+        const targetObjectFound = safeObjects.some((o: any) =>
+          latestUserMessage.toLowerCase().includes(o.type.toLowerCase()) ||
+          latestUserMessage.toLowerCase().includes(o.name.toLowerCase())
+        );
+        const serverGuardResult = evaluateGeminiFunctionCalls(
+          latestUserMessage,
+          rawFunctionCalls,
+          pendingConfirmations,
+          targetObjectFound || Boolean(selectedObjectId)
+        );
+
+        // If ALL proposed function calls are blocked, return advisory/clarification reply
+        if (!serverGuardResult.allowed) {
+          return res.json({
+            success: true,
+            reply: serverGuardResult.blockedReply || 'Hệ thống giữ nguyên bố cục 3D theo yêu cầu tư vấn.',
+            aiActions: null,
+            proposedAdjustment: null,
+            optimizationProposal: null,
+            isGeminiOnline: true,
+            guardBlocked: true,
+            guardMode: serverGuardResult.guard.executionMode,
+          });
+        }
+
+        // Build a lookup of per-call decisions for use inside the loop
+        const callDecisionMap = new Map<string, boolean>();
+        const callBlockReasonMap = new Map<string, string>();
+        serverGuardResult.decisions.forEach((d, idx) => {
+          // Key by fnName+index to handle multiple calls of same type
+          callDecisionMap.set(`${d.fnName}__${idx}`, d.allowed);
+          if (!d.allowed && d.reason) callBlockReasonMap.set(`${d.fnName}__${idx}`, d.reason);
+        });
+
+        for (const call of rawFunctionCalls) {
             const fnName = call.name;
             const args: any = call.args || {};
+            const callIdx = rawFunctionCalls.indexOf(call);
+
+            // ── Per-call guard check: skip blocked calls ──
+            const callKey = `${fnName}__${callIdx}`;
+            const callAllowed = callDecisionMap.get(callKey) !== false; // default allow if not in map
+            if (!callAllowed) {
+              const blockReason = callBlockReasonMap.get(callKey) || 'Thao tác bị từ chối bởi Intent Guard phía server.';
+              functionResponseParts.push({
+                functionResponse: {
+                  name: fnName,
+                  response: {
+                    status: 'BLOCKED_BY_GUARD',
+                    success: false,
+                    reason: blockReason,
+                  },
+                },
+              });
+              continue;
+            }
+
+            // ── Destructive actions: create proposal if no proposalId supplied ──
+            const DESTRUCTIVE_FNS = ['delete_furniture', 'optimize_room_layout'];
+            if (DESTRUCTIVE_FNS.includes(fnName) && !args.proposalId) {
+              const sceneVersion = computeSceneVersion(workingObjects);
+              const proposal = createDestructiveProposal(fnName, args, sceneVersion);
+              const actionLabel = fnName === 'delete_furniture'
+                ? `Xóa đồ vật (${args.objectType || args.objectId || 'không xác định'})`
+                : 'Tối ưu toàn bộ bố cục phòng ngủ';
+
+              functionResponseParts.push({
+                functionResponse: {
+                  name: fnName,
+                  response: {
+                    status: 'AWAITING_CONFIRMATION',
+                    success: false,
+                    proposalId: proposal.proposalId,
+                    action: actionLabel,
+                    expiresInSeconds: PROPOSAL_TTL_MS / 1000,
+                    message: `⚠️ **Xác nhận cần thiết**: Hành động "${actionLabel}" có thể thay đổi lớn bố cục phòng. Vui lòng xác nhận bằng cách trả lời "Xác nhận ${proposal.proposalId}" hoặc bấm nút xác nhận trong giao diện.`,
+                  },
+                },
+              });
+              continue;
+            }
 
             if (fnName === 'add_furniture') {
               const objType = String(args.objectType || 'bed').toLowerCase().trim();
@@ -1337,6 +1510,22 @@ HÃY GỌI TOOL THÍCH HỢP ĐỂ THỰC THI THAO TÁC.`;
               ...(optimizationProposal ? { optimizationProposal } : {}),
             };
           } else if (functionResponseParts.length > 0) {
+            const awaitItem = functionResponseParts.find(
+              (p: any) => p.functionResponse?.response?.status === 'AWAITING_CONFIRMATION'
+            );
+            if (awaitItem) {
+              const resp = awaitItem.functionResponse.response;
+              return res.json({
+                success: true,
+                reply: resp.message,
+                awaitingConfirmation: true,
+                proposalId: resp.proposalId,
+                action: resp.action,
+                aiActions: null,
+                isGeminiOnline: true,
+              });
+            }
+
             const firstFail = failures.join('\n') || functionResponseParts[0]?.functionResponse?.response?.reason || 'Không tìm được vị trí an toàn trong phòng.';
             cleanedReply = `Chưa thể thực hiện các thao tác:\n\n${firstFail}\n\nGia chủ có thể điều chỉnh lại vị trí hoặc kích thước đồ vật để phù hợp với không gian phòng.`;
             aiActions = null;
@@ -1427,4 +1616,9 @@ async function startServer() {
   });
 }
 
-startServer();
+export { app, startServer };
+
+const isTest = process.env.NODE_ENV === 'test' || process.argv.some((a) => a.toLowerCase().includes('test'));
+if (!isTest) {
+  startServer();
+}

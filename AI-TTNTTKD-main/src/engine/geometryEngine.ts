@@ -62,6 +62,33 @@ export function getOBBCorners(obb: OBB2D): Point2D[] {
 }
 
 /**
+ * Calculates the 4 corner points of an OBB on the XZ floor plane (V2).
+ * Strictly conforms to Three.js right-handed rotation around +Y axis (looking down at XZ floor):
+ *   x' =  x * cos(angleRad) + z * sin(angleRad)
+ *   z' = -x * sin(angleRad) + z * cos(angleRad)
+ * Validated to produce identical coordinates to THREE.BoxGeometry vertices transformed by Matrix4.makeRotationY.
+ */
+export function getOBBCornersV2(obb: OBB2D): Point2D[] {
+  const cos = Math.cos(obb.angleRad);
+  const sin = Math.sin(obb.angleRad);
+
+  const hw = obb.halfWidth;
+  const hl = obb.halfLength;
+
+  const localCorners: Point2D[] = [
+    { x: -hw, z: -hl },
+    { x:  hw, z: -hl },
+    { x:  hw, z:  hl },
+    { x: -hw, z:  hl },
+  ];
+
+  return localCorners.map((pt) => ({
+    x: obb.center.x + ( pt.x * cos + pt.z * sin),
+    z: obb.center.z + (-pt.x * sin + pt.z * cos),
+  }));
+}
+
+/**
  * Projects a polygon's vertices onto a 2D axis and returns the [min, max] scalar interval.
  */
 function projectVerticesOntoAxis(vertices: Point2D[], axis: Point2D): [number, number] {
@@ -105,6 +132,35 @@ export function checkOBBCollision(obb1: OBB2D, obb2: OBB2D): boolean {
     const [min2, max2] = projectVerticesOntoAxis(corners2, axis);
 
     // If there is any axis where projections do not overlap, they do not collide
+    if (!intervalsOverlap(min1, max1, min2, max2)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Checks 2D collision between two Oriented Bounding Boxes (OBBs) using Separating Axis Theorem (V2).
+ * Uses getOBBCornersV2 and the correct normal axes derived from Three.js Y-rotation:
+ *   axisX = { x:  cos(angleRad), z: -sin(angleRad) }
+ *   axisZ = { x:  sin(angleRad), z:  cos(angleRad) }
+ */
+export function checkOBBCollisionV2(obb1: OBB2D, obb2: OBB2D): boolean {
+  const corners1 = getOBBCornersV2(obb1);
+  const corners2 = getOBBCornersV2(obb2);
+
+  const axes: Point2D[] = [
+    { x:  Math.cos(obb1.angleRad), z: -Math.sin(obb1.angleRad) },
+    { x:  Math.sin(obb1.angleRad), z:  Math.cos(obb1.angleRad) },
+    { x:  Math.cos(obb2.angleRad), z: -Math.sin(obb2.angleRad) },
+    { x:  Math.sin(obb2.angleRad), z:  Math.cos(obb2.angleRad) },
+  ];
+
+  for (const axis of axes) {
+    const [min1, max1] = projectVerticesOntoAxis(corners1, axis);
+    const [min2, max2] = projectVerticesOntoAxis(corners2, axis);
+
     if (!intervalsOverlap(min1, max1, min2, max2)) {
       return false;
     }

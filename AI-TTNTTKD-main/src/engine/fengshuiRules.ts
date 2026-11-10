@@ -14,6 +14,7 @@ import {
   SECTOR_NAMES_VI,
 } from './batTrach';
 import { checkOBBCollision, createOBBFromObject, isDoorCorridorBlocked } from './geometryEngine';
+import { worldBearingOfAxis, directionFromBearing } from './core/compass.js';
 
 /**
  * Calculates facing direction vector from yaw angle in radians.
@@ -42,6 +43,21 @@ export function getBedHeadboardDirection(yawRad: number): CompassDirection {
   // Unrotated: headboard is at North (0 deg)
   const compassAngle = (deg + 360) % 360;
   return getCompassDirectionFromAngle(compassAngle);
+}
+
+/**
+ * Headboard direction for bed (V2 - Standardized Compass Engine):
+ * Bed extends along Z when rotation.y = 0. The headboard is at local -Z = { x: 0, z: -1 }.
+ * Using standard Three.js rotation around +Y axis (right-hand rule):
+ * - yaw = 0°   (0 rad)       -> headboard points North (Z-) -> bearing 0°   -> 'N'
+ * - yaw = 90°  (PI/2 rad)    -> headboard points West  (X-) -> bearing 270° -> 'W'
+ * - yaw = 180° (PI rad)      -> headboard points South (Z+) -> bearing 180° -> 'S'
+ * - yaw = 270° (3*PI/2 rad)  -> headboard points East  (X+) -> bearing 90°  -> 'E'
+ */
+export function getBedHeadboardDirectionV2(yawRad: number): CompassDirection {
+  const localHeadAxis = { x: 0, z: -1 };
+  const bearing = worldBearingOfAxis(localHeadAxis, yawRad);
+  return directionFromBearing(bearing);
 }
 
 /**
