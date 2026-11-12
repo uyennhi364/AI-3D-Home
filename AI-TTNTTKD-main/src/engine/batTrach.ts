@@ -19,6 +19,55 @@ export const DIRECTION_NAMES_VI: Record<CompassDirection, string> = {
   NW: 'Tây Bắc',
 };
 
+export const VI_TO_COMPASS_DIRECTION: Record<string, CompassDirection> = {
+  'bắc': 'N',
+  'bac': 'N',
+  'n': 'N',
+  'đông bắc': 'NE',
+  'dong bac': 'NE',
+  'ne': 'NE',
+  'đông': 'E',
+  'dong': 'E',
+  'e': 'E',
+  'đông nam': 'SE',
+  'dong nam': 'SE',
+  'se': 'SE',
+  'nam': 'S',
+  's': 'S',
+  'tây nam': 'SW',
+  'tay nam': 'SW',
+  'sw': 'SW',
+  'tây': 'W',
+  'tay': 'W',
+  'w': 'W',
+  'tây bắc': 'NW',
+  'tay bac': 'NW',
+  'nw': 'NW',
+};
+
+/**
+ * Normalizes any direction representation (Latin code, lowercase, Vietnamese string)
+ * into a canonical CompassDirection ('N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW').
+ * Returns null if input is invalid or missing.
+ */
+export function normalizeCompassDirection(val: unknown): CompassDirection | null {
+  if (typeof val !== 'string') return null;
+  const clean = val.trim();
+  const upper = clean.toUpperCase();
+  if (['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'].includes(upper)) {
+    return upper as CompassDirection;
+  }
+  const lower = clean.toLowerCase();
+  return VI_TO_COMPASS_DIRECTION[lower] || null;
+}
+
+/**
+ * Formats a canonical CompassDirection to its formal Vietnamese display label.
+ */
+export function formatCompassDirectionVi(dir: CompassDirection): string {
+  return DIRECTION_NAMES_VI[dir] || dir;
+}
+
 export const DIRECTION_ANGLES: Record<CompassDirection, number> = {
   N: 0,
   NE: 45,

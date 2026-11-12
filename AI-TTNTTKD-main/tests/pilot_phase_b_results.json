@@ -1,0 +1,424 @@
+{
+  "phase": "B",
+  "summary": {
+    "pass": 30,
+    "partial": 0,
+    "fail": 0,
+    "blocked": 0,
+    "total": 30
+  },
+  "results": [
+    {
+      "id": "B-01",
+      "prompt": "Bát Trạch là gì?",
+      "expectedIntent": "THEORY",
+      "actualResponse": "Đây là câu hỏi tư vấn phong thủy lý thuyết. Để đảm bảo an toàn, hệ thống giữ nguyên hiện trạng mô hình 3D:\n\n• Đầu giường ngủ cần kê tựa vào tường vững",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 83
+    },
+    {
+      "id": "B-02",
+      "prompt": "Phòng ngủ của tôi có hợp phong thủy không?",
+      "expectedIntent": "ANALYZE",
+      "actualResponse": "Đây là câu hỏi tư vấn phong thủy lý thuyết. Để đảm bảo an toàn, hệ thống giữ nguyên hiện trạng mô hình 3D:\n\n• Đầu giường ngủ cần kê tựa vào tường vững",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 10
+    },
+    {
+      "id": "B-03",
+      "prompt": "Tại sao không nên đặt giường đối diện cửa?",
+      "expectedIntent": "THEORY",
+      "actualResponse": "Đây là câu hỏi tư vấn phong thủy lý thuyết. Để đảm bảo an toàn, hệ thống giữ nguyên hiện trạng mô hình 3D:\n\n• Đầu giường ngủ cần kê tựa vào tường vững",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 4
+    },
+    {
+      "id": "B-04",
+      "prompt": "Hãy kiểm tra vị trí giường hiện tại.",
+      "expectedIntent": "ANALYZE",
+      "actualResponse": "Chào gia chủ mệnh Khảm (Thủy — Đông Tứ Mệnh).\n\nPhòng ngủ 5m × 5.2m, hướng N hiện có: Giường đôi bọc nệm 1m6, Bàn làm việc, Tủ quần áo kịch trần.\nĐiểm ",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": false,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 7
+    },
+    {
+      "id": "B-05",
+      "prompt": "Tôi muốn chuyển giường sang trái 50cm.",
+      "expectedIntent": "COMMAND",
+      "actualResponse": "Đã đề xuất phương án di chuyển **Giường đôi bọc nệm 1m6** đến tọa độ [X=-0.55m, Z=0.55m]. Vị trí mới giúp căn phòng thông thoáng, tăng cường khoảng tụ",
+      "toolsCalledInResponse": [
+        "move_object"
+      ],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": true,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Proposal/Action created",
+      "durationMs": 12
+    },
+    {
+      "id": "B-06",
+      "prompt": "Xoay bàn học 90 độ.",
+      "expectedIntent": "COMMAND",
+      "actualResponse": "Đã xoay **Bàn làm việc** 90°. Góc xoay hiện tại: 180°. Hướng đón khí trường mới giúp tối ưu trường khí trong phòng.",
+      "toolsCalledInResponse": [
+        "rotate_object"
+      ],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": false,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Proposal/Action created",
+      "durationMs": 7
+    },
+    {
+      "id": "B-07",
+      "prompt": "Đưa nó sang bên trái.",
+      "expectedIntent": "CLARIFY",
+      "actualResponse": "Vui lòng cho biết bạn muốn di chuyển hoặc sắp xếp đối tượng nào cụ thể (ví dụ: \"Di chuyển giường sang trái 50cm\", \"Dời tủ sát tường\"), hoặc nhấp chọn ",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Clarification handled",
+      "durationMs": 6
+    },
+    {
+      "id": "B-08",
+      "prompt": "Xóa cái đó đi.",
+      "expectedIntent": "CLARIFY",
+      "actualResponse": "Vui lòng cho biết bạn muốn xóa đối tượng nào cụ thể (ví dụ: \"Xóa bàn học\", \"Xóa tủ quần áo\", \"Xóa tủ đầu giường\") hoặc nhấp chọn đồ vật trên không gia",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Clarification handled",
+      "durationMs": 6
+    },
+    {
+      "id": "B-09",
+      "prompt": "Hãy đề xuất ba cách bố trí phòng ngủ.",
+      "expectedIntent": "MULTI-PROPOSAL",
+      "actualResponse": "Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ 3 đồ vật trong phòng 5m × 5.2m của gia chủ mệnh Khảm (Thủy - Đông Tứ Mệnh).\n\nĐề xuất ph",
+      "toolsCalledInResponse": [
+        "optimize_room"
+      ],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": true,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Proposal/Action created",
+      "durationMs": 17
+    },
+    {
+      "id": "B-10",
+      "prompt": "Tôi không thích phương án này, hãy đề xuất phương án khác.",
+      "expectedIntent": "MULTI-PROPOSAL",
+      "actualResponse": "Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ 3 đồ vật trong phòng 5m × 5.2m của gia chủ mệnh Khảm (Thủy - Đông Tứ Mệnh).\n\nĐề xuất ph",
+      "toolsCalledInResponse": [
+        "optimize_room"
+      ],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": true,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Proposal/Action created",
+      "durationMs": 6
+    },
+    {
+      "id": "B-11",
+      "prompt": "Giữ nguyên giường, chỉ thay đổi vị trí bàn.",
+      "expectedIntent": "COMMAND",
+      "actualResponse": "Đề xuất phương án thay đổi vị trí **Bàn làm việc** đến tọa độ [X=1.6m, Z=-1.9m] và giữ nguyên các đồ vật khác theo đúng ràng buộc của bạn. Bạn có muốn",
+      "toolsCalledInResponse": [
+        "move_object"
+      ],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": false,
+      "proposalDetected": true,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Proposal/Action created",
+      "durationMs": 4
+    },
+    {
+      "id": "B-12",
+      "prompt": "Tại sao bạn đề xuất vị trí này?",
+      "expectedIntent": "THEORY",
+      "actualResponse": "Đây là câu hỏi tư vấn phong thủy lý thuyết. Để đảm bảo an toàn, hệ thống giữ nguyên hiện trạng mô hình 3D:\n\n• Đầu giường ngủ cần kê tựa vào tường vững",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 4
+    },
+    {
+      "id": "B-13",
+      "prompt": "Thủ đô của Việt Nam là gì?",
+      "expectedIntent": "OUT-OF-SCOPE",
+      "actualResponse": "Đây là câu hỏi tư vấn phong thủy lý thuyết. Để đảm bảo an toàn, hệ thống giữ nguyên hiện trạng mô hình 3D:\n\n• Đầu giường ngủ cần kê tựa vào tường vững",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 2
+    },
+    {
+      "id": "B-14",
+      "prompt": "Python là gì và dùng để làm gì?",
+      "expectedIntent": "OUT-OF-SCOPE",
+      "actualResponse": "Đây là câu hỏi tư vấn phong thủy lý thuyết. Để đảm bảo an toàn, hệ thống giữ nguyên hiện trạng mô hình 3D:\n\n• Đầu giường ngủ cần kê tựa vào tường vững",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 2
+    },
+    {
+      "id": "B-15",
+      "prompt": "Thêm giường vào phòng và phân tích phong thủy luôn.",
+      "expectedIntent": "COMMAND",
+      "actualResponse": "Đã thực thi thành công toàn bộ 1 yêu cầu của gia chủ:\n\n• Giường ngủ: ✓ SUCCESS\n\nMô hình 3D đã được cập nhật an toàn, đảm bảo khoảng thông thủy di chuy",
+      "toolsCalledInResponse": [
+        "add_object"
+      ],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": false,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Proposal/Action created",
+      "durationMs": 12
+    },
+    {
+      "id": "B-16",
+      "prompt": "Đặt giường ở góc tốt nhất cho tuổi Tý.",
+      "expectedIntent": "COMMAND",
+      "actualResponse": "Đề xuất phương án bố trí **Giường đôi bọc nệm 1m6** tại tọa độ cát vị [X=-1.4m, Z=-1.3m] đón sinh khí tốt nhất theo tuổi và bản mệnh gia chủ. Bạn có m",
+      "toolsCalledInResponse": [
+        "move_object"
+      ],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": false,
+      "proposalDetected": true,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Proposal/Action created",
+      "durationMs": 3
+    },
+    {
+      "id": "B-17",
+      "prompt": "Xóa tất cả đồ nội thất trong phòng.",
+      "expectedIntent": "COMMAND",
+      "actualResponse": "Đề xuất phương án xóa tất cả 3 đồ nội thất trong phòng ngủ. Thao tác này sẽ làm trống toàn bộ không gian 3D. Bạn có muốn áp dụng thay đổi này không?",
+      "toolsCalledInResponse": [
+        "delete_object"
+      ],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": false,
+      "proposalDetected": true,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Proposal/Action created",
+      "durationMs": 2
+    },
+    {
+      "id": "B-18",
+      "prompt": "Tôi muốn đặt giường ở giữa phòng và cũng sát tường.",
+      "expectedIntent": "COMMAND",
+      "actualResponse": "Không thể thực hiện yêu cầu mâu thuẫn hình học: Một đồ vật không thể vừa đặt ở giữa phòng vừa kê sát tường. Bạn muốn ưu tiên đặt ở vị trí nào cụ thể h",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Clarification handled",
+      "durationMs": 2
+    },
+    {
+      "id": "B-19",
+      "prompt": "Mệnh Hỏa hợp với màu gì?",
+      "expectedIntent": "THEORY",
+      "actualResponse": "Đây là câu hỏi tư vấn phong thủy lý thuyết. Để đảm bảo an toàn, hệ thống giữ nguyên hiện trạng mô hình 3D:\n\n• Đầu giường ngủ cần kê tựa vào tường vững",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 3
+    },
+    {
+      "id": "B-20",
+      "prompt": "Căn phòng này có ánh sáng tốt không?",
+      "expectedIntent": "ANALYZE",
+      "actualResponse": "Đây là câu hỏi tư vấn phong thủy lý thuyết. Để đảm bảo an toàn, hệ thống giữ nguyên hiện trạng mô hình 3D:\n\n• Đầu giường ngủ cần kê tựa vào tường vững",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 4
+    },
+    {
+      "id": "B-21",
+      "prompt": "Hãy tối ưu bố cục phòng ngủ cho tôi.",
+      "expectedIntent": "MULTI-PROPOSAL",
+      "actualResponse": "Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ 3 đồ vật trong phòng 5m × 5.2m của gia chủ mệnh Khảm (Thủy - Đông Tứ Mệnh).\n\nĐề xuất ph",
+      "toolsCalledInResponse": [
+        "optimize_room"
+      ],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": true,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Proposal/Action created",
+      "durationMs": 3
+    },
+    {
+      "id": "B-22",
+      "prompt": "Giường của tôi có bị soi gương không?",
+      "expectedIntent": "ANALYZE",
+      "actualResponse": "Theo nguyên lý phong thủy Bát Trạch & Loan Đầu, **gương soi đối diện giường ngủ là một đại kỵ** vì phạm thế **Quang Sát**.\n\n• **Tác hại:** Gương phản ",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": false,
+      "proposalDetected": true,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 2
+    },
+    {
+      "id": "B-23",
+      "prompt": "Hãy vẽ sơ đồ phòng ngủ của tôi.",
+      "expectedIntent": "OUT-OF-SCOPE",
+      "actualResponse": "Chào gia chủ mệnh Khảm (Thủy — Đông Tứ Mệnh).\n\nPhòng ngủ 5m × 5.2m, hướng N hiện có: Giường đôi bọc nệm 1m6, Bàn làm việc, Tủ quần áo kịch trần.\nĐiểm ",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": false,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 2
+    },
+    {
+      "id": "B-24",
+      "prompt": "Thêm cây xanh góc Đông Nam phòng.",
+      "expectedIntent": "COMMAND",
+      "actualResponse": "Đã thực thi thành công toàn bộ 1 yêu cầu của gia chủ:\n\n• Cây xanh phong thủy: ✓ SUCCESS\n\nMô hình 3D đã được cập nhật an toàn, đảm bảo khoảng thông thủ",
+      "toolsCalledInResponse": [
+        "add_object"
+      ],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": false,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Proposal/Action created",
+      "durationMs": 3
+    },
+    {
+      "id": "B-25",
+      "prompt": "Căn phòng có thể đặt được bao nhiêu người ngủ?",
+      "expectedIntent": "ANALYZE",
+      "actualResponse": "Vui lòng cho biết bạn muốn di chuyển hoặc sắp xếp đối tượng nào cụ thể (ví dụ: \"Di chuyển giường sang trái 50cm\", \"Dời tủ sát tường\"), hoặc nhấp chọn ",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 4
+    },
+    {
+      "id": "B-26",
+      "prompt": "Cho tôi biết điểm phong thủy tổng thể là bao nhiêu.",
+      "expectedIntent": "ANALYZE",
+      "actualResponse": "**Điểm phong thủy hiện tại: 0/100** — Chưa có đánh giá.\n\nKhông có xung sát nghiêm trọng.\n\nBạn có muốn tôi **tối ưu tự động** để nâng điểm không?",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": false,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 3
+    },
+    {
+      "id": "B-27",
+      "prompt": "Dịch sang tiếng Anh: \"Phòng ngủ hợp phong thủy\"",
+      "expectedIntent": "OUT-OF-SCOPE",
+      "actualResponse": "Vui lòng cho biết bạn muốn di chuyển hoặc sắp xếp đối tượng nào cụ thể (ví dụ: \"Di chuyển giường sang trái 50cm\", \"Dời tủ sát tường\"), hoặc nhấp chọn ",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 3
+    },
+    {
+      "id": "B-28",
+      "prompt": "Di chuyển bàn làm việc 20cm về phía cửa sổ.",
+      "expectedIntent": "COMMAND",
+      "actualResponse": "Đã đề xuất phương án di chuyển **Bàn làm việc** đến tọa độ [X=1.65m, Z=-1.9m]. Vị trí mới giúp căn phòng thông thoáng, tăng cường khoảng tụ khí. Bạn c",
+      "toolsCalledInResponse": [
+        "move_object"
+      ],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": true,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Proposal/Action created",
+      "durationMs": 3
+    },
+    {
+      "id": "B-29",
+      "prompt": "Xin chào",
+      "expectedIntent": "OUT-OF-SCOPE",
+      "actualResponse": "Chào gia chủ mệnh Khảm (Thủy — Đông Tứ Mệnh).\n\nPhòng ngủ 5m × 5.2m, hướng N hiện có: Giường đôi bọc nệm 1m6, Bàn làm việc, Tủ quần áo kịch trần.\nĐiểm ",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": false,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded",
+      "durationMs": 5
+    },
+    {
+      "id": "B-30",
+      "prompt": "aaabbbccc 123 !@# không hiểu gì cả",
+      "expectedIntent": "CLARIFY",
+      "actualResponse": "Hệ thống chưa hiểu rõ yêu cầu của bạn. Bạn có thể mô tả cụ thể hơn bạn muốn tôi tư vấn phong thủy hay điều chỉnh đồ vật nào trong phòng ngủ không?",
+      "toolsCalledInResponse": [],
+      "sceneChangeAttempted": false,
+      "clarificationDetected": true,
+      "proposalDetected": false,
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Clarification handled",
+      "durationMs": 2
+    }
+  ]
+}

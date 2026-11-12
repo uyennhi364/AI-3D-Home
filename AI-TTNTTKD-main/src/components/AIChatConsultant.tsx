@@ -234,9 +234,18 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState<boolean>(false);
   const [currentLoadingMessage, setCurrentLoadingMessage] = useState<string>('AI đang suy nghĩ...');
   const [loadingDetails, setLoadingDetails] = useState<string[]>([]);
-  const [apiKeyInput, setApiKeyInput] = useState<string>(() =>
-    typeof window !== 'undefined' ? localStorage.getItem('gemini_api_key') || '' : ''
-  );
+  const [apiKeyInput, setApiKeyInput] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    const sessionKey = sessionStorage.getItem('gemini_api_key');
+    if (sessionKey) return sessionKey;
+    const legacyKey = localStorage.getItem('gemini_api_key');
+    if (legacyKey) {
+      sessionStorage.setItem('gemini_api_key', legacyKey);
+      localStorage.removeItem('gemini_api_key');
+      return legacyKey;
+    }
+    return '';
+  });
   const [activeStrategies, setActiveStrategies] = useState<Record<string, LayoutStrategyType>>({});
   const [expandedIssueMap, setExpandedIssueMap] = useState<Record<string, boolean>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -245,7 +254,9 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const savedKey = localStorage.getItem('gemini_api_key') || '';
+        const savedKey = (typeof window !== 'undefined'
+          ? sessionStorage.getItem('gemini_api_key') || localStorage.getItem('gemini_api_key')
+          : '') || '';
         const headers: Record<string, string> = {};
         if (savedKey) headers['x-gemini-api-key'] = savedKey;
         const res = await fetch('/api/gemini/status', { headers });
@@ -1298,6 +1309,7 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => {
+                  sessionStorage.removeItem('gemini_api_key');
                   localStorage.removeItem('gemini_api_key');
                   setApiKeyInput('');
                   setIsGeminiOnline(false);
@@ -1311,8 +1323,10 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
                 onClick={async () => {
                   const trimmed = apiKeyInput.trim();
                   if (trimmed) {
-                    localStorage.setItem('gemini_api_key', trimmed);
+                    sessionStorage.setItem('gemini_api_key', trimmed);
+                    localStorage.removeItem('gemini_api_key');
                   } else {
+                    sessionStorage.removeItem('gemini_api_key');
                     localStorage.removeItem('gemini_api_key');
                   }
                   try {

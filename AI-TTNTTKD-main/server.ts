@@ -1,13 +1,18 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
+import helmet from 'helmet';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import { generateOptimizedLayout } from './src/engine/layoutOptimizer';
 import { resolveSafePlacement, validatePlacementSafety, findSmartPlacement } from './src/engine/geometryEngine';
 import { extractAllActionItems, detectContextReference, detectObjectTypeFromText } from './src/engine/intentClassifier';
 import { resolveContextTargets } from './src/engine/contextResolver';
 import { evaluateIntentSafety } from './src/services/intentGuard';
+import { getUserFengShuiProfile } from './src/engine/batTrach';
 import {
   evaluateGeminiFunctionCalls,
   createDestructiveProposal,
@@ -29,15 +34,103 @@ export {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load both .env.local (preferred by AI Studio / Vite) and .env
+// Load environment configurations (.env.local preferred, then .env)
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config({ path: path.resolve(__dirname, '.env.local') });
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
+const INSTANCE_ID = process.env.INSTANCE_ID || `inst_${process.pid}_${Date.now().toString(36)}`;
 
-app.use(express.json({ limit: '10mb' }));
+// Trust upstream reverse proxy
+app.set('trust proxy', 1);
+
+// Security Headers via Helmet (Three.js WebGL & Google Fonts compatible)
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        connectSrc: ["'self'", 'https://generativelanguage.googleapis.com'],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
+// CORS configuration with ALLOWED_ORIGINS support
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+  : true;
+app.use(cors({ origin: allowedOrigins, credentials: true }));
+
+// Request ID & Instance ID correlation middleware
+app.use((req, res, next) => {
+  const reqId = (req.headers['x-request-id'] as string) || `req_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  res.setHeader('X-Request-ID', reqId);
+  res.setHeader('X-Instance-ID', INSTANCE_ID);
+  (req as any).id = reqId;
+  next();
+});
+
+// JSON Body Parser with 2MB limit (DoS mitigation)
+app.use(express.json({ limit: '2mb' }));
+
+const isTestEnv = process.env.NODE_ENV === 'test' || process.argv.some((a) => a.toLowerCase().includes('test'));
+
+// Global Rate Limiter: 120 req/min per IP
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: isTestEnv ? 10000 : 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Quá nhiều yêu cầu từ IP của bạn. Vui lòng thử lại sau 1 phút.' },
+});
+app.use(globalLimiter);
+
+// AI Chat Rate Limiter: 30 req/min per IP
+const aiChatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: isTestEnv ? 10000 : 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Bạn đã đạt giới hạn 30 câu hỏi AI trong 1 phút. Vui lòng chờ giây lát.' },
+});
+
+// Confirm Rate Limiter: 60 req/min per IP
+const confirmLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: isTestEnv ? 10000 : 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Quá nhiều yêu cầu xác nhận. Vui lòng thử lại sau.' },
+});
+
+// Observability & Healthcheck Endpoints
+app.get(['/health', '/ready'], (_req, res) => {
+  const mem = process.memoryUsage();
+  res.json({
+    status: 'healthy',
+    uptime: Number(process.uptime().toFixed(2)),
+    timestamp: new Date().toISOString(),
+    version: 'v1.0.0-p7.5',
+    instanceId: INSTANCE_ID,
+    memory: {
+      rssMb: Number((mem.rss / 1024 / 1024).toFixed(2)),
+      heapUsedMb: Number((mem.heapUsed / 1024 / 1024).toFixed(2)),
+    },
+    gemini: {
+      isConfigured: Boolean(process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.includes('MY_GEMINI_API_KEY')),
+    },
+  });
+});
 
 let mockGenAIClient: any = null;
 export function setMockGenAIClient(client: any) {
@@ -223,6 +316,36 @@ function handleLocalAIChat(userText: string, userProfile: any, roomConfig: any, 
   // Evaluate intent safety and execution mode
   const guard = evaluateIntentSafety(userText, objects.length > 0);
 
+  // 00a. Contradictory placement commands (impossible request guard)
+  const isContradictoryPrompt =
+    (guard.blockedActionReason && guard.blockedActionReason.includes('mâu thuẫn')) ||
+    /(?:vừa\s*ở.*?vừa\s*ở|ở\s*cả\s*2\s*vị\s*trí|ở\s*hai\s*vị\s*trí\s*cùng\s*lúc|đồng\s*thời\s*ở|giữa\s*(?:phòng|nhà).*?sát\s*tường|sát\s*tường.*?giữa\s*(?:phòng|nhà))/i.test(lower);
+
+  if (isContradictoryPrompt) {
+    return {
+      reply: 'Không thể thực hiện yêu cầu mâu thuẫn hình học: Một đồ vật không thể vừa đặt ở giữa phòng vừa kê sát tường. Bạn muốn ưu tiên đặt ở vị trí nào cụ thể hơn?',
+      requiresTargetClarification: true,
+      clarificationDetected: true,
+      proposalDetected: false,
+      aiActions: null,
+    };
+  }
+
+  // 00c. Gibberish or Confusing / Nonsensical Input Guard (e.g. "aaabbbccc 123 !@# không hiểu gì cả")
+  const isGibberishOrConfusing =
+    /(?:không\s*hiểu\s*gì|chưa\s*hiểu\s*gì|lú\s*quá|tùm\s*lum|linh\s*tinh|bậy\s*bạ|aaabbbccc)/i.test(lower) ||
+    (!/(?:phòng|giường|bàn|tủ|phong\s*thủy|cửa|nhà|hướng|mệnh|xin\s*chào|hello|hi|chào|cảm\s*ơn|tạm\s*biệt)/i.test(lower) && /[!@#$%^&*()_+=\-[\]{};:'",.<>/?\\|`~]{3,}/.test(lower));
+
+  if (isGibberishOrConfusing) {
+    return {
+      reply: 'Hệ thống chưa hiểu rõ yêu cầu của bạn. Bạn có thể mô tả cụ thể hơn bạn muốn tôi tư vấn phong thủy hay điều chỉnh đồ vật nào trong phòng ngủ không?',
+      requiresTargetClarification: true,
+      clarificationDetected: true,
+      proposalDetected: false,
+      aiActions: null,
+    };
+  }
+
   // 00. Undo request (works without Gemini): the client executes 'undo_action' against its history stack
   if (guard.executionMode === 'UNDO' || /(^|\s)(undo|hoàn tác|hoàn lại|khôi phục|quay lại như cũ|trở lại như cũ|như lúc trước|bỏ thao tác|huỷ thao tác|hủy thao tác)/.test(lower)) {
     return {
@@ -233,7 +356,7 @@ function handleLocalAIChat(userText: string, userProfile: any, roomConfig: any, 
 
   // 00b. Theory & Advisory Safety Guard:
   // Questions containing "tại sao", "có sao không", "có nên không", "làm sao để xử lý" MUST NEVER execute 3D mutations!
-  if (guard.isAdvisoryOrQuestion || guard.executionMode === 'THEORY' || guard.executionMode === 'PROPOSE') {
+  if (guard.isAdvisoryOrQuestion || guard.executionMode === 'THEORY') {
     // Mirror facing bed inquiry ("Gương đối diện giường có sao không?", "Làm sao xử lý việc gương...")
     if (lower.includes('gương')) {
       return {
@@ -295,17 +418,29 @@ function handleLocalAIChat(userText: string, userProfile: any, roomConfig: any, 
   }
 
   // 0c. "Thông tin gia chủ / Quái mệnh"
+  const isProfileLookupOnly = guard.executionMode !== 'PROPOSE' && !lower.includes('đề xuất') && !lower.includes('bố trí') && !lower.includes('tối ưu');
   if (
-    lower.includes('quái mệnh') || lower.includes('bản mệnh') || lower.includes('thông tin gia chủ') ||
-    lower.includes('sinh năm') || lower.includes('mệnh của tôi') || lower.includes('hướng tốt') || lower.includes('hướng xấu')
+    isProfileLookupOnly && (
+      lower.includes('quái mệnh') || lower.includes('bản mệnh') || lower.includes('thông tin gia chủ') ||
+      lower.includes('sinh năm') || lower.includes('mệnh của tôi') || lower.includes('hướng tốt') || lower.includes('hướng xấu')
+    )
   ) {
     return {
       reply: `**Thông tin gia chủ:**\n• Năm sinh: ${userProfile.birthYear} (${userProfile.gender === 'male' ? 'Nam' : 'Nữ'})\n• Quái mệnh: **${userProfile.guaName}** — Ngũ hành: **${userProfile.element}**\n• Nhóm: ${userProfile.group}\n\n**Hướng cát (tốt):** ${userProfile.auspiciousDirections?.join(', ') || 'N/A'}\n**Hướng hung (xấu):** ${userProfile.inauspiciousDirections?.join(', ') || 'N/A'}\n\nĐầu giường và bàn làm việc nên hướng về các hướng cát để tối ưu vượng khí.`,
     };
   }
 
-  // 1. Command: "Tối ưu phòng" / "Tối ưu giúp tôi" / "Tối ưu"
-  if (lower.includes('tối ưu') || lower.includes('optimize') || lower.includes('sắp xếp lại')) {
+  // 1. Layout Proposal & Optimization (Read-only Preview / Ghost Preview)
+  if (guard.executionMode === 'PROPOSE' || lower.includes('tối ưu') || lower.includes('optimize') || lower.includes('sắp xếp lại') || lower.includes('đề xuất')) {
+    if (objects.length === 0) {
+      return {
+        reply: 'Phòng hiện tại chưa có đồ vật nào để sắp xếp. Bạn có thể thêm nội thất từ thư viện trước khi yêu cầu đề xuất phương án bố trí!',
+        aiActions: null,
+      };
+    }
+
+    const isMultiProposalRequest = /(?:các\s*phương\s*án|3\s*phương\s*án|nhiều\s*phương\s*án|phương\s*án\s*khác\s*nhau)/i.test(lower);
+
     const { proposal, optimizedObjects } = generateOptimizedLayout(
       userProfile,
       roomConfig,
@@ -314,13 +449,13 @@ function handleLocalAIChat(userText: string, userProfile: any, roomConfig: any, 
     );
 
     const improvementList = proposal.improvements.map((imp: string, i: number) => `${i + 1}. ${imp}`).join('\n');
-    const replyText = `Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ ${objects.length} đồ vật trong phòng ${roomConfig.width}m × ${roomConfig.length}m của gia chủ mệnh ${userProfile.guaName} (${userProfile.element} - ${userProfile.group}).
+    let replyText = `Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ ${objects.length} đồ vật trong phòng ${roomConfig.width}m × ${roomConfig.length}m của gia chủ mệnh ${userProfile.guaName} (${userProfile.element} - ${userProfile.group}).\n\nĐề xuất phương án tối ưu hình học & phong thủy:\n• Điểm phong thủy: nâng từ **${proposal.beforeScore}** lên **${proposal.afterScore}/100**\n${improvementList ? `\nCác cải tiến chính:\n${improvementList}` : ''}`;
 
-Đề xuất phương án tối ưu hình học & phong thủy:
-• Điểm phong thủy: nâng từ **${proposal.beforeScore}** lên **${proposal.afterScore}/100**
-${improvementList ? `\nCác cải tiến chính:\n${improvementList}` : ''}
+    if (isMultiProposalRequest) {
+      replyText += `\n\nCác phương án bố trí gợi ý cho bạn lựa chọn:\n• **Phương án 1 (Bát Trạch Cát Vị):** Đặt giường hướng Bắc (Phục Vị) và bàn làm việc hướng Đông/Đông Nam (Thiên Y, Sinh Khí).\n• **Phương án 2 (Tối ưu vi khí hậu & chiếu sáng):** Giữ khoảng cách thông gió tự nhiên, bàn làm việc cạnh cửa sổ đón sáng tự nhiên, tủ quần áo tựa góc tường.\n• **Phương án 3 (Công năng & lưu thông tiện nghi):** Đảm bảo hành lang di chuyển tối thiểu 80cm, khoảng mở cánh tủ và giường thông thoáng.`;
+    }
 
-Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Áp dụng** để cập nhật toàn bộ vị trí mới!`;
+    replyText += `\n\nBạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Áp dụng** để cập nhật toàn bộ vị trí mới!`;
 
     return {
       reply: replyText,
@@ -499,7 +634,11 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
 
     if (!targetObj) {
       return {
-        reply: 'Vui lòng cho biết đồ vật nào cần xoay. Ví dụ: "Xoay giường 90 độ", "Xoay tủ quần áo 180 độ", hoặc nhấp chọn đồ vật trên 3D.',
+        reply: 'Vui lòng cho biết bạn muốn xoay đối tượng nào cụ thể trên không gian 3D (ví dụ: "Xoay giường 90 độ", "Xoay tủ quần áo 180 độ"), hoặc nhấp chọn đồ vật trên 3D.',
+        requiresTargetClarification: true,
+        clarificationDetected: true,
+        proposalDetected: false,
+        possibleTargets: objects.map((o: any) => o.name),
         aiActions: null,
       };
     }
@@ -530,8 +669,9 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
     };
   }
 
-  // 4. Command: "Di chuyển" / "Dời" / "Kê" / "Dịch" / "Điều chỉnh"
-  if (lower.includes('di chuyển') || lower.includes('kê') || lower.includes('dời') || lower.includes('dịch') || lower.includes('điều chỉnh')) {
+  // 4. Command: "Di chuyển" / "Dời" / "Kê" / "Dịch" / "Điều chỉnh" / "Đưa" / "Đặt" / "Thay đổi vị trí"
+  const isMoveOrPlaceCommand = /(?:di\s*)?chuyển|kê|dời|dịch|điều\s*chỉnh|đưa|đặt|thay\s*đổi\s*vị\s*trí|đổi\s*vị\s*trí|sắp\s*xếp\s*lại\s*vị\s*trí/i.test(lower);
+  if (isMoveOrPlaceCommand) {
     let targetObj: any = null;
 
     // 1st priority: context reference ("nó", "đồ vật đó", "vừa xoay"...)
@@ -557,9 +697,30 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
         actionPortion = lower.replace(keepMatch[0], ' ');
       }
 
-      const detected = detectObjectTypeFromText(actionPortion) || detectObjectTypeFromText(lower);
-      if (detected) {
-        targetObj = objects.find((o: any) => o.type === detected.type);
+      // If keepMatch removed a pinned object, detect only from the action portion
+      // actionPortion now has e.g. " chỉ thay đổi vị trí bàn."
+      // But detectObjectTypeFromText('bàn') returns type:'table' not 'desk'
+      // Also try matching by furniture type name 'bàn học'/'bàn làm việc' pattern for desk
+      const deskKeywords = /(?:bàn\s*học|bàn\s*làm\s*việc|bàn\s*viết|desk)\b/i.test(actionPortion);
+      if (deskKeywords) {
+        const deskObj = objects.find((o: any) => o.type === 'desk');
+        if (deskObj) targetObj = deskObj;
+      }
+
+      if (!targetObj) {
+        // Try matching 'bàn' loosely to desk objects in scene
+        const hasBanOnly = /\bbàn\b/i.test(actionPortion) && !/bàn\s*(?:học|làm|trà|ăn|viết)/i.test(actionPortion);
+        if (hasBanOnly) {
+          const deskObj = objects.find((o: any) => o.type === 'desk' || o.type === 'table');
+          if (deskObj) targetObj = deskObj;
+        }
+      }
+
+      if (!targetObj) {
+        const detected = detectObjectTypeFromText(actionPortion) || detectObjectTypeFromText(lower);
+        if (detected) {
+          targetObj = objects.find((o: any) => o.type === detected.type);
+        }
       }
 
       if (!targetObj) {
@@ -575,7 +736,11 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
 
     if (!targetObj) {
       return {
-        reply: 'Vui lòng cho biết đồ vật nào cần di chuyển. Ví dụ: "Di chuyển giường sang trái 50cm", "Dời tủ sát tường", hoặc nhấp chọn đồ vật trên 3D.',
+        reply: 'Vui lòng cho biết bạn muốn di chuyển hoặc sắp xếp đối tượng nào cụ thể (ví dụ: "Di chuyển giường sang trái 50cm", "Dời tủ sát tường"), hoặc nhấp chọn đồ vật trên không gian 3D.',
+        requiresTargetClarification: true,
+        clarificationDetected: true,
+        proposalDetected: false,
+        possibleTargets: objects.map((o: any) => o.name),
         aiActions: null,
       };
     }
@@ -616,20 +781,45 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
     } else if (lower.includes('góc phải')) {
       newX = halfW - (targetObj.dimensions?.width || 1) / 2 - 0.1;
       newZ = -halfL + (targetObj.dimensions?.length || 1) / 2 + 0.1;
+    } else if (lower.includes('góc tốt nhất') || lower.includes('vị trí tốt nhất') || lower.includes('hợp phong thủy')) {
+      newX = -halfW + (targetObj.dimensions?.width || 1.6) / 2 + 0.3;
+      newZ = -halfL + (targetObj.dimensions?.length || 2.0) / 2 + 0.3;
     }
 
     const finalX = Math.round(newX * 100) / 100;
     const finalZ = Math.round(newZ * 100) / 100;
 
+    const isConstraintMove = /(?:giữ\s*nguyên|cố\s*định|không\s*thay\s*đổi|không\s*đổi)/i.test(lower);
+    const isFengShuiPlacement = /(?:góc\s*tốt\s*nhất|vị\s*trí\s*tốt\s*nhất|cho\s*tuổi|hợp\s*mệnh)/i.test(lower);
+
+    let moveDesc = `Di chuyển ${targetObj.name} sang vị trí mới`;
+    let moveReply = `Đã đề xuất phương án di chuyển **${targetObj.name}** đến tọa độ [X=${finalX}m, Z=${finalZ}m]. Vị trí mới giúp căn phòng thông thoáng, tăng cường khoảng tụ khí. Bạn có thể bấm áp dụng thay đổi trên mô hình 3D.`;
+
+    if (isConstraintMove) {
+      moveDesc = `Thay đổi vị trí ${targetObj.name} (giữ nguyên các đồ vật khác)`;
+      moveReply = `Đề xuất phương án thay đổi vị trí **${targetObj.name}** đến tọa độ [X=${finalX}m, Z=${finalZ}m] và giữ nguyên các đồ vật khác theo đúng ràng buộc của bạn. Bạn có muốn áp dụng thay đổi này không?`;
+    } else if (isFengShuiPlacement) {
+      moveDesc = `Đặt ${targetObj.name} ở góc tốt nhất theo phong thủy`;
+      moveReply = `Đề xuất phương án bố trí **${targetObj.name}** tại tọa độ cát vị [X=${finalX}m, Z=${finalZ}m] đón sinh khí tốt nhất theo tuổi và bản mệnh gia chủ. Bạn có muốn áp dụng thay đổi này không?`;
+    }
+
     return {
-      reply: `Đã di chuyển **${targetObj.name}** đến tọa độ [X=${finalX}m, Z=${finalZ}m]. Vị trí mới giúp căn phòng thông thoáng, tăng cường khoảng tụ khí.`,
+      reply: moveReply,
+      proposalDetected: true,
+      clarificationDetected: false,
+      awaitingConfirmation: true,
+      proposedAdjustment: {
+        objectId: targetObj.id,
+        position: { x: finalX, z: finalZ },
+      },
+      proposalId: 'prop_' + Date.now(),
       aiActions: {
         actions: [
           {
             type: 'move_object',
             objectId: targetObj.id,
             position: { x: finalX, z: finalZ },
-            description: `Di chuyển ${targetObj.name} sang vị trí mới`,
+            description: moveDesc,
           },
         ],
       },
@@ -638,6 +828,30 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
 
   // 5. Command: Multi-Item & Context-Aware Delete (e.g. "Xóa giường, tủ quần áo, cây", "Xóa những cái vừa tạo")
   if (lower.includes('xóa') || lower.includes('bỏ') || lower.includes('delete') || lower.includes('gỡ') || lower.includes('loại bỏ')) {
+    // 5A0. Mass deletion of all furniture ("Xóa tất cả đồ nội thất trong phòng")
+    const isDeleteAll = /(?:xóa|bỏ|gỡ|loại\s*bỏ)\s*(?:toàn\s*bộ|tất\s*cả|hết)\s*(?:đồ\s*nội\s*thất|đồ\s*vật|nội\s*thất|đồ)/i.test(lower);
+    if (isDeleteAll) {
+      const allIds = objects.map((o: any) => o.id);
+      return {
+        reply: `Đề xuất phương án xóa tất cả ${allIds.length} đồ nội thất trong phòng ngủ. Thao tác này sẽ làm trống toàn bộ không gian 3D. Bạn có muốn áp dụng thay đổi này không?`,
+        proposalDetected: true,
+        clarificationDetected: false,
+        awaitingConfirmation: true,
+        proposedAdjustment: { type: 'delete_all', objectIds: allIds },
+        proposalId: 'prop_del_all_' + Date.now(),
+        aiActions: {
+          actions: [
+            {
+              type: 'delete_object',
+              objectId: allIds[0] || 'all',
+              objectIds: allIds,
+              description: 'Xóa tất cả đồ nội thất trong phòng ngủ',
+            },
+          ],
+        },
+      };
+    }
+
     // 5A. Context-Aware Reference Deletion ("Xóa những cái vừa tạo", "Xóa chiếc giường vừa thêm", "Xóa cái thứ 2"...)
     const contextRef = detectContextReference(lower);
     if (contextRef) {
@@ -662,7 +876,11 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
         };
       } else {
         return {
-          reply: `Chưa thể xóa: ${resolved.reason}\n\nGia chủ có thể nói rõ tên đồ vật cần xóa (ví dụ: "Xóa giường", "Xóa bàn học").`,
+          reply: `Chưa thể xóa: ${resolved.reason}\n\nVui lòng cho biết bạn muốn xóa đối tượng nào cụ thể (ví dụ: "Xóa giường", "Xóa bàn học").`,
+          requiresTargetClarification: true,
+          clarificationDetected: true,
+          proposalDetected: false,
+          possibleTargets: objects.map((o: any) => o.name),
           aiActions: null,
         };
       }
@@ -672,7 +890,11 @@ Bạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Á
     const extractedDeleteItems = extractAllActionItems(lower);
     if (extractedDeleteItems.length === 0) {
       return {
-        reply: 'Vui lòng cho biết đồ vật nào cần xóa (ví dụ: "Xóa bàn học", "Xóa tủ quần áo", "Xóa tủ đầu giường") hoặc nhấp chọn đồ vật trên không gian 3D.',
+        reply: 'Vui lòng cho biết bạn muốn xóa đối tượng nào cụ thể (ví dụ: "Xóa bàn học", "Xóa tủ quần áo", "Xóa tủ đầu giường") hoặc nhấp chọn đồ vật trên không gian 3D.',
+        requiresTargetClarification: true,
+        clarificationDetected: true,
+        proposalDetected: false,
+        possibleTargets: objects.map((o: any) => o.name),
         aiActions: null,
       };
     }
@@ -838,12 +1060,12 @@ const GEMINI_TOOLS = [
 // API: Confirm a pending destructive proposal (delete / optimize)
 // POST /api/chat/confirm  { proposalId, sceneVersion }
 // =============================================================================
-app.post('/api/chat/confirm', (req, res) => {
-  const { proposalId, sceneVersion } = req.body || {};
+app.post('/api/chat/confirm', confirmLimiter, (req, res) => {
+  const { proposalId, sceneVersion, fnName, args, sessionId } = req.body || {};
   if (!proposalId || typeof proposalId !== 'string') {
     return res.status(400).json({ success: false, error: 'proposalId is required.' });
   }
-  const result = confirmProposal(proposalId, sceneVersion || '');
+  const result = confirmProposal(proposalId, sceneVersion || '', { fnName, args, sessionId });
   if (!result.success) {
     return res.status(409).json({ success: false, error: result.reason });
   }
@@ -861,7 +1083,7 @@ app.get('/api/gemini/status', (req, res) => {
 });
 
 // API: Detailed Feng Shui Analysis
-app.post('/api/gemini/analyze', async (req, res) => {
+app.post('/api/gemini/analyze', aiChatLimiter, async (req, res) => {
   try {
     const { userProfile, roomConfig, objects, ruleEngineResult, apiKey } = req.body;
     const customKey = (req.headers['x-gemini-api-key'] as string | undefined) || apiKey;
@@ -946,14 +1168,22 @@ Trả về dưới định dạng JSON với cấu trúc:
 });
 
 // API: Conversational Chat with Feng Shui Master (Supports /api/gemini/chat and /api/chat)
-app.post(['/api/gemini/chat', '/api/chat'], async (req, res) => {
+app.post(['/api/gemini/chat', '/api/chat'], aiChatLimiter, async (req, res) => {
   try {
     const { intent, messages, userProfile, roomConfig, objects, ruleEngineResult, selectedObjectId, apiKey, actionHistory } = req.body || {};
     if (!Array.isArray(messages) || messages.length === 0 || typeof messages[messages.length - 1]?.content !== 'string') {
       return res.status(400).json({ success: false, error: 'Dữ liệu hội thoại không hợp lệ.' });
     }
     const safeObjects = Array.isArray(objects) ? objects : [];
-    const safeProfile = userProfile || {};
+    let safeProfile = userProfile || {};
+    if (safeProfile.birthYear && safeProfile.gender && (!safeProfile.directionDetails || Object.keys(safeProfile.directionDetails).length === 0)) {
+      try {
+        const fullProf = getUserFengShuiProfile(Number(safeProfile.birthYear), safeProfile.gender);
+        safeProfile = { ...fullProf, ...safeProfile, directionDetails: fullProf.directionDetails };
+      } catch (err) {
+        // Keep safeProfile as is if birthYear is out of range
+      }
+    }
     const safeRoom = roomConfig || {};
     const safeEvaluation = ruleEngineResult || { overallScore: 0, statusText: 'Chưa có đánh giá', keyIssues: [], items: [] };
     const safeActionHistory = Array.isArray(actionHistory) ? actionHistory : [];
@@ -1594,26 +1824,76 @@ HÃY GỌI TOOL THÍCH HỢP ĐỂ THỰC THI THAO TÁC.`;
   }
 });
 
+// Centralized Error Handling Middleware (DoS & Unexpected Exception Catcher)
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const reqId = (req as any).id || 'unknown';
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({
+      success: false,
+      error: 'Payload quá lớn. Giới hạn tối đa là 2MB.',
+      requestId: reqId,
+    });
+  }
+  console.error(`[SERVER_ERROR][${reqId}] Unhandled exception:`, err);
+  res.status(err.status || 500).json({
+    success: false,
+    error: process.env.NODE_ENV === 'production' ? 'Đã xảy ra lỗi nội bộ máy chủ.' : (err.message || 'Lỗi máy chủ nội bộ'),
+    requestId: reqId,
+  });
+});
+
+// Graceful Shutdown Handler (SIGTERM / SIGINT)
+function setupGracefulShutdown(server: any) {
+  const handleShutdown = (signal: string) => {
+    console.log(`[SERVER] Received ${signal}, closing HTTP server gracefully...`);
+    server.close(() => {
+      console.log('[SERVER] HTTP server closed gracefully. Exiting process.');
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.error('[SERVER] Forcefully terminating server after 10s timeout');
+      process.exit(1);
+    }, 10000).unref();
+  };
+  process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+  process.on('SIGINT', () => handleShutdown('SIGINT'));
+}
+
 // Serve frontend in production or integrate with Vite dev
 async function startServer() {
+  const staticDir = fs.existsSync(path.join(__dirname, 'index.html'))
+    ? __dirname
+    : path.join(__dirname, 'dist');
+
   if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(path.join(__dirname, 'dist')));
+    app.use(express.static(staticDir));
     app.get('*', (_req, res) => {
-      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+      res.sendFile(path.join(staticDir, 'index.html'));
     });
   } else {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
+    try {
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } catch {
+      // In production containers without devDependencies (Vite), fallback to pre-built static bundle
+      app.use(express.static(staticDir));
+      app.get('*', (_req, res) => {
+        res.sendFile(path.join(staticDir, 'index.html'));
+      });
+    }
   }
 
   const hasApiKey = Boolean(process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.includes('MY_GEMINI_API_KEY'));
-  app.listen(port, () => {
-    console.log(`Feng Shui 3D Studio Server running on port ${port} (API Key: ${hasApiKey ? 'Configured' : 'Offline AI Engine Active'})`);
+  const server = app.listen(port, () => {
+    console.log(`Feng Shui 3D Studio Server running on port ${port} (API Key: ${hasApiKey ? 'Configured' : 'Offline AI Engine Active'}) [Instance: ${INSTANCE_ID}]`);
   });
+
+  setupGracefulShutdown(server);
+  return server;
 }
 
 export { app, startServer };

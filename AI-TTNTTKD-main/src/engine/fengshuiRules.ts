@@ -6,15 +6,50 @@ import {
   RoomObject,
   SectorType,
   UserFengShuiProfile,
+  DirectionSectorInfo,
 } from '../types/fengshui';
 import {
   DIRECTION_NAMES_VI,
   getCompassDirectionFromAngle,
   getSectorFromPosition,
   SECTOR_NAMES_VI,
+  normalizeCompassDirection,
+  formatCompassDirectionVi,
 } from './batTrach';
 import { checkOBBCollision, createOBBFromObject, isDoorCorridorBlocked } from './geometryEngine';
 import { worldBearingOfAxis, directionFromBearing } from './core/compass.js';
+
+export const UNKNOWN_SECTOR_INFO: DirectionSectorInfo = {
+  name: 'Chưa xác định',
+  type: 'UNKNOWN' as any,
+  isGood: false,
+  meaning: 'Chưa đủ dữ liệu quái mệnh hoặc phương vị',
+};
+
+/**
+ * Safely retrieves DirectionSectorInfo from a directionDetails dictionary,
+ * supporting standard Latin codes (N, NE, ...), lowercase, or Vietnamese keys.
+ */
+export function getSectorInfoFromDetails(
+  details: Record<string, DirectionSectorInfo> | undefined | null,
+  dir: unknown
+): DirectionSectorInfo | null {
+  if (!details || typeof details !== 'object') return null;
+  const std = normalizeCompassDirection(dir);
+  if (std && details[std]) {
+    return details[std];
+  }
+  if (typeof dir === 'string' && details[dir]) {
+    return details[dir];
+  }
+  if (std) {
+    const vi = DIRECTION_NAMES_VI[std];
+    if (vi && details[vi]) {
+      return details[vi];
+    }
+  }
+  return null;
+}
 
 /**
  * Calculates facing direction vector from yaw angle in radians.
@@ -155,8 +190,10 @@ export function evaluateRoomFengShui(
   room: RoomConfig,
   objects: RoomObject[]
 ): FengShuiRoomEvaluation {
-  const halfW = room.width / 2;
-  const halfL = room.length / 2;
+  const width = Number(room?.width) || 5.0;
+  const length = Number(room?.length) || 5.2;
+  const halfW = width / 2;
+  const halfL = length / 2;
 
   const items: FengShuiItemEvaluation[] = [];
   const keyIssues: string[] = [];
@@ -171,13 +208,19 @@ export function evaluateRoomFengShui(
   const desks = objects.filter((o) => o.type === 'desk');
 
   // Room Direction Check
-  const roomSector = profile.directionDetails[room.direction];
-  const roomDirectionScore = roomSector?.isGood ? 95 : 60;
-  if (roomSector && !roomSector.isGood) {
-    const meaningText = roomSector.meaning || (roomSector as any).description || '';
-    keyIssues.push(
-      `Hướng phòng (${roomSector.name}) thuộc hướng ${roomSector.name} (${meaningText.slice(0, 30)}...) - cần chú trọng đặt giường và bàn ở cung Cát để hóa giải.`
-    );
+  const normRoomDir = normalizeCompassDirection(room?.direction);
+  const roomSector = getSectorInfoFromDetails(profile?.directionDetails, normRoomDir || room?.direction);
+  let roomDirectionScore = 75; // Neutral baseline when data is missing/uncalibrated
+  if (roomSector) {
+    roomDirectionScore = roomSector.isGood ? 95 : 60;
+    if (!roomSector.isGood) {
+      const meaningText = roomSector.meaning || (roomSector as any).description || '';
+      keyIssues.push(
+        `Hướng phòng (${roomSector.name}) thuộc hướng ${roomSector.name} (${meaningText.slice(0, 30)}...) - cần chú trọng đặt giường và bàn ở cung Cát để hóa giải.`
+      );
+    }
+  } else {
+    keyIssues.push('Chưa đủ dữ liệu quái mệnh hoặc hướng phòng để đánh giá cát/hung của hướng phòng.');
   }
 
   // 1. Evaluate BEDS
@@ -190,26 +233,34 @@ export function evaluateRoomFengShui(
 
     // Sector where bed is located
     const sectorDir = getSectorFromPosition(bed.position.x, bed.position.z);
-    const sectorInfo = profile.directionDetails[sectorDir];
+    const sectorInfo = getSectorInfoFromDetails(profile?.directionDetails, sectorDir);
 
-    if (sectorInfo.isGood) {
-      score += 8;
-      pros.push(`Tọa lạc tại cung cát ${sectorInfo.name} (${sectorInfo.meaning.slice(0, 40)})`);
+    if (sectorInfo) {
+      if (sectorInfo.isGood) {
+        score += 8;
+        pros.push(`Tọa lạc tại cung cát ${sectorInfo.name} (${(sectorInfo.meaning || '').slice(0, 40)})`);
+      } else {
+        score -= 15;
+        issues.push(`Đặt tại cung hung ${sectorInfo.name} (${(sectorInfo.meaning || '').slice(0, 45)})`);
+      }
     } else {
-      score -= 15;
-      issues.push(`Đặt tại cung hung ${sectorInfo.name} (${sectorInfo.meaning.slice(0, 45)})`);
+      issues.push('Chưa đủ dữ liệu quái mệnh để xác định cung Bát Trạch tại vị trí giường.');
     }
 
     // Headboard direction (Hướng đầu giường)
     const headboardDir = getBedHeadboardDirection(bed.rotation.y);
-    const headboardSector = profile.directionDetails[headboardDir];
+    const headboardSector = getSectorInfoFromDetails(profile?.directionDetails, headboardDir);
 
-    if (headboardSector.isGood) {
-      score += 10;
-      pros.push(`Đầu giường hướng về ${headboardSector.name} (${headboardSector.name}) rất cát lợi`);
+    if (headboardSector) {
+      if (headboardSector.isGood) {
+        score += 10;
+        pros.push(`Đầu giường hướng về ${headboardSector.name} (${headboardSector.name}) rất cát lợi`);
+      } else {
+        score -= 15;
+        issues.push(`Đầu giường quay về hướng hung ${headboardSector.name} (${headboardSector.name})`);
+      }
     } else {
-      score -= 15;
-      issues.push(`Đầu giường quay về hướng hung ${headboardSector.name} (${headboardSector.name})`);
+      issues.push('Chưa đủ dữ liệu quái mệnh để xác định hướng đầu giường theo Bát Trạch.');
     }
 
     // Solid Wall Check (Tọa sơn)
@@ -288,17 +339,28 @@ export function evaluateRoomFengShui(
 
     let recommendation = 'Vị trí và hướng giường đã tương đối hài hòa.';
     if (score < 75) {
-      recommendation = `Đề xuất điều chỉnh đầu giường về hướng cát (${profile.auspiciousDirections.slice(0, 2).map((d) => profile.directionDetails[d].name).join(', ')}) và tránh trục cửa/gương.`;
+      const goodDirs = Array.isArray(profile?.auspiciousDirections)
+        ? profile.auspiciousDirections
+            .map((d: any) => {
+              const std = normalizeCompassDirection(d);
+              const info = getSectorInfoFromDetails(profile?.directionDetails, std || d);
+              return info?.name || (std ? DIRECTION_NAMES_VI[std] : null) || (typeof d === 'string' ? d : null);
+            })
+            .filter(Boolean)
+        : [];
+      const dirText = goodDirs.length > 0 ? goodDirs.slice(0, 2).join(', ') : 'hướng cát của gia chủ';
+      recommendation = `Đề xuất điều chỉnh đầu giường về hướng cát (${dirText}) và tránh trục cửa/gương.`;
     }
 
+    const safeBedSector = sectorInfo || UNKNOWN_SECTOR_INFO;
     items.push({
       objectId: bed.id,
       objectName: bed.name,
       type: 'bed',
       score,
-      sector: sectorInfo.type,
-      sectorName: sectorInfo.name,
-      isSectorGood: sectorInfo.isGood,
+      sector: safeBedSector.type,
+      sectorName: safeBedSector.name,
+      isSectorGood: safeBedSector.isGood,
       facingDirection: headboardDir,
       status: score >= 80 ? 'good' : score >= 65 ? 'warning' : 'bad',
       pros,
@@ -316,20 +378,24 @@ export function evaluateRoomFengShui(
     const issues: string[] = [];
 
     const sectorDir = getSectorFromPosition(desk.position.x, desk.position.z);
-    const sectorInfo = profile.directionDetails[sectorDir];
+    const sectorInfo = getSectorInfoFromDetails(profile?.directionDetails, sectorDir);
 
-    if (sectorInfo.isGood) {
-      score += 10;
-      pros.push(`Tọa tại phương vị ${sectorInfo.name} (${sectorInfo.meaning.slice(0, 35)})`);
+    if (sectorInfo) {
+      if (sectorInfo.isGood) {
+        score += 10;
+        pros.push(`Tọa tại phương vị ${sectorInfo.name} (${(sectorInfo.meaning || '').slice(0, 35)})`);
+      } else {
+        score -= 10;
+        issues.push(`Đặt tại cung ${sectorInfo.name} (${(sectorInfo.meaning || '').slice(0, 35)})`);
+      }
     } else {
-      score -= 10;
-      issues.push(`Đặt tại cung ${sectorInfo.name} (${sectorInfo.meaning.slice(0, 35)})`);
+      issues.push('Chưa đủ dữ liệu quái mệnh để xác định phương vị bàn làm việc.');
     }
 
     // Desk facing direction
     const deskFacing = getFacingDirectionFromYaw(desk.rotation.y);
-    const facingSector = profile.directionDetails[deskFacing];
-    if (facingSector.isGood) {
+    const facingSector = getSectorInfoFromDetails(profile?.directionDetails, deskFacing);
+    if (facingSector?.isGood) {
       score += 8;
       pros.push(`Mặt bàn quay về hướng cát ${facingSector.name} (tập trung học vấn, sự nghiệp)`);
     }
@@ -363,14 +429,15 @@ export function evaluateRoomFengShui(
     score = Math.max(40, Math.min(98, score));
     totalDeskScore += score;
 
+    const safeDeskSector = sectorInfo || UNKNOWN_SECTOR_INFO;
     items.push({
       objectId: desk.id,
       objectName: desk.name,
       type: 'desk',
       score,
-      sector: sectorInfo.type,
-      sectorName: sectorInfo.name,
-      isSectorGood: sectorInfo.isGood,
+      sector: safeDeskSector.type,
+      sectorName: safeDeskSector.name,
+      isSectorGood: safeDeskSector.isGood,
       facingDirection: deskFacing,
       status: score >= 80 ? 'good' : score >= 65 ? 'warning' : 'bad',
       pros,
@@ -391,7 +458,7 @@ export function evaluateRoomFengShui(
     let hasConflict = false;
 
     const sectorDir = getSectorFromPosition(mirror.position.x, mirror.position.z);
-    const sectorInfo = profile.directionDetails[sectorDir];
+    const sectorInfo = getSectorInfoFromDetails(profile?.directionDetails, sectorDir);
 
     // Check reflection toward any bed
     for (const bed of beds) {
@@ -421,14 +488,15 @@ export function evaluateRoomFengShui(
     score = Math.max(35, Math.min(95, score));
     totalMirrorScore += score;
 
+    const safeMirrorSector = sectorInfo || UNKNOWN_SECTOR_INFO;
     items.push({
       objectId: mirror.id,
       objectName: mirror.name,
       type: 'mirror',
       score,
-      sector: sectorInfo.type,
-      sectorName: sectorInfo.name,
-      isSectorGood: sectorInfo.isGood,
+      sector: safeMirrorSector.type,
+      sectorName: safeMirrorSector.name,
+      isSectorGood: safeMirrorSector.isGood,
       facingDirection: getFacingDirectionFromYaw(mirror.rotation.y),
       status: score >= 75 ? 'good' : score >= 60 ? 'warning' : 'bad',
       pros,
@@ -449,7 +517,7 @@ export function evaluateRoomFengShui(
     const issues: string[] = [];
 
     const sectorDir = getSectorFromPosition(obj.position.x, obj.position.z);
-    const sectorInfo = profile.directionDetails[sectorDir];
+    const sectorInfo = getSectorInfoFromDetails(profile?.directionDetails, sectorDir);
 
     // Check door blockage
     if (door) {
@@ -468,19 +536,21 @@ export function evaluateRoomFengShui(
     } else if (obj.type === 'nightstand') {
       pros.push('Tủ đầu giường cân bằng âm dương hai bên giường ngủ');
     } else if (obj.type === 'door') {
-      pros.push(`Cửa mở hướng ${DIRECTION_NAMES_VI[room.direction]} nạp khí`);
+      const roomLabel = (normRoomDir && DIRECTION_NAMES_VI[normRoomDir]) || room?.direction || '';
+      pros.push(`Cửa mở hướng ${roomLabel} nạp khí`);
     } else if (obj.type === 'window') {
       pros.push('Cửa sổ thông thoáng, lưu thông dương khí tự nhiên');
     }
 
+    const safeObjSector = sectorInfo || UNKNOWN_SECTOR_INFO;
     items.push({
       objectId: obj.id,
       objectName: obj.name,
       type: obj.type,
       score: Math.min(95, score),
-      sector: sectorInfo.type,
-      sectorName: sectorInfo.name,
-      isSectorGood: sectorInfo.isGood,
+      sector: safeObjSector.type,
+      sectorName: safeObjSector.name,
+      isSectorGood: safeObjSector.isGood,
       facingDirection: getFacingDirectionFromYaw(obj.rotation.y),
       status: score >= 80 ? 'good' : score >= 65 ? 'warning' : 'bad',
       pros,

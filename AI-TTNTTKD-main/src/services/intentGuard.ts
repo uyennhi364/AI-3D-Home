@@ -68,6 +68,19 @@ export function evaluateIntentSafety(
     };
   }
 
+  // 1b. Contradictory Placement Commands (e.g. "Đặt giường vừa ở góc Đông Bắc vừa ở góc Tây Nam")
+  const isContradictory = /(?:vừa\s*ở.*?vừa\s*ở|ở\s*cả\s*2\s*vị\s*trí|ở\s*hai\s*vị\s*trí\s*cùng\s*lúc|đồng\s*thời\s*ở)/i.test(lower);
+  if (isContradictory) {
+    return {
+      executionMode: 'COMMAND',
+      isSafeToExecute: false,
+      isAdvisoryOrQuestion: false,
+      blockedActionReason: 'Yêu cầu mâu thuẫn: Không thể đặt một đồ vật ở cả hai vị trí cùng một lúc vì vi phạm ràng buộc vật lý.',
+      sanitizedPrompt: p,
+      hasAmbiguousTarget: false,
+      requiresTargetClarification: false,
+    };
+  }
   // 2. Explicit Preview Cancellation
   if (CANCEL_PREVIEW_REGEX.test(lower)) {
     return {
@@ -158,8 +171,10 @@ export function evaluateIntentSafety(
     };
   }
 
-  // 6. Explicit Multiple Layout Proposal Request (Read-only / Ghost Preview, e.g. "3 phương án bố trí")
-  if (/(?:các\s*phương\s*án|3\s*phương\s*án|nhiều\s*phương\s*án|so\s*sánh\s*bố\s*trí|đề\s*xuất\s*bố\s*trí)/i.test(lower)) {
+  // 6. Explicit Multiple Layout Proposal Request (Read-only / Ghost Preview, e.g. "3 phương án bố trí", "đề xuất vị trí", "vị trí nào tốt nhất")
+  if (
+    /(?:các\s*phương\s*án|3\s*phương\s*án|nhiều\s*phương\s*án|so\s*sánh\s*bố\s*trí|đề\s*xuất\s*(?:bố\s*trí|vị\s*trí|phương\s*án)|vị\s*trí\s*(?:.*?)(?:nào\s*)?tốt\s*nhất|phù\s*hợp\s*mệnh)/i.test(lower)
+  ) {
     return {
       executionMode: 'PROPOSE',
       isSafeToExecute: false,

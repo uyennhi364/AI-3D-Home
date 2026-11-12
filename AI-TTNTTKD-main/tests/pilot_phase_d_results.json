@@ -1,0 +1,90 @@
+{
+  "phase": "D",
+  "summary": {
+    "pass": 10,
+    "fail": 0,
+    "total": 10
+  },
+  "results": [
+    {
+      "id": "D-01",
+      "description": "Tối ưu giường theo phong thủy",
+      "status": "PASS",
+      "evidence": "OK: Proposal detected | OK: Scene guarded",
+      "responseExcerpt": "Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ 3 đồ vật trong phòng 5m × 5.2m của gia chủ mệnh Khảm (Thủy - Đông Tứ Mệnh).\n\nĐề xuất ph",
+      "durationMs": 65
+    },
+    {
+      "id": "D-02",
+      "description": "Tối ưu bàn làm việc theo phong thủy",
+      "status": "PASS",
+      "evidence": "OK: Proposal detected | OK: Scene guarded",
+      "responseExcerpt": "Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ 3 đồ vật trong phòng 5m × 5.2m của gia chủ mệnh Khảm (Thủy - Đông Tứ Mệnh).\n\nĐề xuất ph",
+      "durationMs": 14
+    },
+    {
+      "id": "D-03",
+      "description": "Tối ưu tủ quần áo",
+      "status": "PASS",
+      "evidence": "OK: Proposal detected | OK: Scene guarded",
+      "responseExcerpt": "Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ 3 đồ vật trong phòng 5m × 5.2m của gia chủ mệnh Khảm (Thủy - Đông Tứ Mệnh).\n\nĐề xuất ph",
+      "durationMs": 7
+    },
+    {
+      "id": "D-04",
+      "description": "Giữ nguyên giường, chỉ di chuyển bàn",
+      "status": "PASS",
+      "evidence": "OK: Proposal detected | OK: Scene guarded",
+      "responseExcerpt": "Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ 3 đồ vật trong phòng 5m × 5.2m của gia chủ mệnh Khảm (Thủy - Đông Tứ Mệnh).\n\nĐề xuất ph",
+      "durationMs": 5
+    },
+    {
+      "id": "D-05",
+      "description": "Không chặn cửa sổ khi sắp xếp",
+      "status": "PASS",
+      "evidence": "OK: Proposal detected | OK: Scene guarded",
+      "responseExcerpt": "Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ 3 đồ vật trong phòng 5m × 5.2m của gia chủ mệnh Khảm (Thủy - Đông Tứ Mệnh).\n\nĐề xuất ph",
+      "durationMs": 6
+    },
+    {
+      "id": "D-06",
+      "description": "Tối ưu cho người tuổi Tý (Khảm, Đông Tứ Mệnh)",
+      "status": "PASS",
+      "evidence": "OK: Proposal detected | OK: Scene guarded",
+      "responseExcerpt": "Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ 3 đồ vật trong phòng 5m × 5.2m của gia chủ mệnh Khảm (Thủy - Đông Tứ Mệnh).\n\nĐề xuất ph",
+      "durationMs": 5
+    },
+    {
+      "id": "D-07",
+      "description": "Yêu cầu 3 phương án bố trí",
+      "status": "PASS",
+      "evidence": "OK: Proposal detected | OK: Scene guarded | OK: Multiple proposals detected",
+      "responseExcerpt": "Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ 3 đồ vật trong phòng 5m × 5.2m của gia chủ mệnh Khảm (Thủy - Đông Tứ Mệnh).\n\nĐề xuất ph",
+      "durationMs": 4
+    },
+    {
+      "id": "D-08",
+      "description": "Đề xuất bố trí tổng thể phòng ngủ",
+      "status": "PASS",
+      "evidence": "OK: Proposal detected | OK: Scene guarded",
+      "responseExcerpt": "Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ 3 đồ vật trong phòng 5m × 5.2m của gia chủ mệnh Khảm (Thủy - Đông Tứ Mệnh).\n\nĐề xuất ph",
+      "durationMs": 4
+    },
+    {
+      "id": "D-09",
+      "description": "Phòng quá nhỏ, không thể đặt tất cả đồ nội thất",
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Impossible case handled gracefully",
+      "responseExcerpt": "Không thể thực thi các yêu cầu:\n\n• Giường đôi 1m6: ✕ FAILED (Không tìm được vị trí an toàn cho Giường đôi 1m6 (1.6m × 2m) mà không bị chồng lấn đồ nội",
+      "durationMs": 148
+    },
+    {
+      "id": "D-10",
+      "description": "Yêu cầu mâu thuẫn: đặt giường ở cả 2 vị trí cùng lúc",
+      "status": "PASS",
+      "evidence": "OK: Scene guarded | OK: Impossible case handled gracefully",
+      "responseExcerpt": "Không thể thực hiện yêu cầu mâu thuẫn hình học: Một đồ vật không thể vừa đặt ở giữa phòng vừa kê sát tường. Bạn muốn ưu tiên đặt ở vị trí nào cụ thể h",
+      "durationMs": 3
+    }
+  ]
+}

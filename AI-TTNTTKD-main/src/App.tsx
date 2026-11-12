@@ -25,6 +25,9 @@ import { RoomCompassWidget } from './components/RoomCompassWidget';
 import { UserProfileModal } from './components/UserProfileModal';
 import { LayoutComparisonModal } from './components/LayoutComparisonModal';
 import { AIAnalysisReportModal } from './components/AIAnalysisReportModal';
+import { UnifiedAssessmentReportModal } from './components/UnifiedAssessmentReportModal';
+import { buildUnifiedAssessmentReport, UnifiedAssessmentReport } from './engine/core/unifiedAssessment';
+import { PersonalProfile } from './engine/core/personalProfile';
 import { validateAICommand } from './services/aiCommandHandler';
 import {
   clampOBBInsideRoom,
@@ -88,6 +91,7 @@ export default function App() {
   const [activeOptimizationProposal, setActiveOptimizationProposal] = useState<LayoutOptimizationProposal | null>(null);
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
+  const [unifiedReport, setUnifiedReport] = useState<UnifiedAssessmentReport | null>(null);
   const [isAiAnalyzing, setIsAiAnalyzing] = useState<boolean>(false);
   const [aiReportData, setAiReportData] = useState<any>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -730,24 +734,31 @@ export default function App() {
     showToast(`✓ Đã áp dụng toàn bộ phương án tối ưu phong thủy (${adjs.length} đồ vật)!`);
   };
 
-  // Handler: Trigger Deep AI Feng Shui Report
-  const handleTriggerAiAnalysis = async () => {
-    setIsAiAnalyzing(true);
-    showToast('✨ AI đang trích xuất dữ liệu 3D và tổng hợp báo cáo phong thủy...');
+  // Handler: Trigger Unified Feng Shui Report (Phase P5)
+  const handleTriggerAiAnalysis = () => {
     try {
-      const report = await generateDeepFengShuiReport(
-        userProfile,
+      const profile: PersonalProfile = {
+        id: 'user_profile_active',
+        displayName: 'Gia chủ',
+        birthDate: `${birthYear}-07-01`,
+        genderForTraditionalCalculation: gender,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const report = buildUnifiedAssessmentReport({
         roomConfig,
         objects,
-        evaluation
-      );
-      setAiReportData(report);
+        profile,
+        roomName: 'Phòng ngủ Master',
+      });
+
+      setUnifiedReport(report);
       setIsReportModalOpen(true);
+      showToast('✓ Đã cập nhật báo cáo phong thủy không gian sống.');
     } catch (e) {
       console.error(e);
-      showToast('⚠ Không thể tạo báo cáo AI vào lúc này.');
-    } finally {
-      setIsAiAnalyzing(false);
+      showToast('⚠ Lỗi khi tổng hợp báo cáo phong thủy.');
     }
   };
 
@@ -1106,20 +1117,12 @@ export default function App() {
         onApply={handleApplyMultipleAdjustments}
       />
 
-      {/* Deep AI Feng Shui Report Modal */}
-      <AIAnalysisReportModal
+      {/* Unified Assessment Report Modal (Phase P5) */}
+      <UnifiedAssessmentReportModal
         isOpen={isReportModalOpen}
         onClose={() => setIsReportModalOpen(false)}
-        reportData={aiReportData}
-        userProfile={userProfile}
-        evaluation={evaluation}
-        roomConfig={roomConfig}
-        objects={objects}
-        onTriggerOptimization={() => {
-          setIsRightPanelOpen(true);
-          setChatTriggerPrompt('Tối ưu phòng ngủ cho tôi');
-        }}
-        onSelectObject={(id) => setSelectedObjectId(id)}
+        report={unifiedReport}
+        onRefresh={handleTriggerAiAnalysis}
       />
     </div>
   );

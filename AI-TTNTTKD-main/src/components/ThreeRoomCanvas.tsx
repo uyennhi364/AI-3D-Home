@@ -28,6 +28,9 @@ import {
   isOBBInsideRoom,
   isDoorCorridorBlocked,
 } from '../engine/geometryEngine';
+import { deepDisposeObject } from '../engine/threeResourceUtils';
+
+export { deepDisposeObject };
 
 interface ThreeRoomCanvasProps {
   roomConfig: RoomConfig;
@@ -505,6 +508,19 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
     window.addEventListener('three-export-3d-image', handleExport3D);
     window.addEventListener('three-export-2d-plan', handleExport2D);
 
+    const canvas = renderer.domElement;
+    const handleContextLost = (e: Event) => {
+      e.preventDefault();
+      console.warn('[ThreeRoomCanvas] WebGL context lost! Pausing render loop.');
+      cancelAnimationFrame(animId);
+    };
+    const handleContextRestored = () => {
+      console.info('[ThreeRoomCanvas] WebGL context restored! Resuming render loop.');
+      animate();
+    };
+    canvas.addEventListener('webglcontextlost', handleContextLost, false);
+    canvas.addEventListener('webglcontextrestored', handleContextRestored, false);
+
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', handleResize);
@@ -512,12 +528,18 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
       window.removeEventListener('three-camera-reset', handleCameraReset);
       window.removeEventListener('three-export-3d-image', handleExport3D);
       window.removeEventListener('three-export-2d-plan', handleExport2D);
+      canvas.removeEventListener('webglcontextlost', handleContextLost);
+      canvas.removeEventListener('webglcontextrestored', handleContextRestored);
       ro.disconnect();
+      // Recursively dispose all scene children to prevent GPU memory leak
+      scene.traverse((child) => {
+        deepDisposeObject(child);
+      });
       tControls.dispose();
       controls.dispose();
       renderer.dispose();
-      if (container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement);
+      if (container.contains(canvas)) {
+        container.removeChild(canvas);
       }
     };
   }, []);
@@ -1014,9 +1036,10 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
 
     const currentIds = new Set(objects.map((o) => o.id));
 
-    // Remove deleted objects
+    // Remove deleted objects with deep VRAM disposal
     for (const [id, mesh] of objectMeshesRef.current.entries()) {
       if (!currentIds.has(id)) {
+        deepDisposeObject(mesh);
         scene.remove(mesh);
         objectMeshesRef.current.delete(id);
       }
@@ -1088,8 +1111,11 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
     const scene = sceneRef.current;
     if (!scene) return;
 
-    // Clear old previews
-    previewMeshesRef.current.forEach((m) => scene.remove(m));
+    // Clear old previews with deep VRAM disposal
+    previewMeshesRef.current.forEach((m) => {
+      deepDisposeObject(m);
+      scene.remove(m);
+    });
     previewMeshesRef.current = [];
 
     if (isPreviewingProposal) {

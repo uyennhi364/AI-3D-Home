@@ -367,7 +367,7 @@ export function buildLayoutFromLegacy(
   }
 
   return {
-    id: `layout_${Date.now()}`,
+    id: 'layout_legacy_adapter',
     polygon,
     northBearingDeg: null, // Default uncalibrated; never assume 0°
     ceilingHeight: ceilingH,

@@ -1,0 +1,377 @@
+{
+  "phase": "C",
+  "summary": {
+    "pass": 20,
+    "fail": 0,
+    "error": 0,
+    "partial": 0
+  },
+  "results": [
+    {
+      "id": "C-01",
+      "description": "Giường đầu hướng về cửa đông (BED-DOOR-01 axis conflict)",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "BED-DOOR-01",
+        "BED-WALL-01",
+        "BED-DOOR-01"
+      ],
+      "canonicalExpected": [
+        "BED-DOOR-01"
+      ],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-DOOR-01, BED-WALL-01, BED-DOOR-01]",
+      "durationMs": 11
+    },
+    {
+      "id": "C-02",
+      "description": "Giường sát tường phía sau (tốt — Phục Vị check)",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "BED-WALL-01"
+      ],
+      "canonicalExpected": [],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-WALL-01]",
+      "durationMs": 1
+    },
+    {
+      "id": "C-03",
+      "description": "Gương đối diện giường (MIRROR-BED-01)",
+      "status": "PASS",
+      "rulesFound": [
+        "MIRROR-BED-01",
+        "BED-WALL-01",
+        "BED-WALL-01",
+        "MIRROR-BED-01"
+      ],
+      "canonicalExpected": [
+        "MIRROR-BED-01"
+      ],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 6 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [MIRROR-BED-01, BED-WALL-01, BED-WALL-01, MIRROR-BED-01]",
+      "durationMs": 2
+    },
+    {
+      "id": "C-04",
+      "description": "Không có cửa sổ được xác nhận — ENGINE trả unknown (đúng thiết kế)",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "BED-WALL-01"
+      ],
+      "canonicalExpected": [],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-WALL-01]",
+      "durationMs": 1
+    },
+    {
+      "id": "C-05",
+      "description": "Tủ quần áo chắn lối đi (ERG-CIRC/WARD)",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "ERG-CIRC-01",
+        "ERG-BED-01",
+        "ERG-WARD-01",
+        "BED-WALL-01",
+        "ERG-CIRC-01",
+        "ERG-BED-01",
+        "ERG-WARD-01"
+      ],
+      "canonicalExpected": [
+        "ERG-CIRC-01",
+        "ERG-WARD-01"
+      ],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, ERG-CIRC-01, ERG-BED-01, ERG-WARD-01, BED-WALL-01, ERG-CIRC-01]",
+      "durationMs": 2
+    },
+    {
+      "id": "C-06",
+      "description": "Không có thông gió chéo — ENGINE trả unknown (đúng thiết kế)",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "BED-WALL-01"
+      ],
+      "canonicalExpected": [],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-WALL-01]",
+      "durationMs": 0
+    },
+    {
+      "id": "C-07",
+      "description": "Thiếu dữ liệu hướng (northBearingDeg = null)",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "BED-WALL-01"
+      ],
+      "canonicalExpected": [],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-WALL-01]",
+      "durationMs": 0
+    },
+    {
+      "id": "C-08",
+      "description": "Giường ở cung hung cho tuổi Tý (mệnh Thủy, cung Khảm)",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "PERS-BED-01",
+        "PERS-ROOM-01",
+        "BED-WALL-01",
+        "PERS-BED-01",
+        "PERS-ROOM-01"
+      ],
+      "canonicalExpected": [
+        "PERS-BED-01"
+      ],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 4 rules | P4: 3 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, PERS-BED-01, PERS-ROOM-01, BED-WALL-01, PERS-BED-01, PERS-ROOM-01]",
+      "durationMs": 2
+    },
+    {
+      "id": "C-09",
+      "description": "Khoảng thông cạnh giường < 60cm",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "BED-WIN-01",
+        "ERG-CIRC-01",
+        "ERG-BED-01",
+        "ERG-WARD-01",
+        "BED-WALL-01",
+        "BED-WIN-01",
+        "ERG-CIRC-01",
+        "ERG-BED-01",
+        "ERG-WARD-01"
+      ],
+      "canonicalExpected": [
+        "ERG-BED-01",
+        "ERG-CIRC-01"
+      ],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-WIN-01, ERG-CIRC-01, ERG-BED-01, ERG-WARD-01, BED-WALL-01]",
+      "durationMs": 1
+    },
+    {
+      "id": "C-10",
+      "description": "Bàn làm việc quay lưng ra cửa",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "ERG-CIRC-01",
+        "ERG-DESK-01",
+        "BED-WALL-01",
+        "ERG-CIRC-01",
+        "ERG-DESK-01"
+      ],
+      "canonicalExpected": [
+        "DESK-DOOR-01",
+        "ERG-DESK-01"
+      ],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 7 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, ERG-CIRC-01, ERG-DESK-01, BED-WALL-01, ERG-CIRC-01, ERG-DESK-01]",
+      "durationMs": 2
+    },
+    {
+      "id": "C-11",
+      "description": "Phòng tối ưu — giường tốt, không có gương đối diện",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "ERG-CIRC-01",
+        "ERG-BED-01",
+        "BED-WALL-01",
+        "ERG-CIRC-01",
+        "ERG-BED-01"
+      ],
+      "canonicalExpected": [],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 7 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, ERG-CIRC-01, ERG-BED-01, BED-WALL-01, ERG-CIRC-01, ERG-BED-01]",
+      "durationMs": 1
+    },
+    {
+      "id": "C-12",
+      "description": "Giường ở giữa phòng (không tựa tường)",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "BED-WALL-01"
+      ],
+      "canonicalExpected": [
+        "BED-WALL-01"
+      ],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-WALL-01]",
+      "durationMs": 0
+    },
+    {
+      "id": "C-13",
+      "description": "Nhiều gương trong phòng",
+      "status": "PASS",
+      "rulesFound": [
+        "MIRROR-BED-01",
+        "MIRROR-BED-01",
+        "BED-WALL-01",
+        "ERG-CIRC-01",
+        "BED-WALL-01",
+        "MIRROR-BED-01",
+        "MIRROR-BED-01",
+        "ERG-CIRC-01"
+      ],
+      "canonicalExpected": [
+        "MIRROR-BED-01"
+      ],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 8 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [MIRROR-BED-01, MIRROR-BED-01, BED-WALL-01, ERG-CIRC-01, BED-WALL-01, MIRROR-BED-01]",
+      "durationMs": 1
+    },
+    {
+      "id": "C-14",
+      "description": "Phòng nhỏ 2.5m x 3m",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "BED-DOOR-01",
+        "DESK-DOOR-01",
+        "ERG-CIRC-01",
+        "ERG-BED-01",
+        "ERG-WARD-01",
+        "BED-WALL-01",
+        "BED-DOOR-01",
+        "DESK-DOOR-01",
+        "ERG-CIRC-01"
+      ],
+      "canonicalExpected": [
+        "ERG-BED-01",
+        "ERG-CIRC-01"
+      ],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 7 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-DOOR-01, DESK-DOOR-01, ERG-CIRC-01, ERG-BED-01, ERG-WARD-01]",
+      "durationMs": 1
+    },
+    {
+      "id": "C-15",
+      "description": "Phòng hướng Đông (East-facing) cho tuổi Mão",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "BED-WALL-01"
+      ],
+      "canonicalExpected": [],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-WALL-01]",
+      "durationMs": 0
+    },
+    {
+      "id": "C-16",
+      "description": "Không có đồ nội thất nào",
+      "status": "PASS",
+      "rulesFound": [],
+      "canonicalExpected": [],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 0 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: []",
+      "durationMs": 0
+    },
+    {
+      "id": "C-17",
+      "description": "Đồ nội thất chồng lên nhau (collision)",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "ERG-CIRC-01",
+        "ERG-BED-01",
+        "ERG-WARD-01",
+        "BED-WALL-01",
+        "ERG-CIRC-01",
+        "ERG-BED-01",
+        "ERG-WARD-01"
+      ],
+      "canonicalExpected": [
+        "ERG-CIRC-01",
+        "ERG-WARD-01"
+      ],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, ERG-CIRC-01, ERG-BED-01, ERG-WARD-01, BED-WALL-01, ERG-CIRC-01]",
+      "durationMs": 0
+    },
+    {
+      "id": "C-18",
+      "description": "Vật thể ngoài phạm vi phòng",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "BED-WALL-01"
+      ],
+      "canonicalExpected": [
+        "BED-WALL-01"
+      ],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-WALL-01]",
+      "durationMs": 1
+    },
+    {
+      "id": "C-19",
+      "description": "Đánh giá tổng hợp đầy đủ (Unified Report)",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "ERG-CIRC-01",
+        "ERG-BED-01",
+        "ERG-WARD-01",
+        "BED-WALL-01",
+        "ERG-CIRC-01",
+        "ERG-BED-01",
+        "ERG-WARD-01"
+      ],
+      "canonicalExpected": [],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 9 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, ERG-CIRC-01, ERG-BED-01, ERG-WARD-01, BED-WALL-01, ERG-CIRC-01]",
+      "durationMs": 0
+    },
+    {
+      "id": "C-20",
+      "description": "Tường có cấu trúc phức tạp (nhiều vật thể)",
+      "status": "PASS",
+      "rulesFound": [
+        "BED-WALL-01",
+        "ERG-CIRC-01",
+        "ERG-BED-01",
+        "ERG-WARD-01",
+        "BED-WALL-01",
+        "ERG-CIRC-01",
+        "ERG-BED-01",
+        "ERG-WARD-01"
+      ],
+      "canonicalExpected": [],
+      "expectedRulesFired": true,
+      "fabricationDetected": [],
+      "evidence": "P3: 9 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, ERG-CIRC-01, ERG-BED-01, ERG-WARD-01, BED-WALL-01, ERG-CIRC-01]",
+      "durationMs": 1
+    }
+  ]
+}
