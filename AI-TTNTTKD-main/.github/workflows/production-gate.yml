@@ -10,6 +10,9 @@ jobs:
   production-verification:
     name: Lint, Test, Build & Container Verification
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AI-TTNTTKD-main
 
     steps:
       - name: Checkout Source Code
@@ -20,6 +23,7 @@ jobs:
         with:
           node-version: 22
           cache: 'npm'
+          cache-dependency-path: 'AI-TTNTTKD-main/package-lock.json'
 
       - name: Install Dependencies
         run: npm ci
@@ -49,8 +53,11 @@ jobs:
           npx tsx tests/p8_m3_assessment_explainer.test.ts
           npx tsx tests/p8_4_ui_integration.test.ts
 
-      - name: Run P9-M1 Hardening & Core Stability Suite
-        run: npx tsx tests/p9_m1_hardening.test.ts
+      - name: Run P9 Hardening & Observability Suites
+        run: |
+          npx tsx tests/p9_m1_hardening.test.ts
+          npx tsx tests/p9_m3_observability_resilience.test.ts
+          npx tsx tests/user_facing_report_adapter.test.ts
 
       - name: Build Production Client & Server Bundles
         run: npm run build
@@ -85,4 +92,3 @@ jobs:
           docker stop prod-test-container
           docker rm prod-test-container
           echo "Docker verification completed successfully."
-

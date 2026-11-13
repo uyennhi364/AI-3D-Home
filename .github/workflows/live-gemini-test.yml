@@ -12,6 +12,9 @@ jobs:
   verify-live-key:
     name: Live Google Gemini Endpoint Verification
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AI-TTNTTKD-main
 
     steps:
       - name: Checkout Source Code
@@ -22,6 +25,7 @@ jobs:
         with:
           node-version: 22
           cache: 'npm'
+          cache-dependency-path: 'AI-TTNTTKD-main/package-lock.json'
 
       - name: Install Dependencies
         run: npm ci
@@ -30,4 +34,3 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: npx tsx scripts/verify_live_gemini.ts
-
