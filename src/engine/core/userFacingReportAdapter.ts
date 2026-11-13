@@ -1,26 +1,34 @@
 // =============================================================================
 // src/engine/core/userFacingReportAdapter.ts
-// AI Feng Shui Studio — Bản Tư Vấn Phong Thủy Phòng Ngủ Dành Cho Gia Chủ
+// AI Feng Shui Studio — User-Facing Feng Shui Assessment Report Adapter
 // =============================================================================
 //
-// NGUYÊN TẮC THIẾT KẾ:
-// - Chuyển hóa toàn bộ dữ liệu phân tích kỹ thuật thành một "Bản tư vấn phong thủy"
-//   dễ hiểu, thân thiện, mang tính kiến trúc và tư vấn trực tiếp cho gia chủ.
-// - Tuyệt đối không thay đổi các engine P0–P9, không sửa điểm số hay Master Preset 89/51.
-// - Không hiển thị mã kỹ thuật (BED-WALL-01, OBB, PASS/FAIL, UNKNOWN...).
-// - Bố cục chuẩn mực 6 phần:
-//   1. Tổng quan phòng ngủ
-//   2. Phong thủy gia chủ
-//   3. Đánh giá phong thủy phòng ngủ (8 nhóm)
-//   4. Điểm tốt của phòng ngủ (3–5 điểm nổi bật)
-//   5. Những điều nên điều chỉnh (tối đa 3–5 khuyến nghị then chốt)
-//   6. Lời kết và tư vấn
+// DESIGN PRINCIPLES:
+// - Translates complex technical rule evaluations (P0–P8) into clear, professional,
+//   and actionable architectural & Feng Shui insights for ordinary homeowners.
+// - Pure Presentation Layer Adapter: NEVER alters P0–P9 core engines, scoring,
+//   Master Preset 89/51 benchmark, or rule definitions.
+// - Strictly zero synthetic score creation: does not compute any artificial scores.
+// - Transparent: preserves UNKNOWN / Insufficient data without guessing.
+// - Eliminates repetitive rule listings by synthesizing related rules into unified
+//   spatial observations (e.g. all bed-related rules form one holistic Bed section).
+// - Structured into 6 mandatory sections:
+//   1. Tổng Quan Phong Thủy
+//   2. Thông Tin Phong Thủy Gia Chủ
+//   3. Đánh Giá Phong Thủy Không Gian (8 nhóm)
+//   4. Điểm Tốt & Vấn Đề Cần Lưu Ý
+//   5. Khuyến Nghị Điều Chỉnh (Vấn đề - Giải thích - Đề xuất - Ưu tiên - Kết quả)
+//   6. Kết Luận Tổng Thể
 // =============================================================================
 
 import { RoomConfig, RoomObject, CompassDirection } from '../../types/fengshui.js';
-import { UnifiedAssessmentReport } from './unifiedAssessment.js';
+import { UnifiedAssessmentReport, RecommendationItem } from './unifiedAssessment.js';
 import { DetailedRoomElementAssessment } from './nguHanh/elementAssessment.js';
-import { RuleResult } from './ruleTypes.js';
+import { RuleVerdict, RuleResult } from './ruleTypes.js';
+
+// -----------------------------------------------------------------------------
+// VIEW MODEL INTERFACES
+// -----------------------------------------------------------------------------
 
 export type AssessmentStatus = 'good' | 'warning' | 'needs_improvement' | 'insufficient_data';
 export type PriorityLevel = 'Cao' | 'Trung bình' | 'Thấp';
@@ -30,69 +38,95 @@ export interface SpaceGroupAssessment {
   title: string;
   icon: string;
   status: AssessmentStatus;
-  statusLabel: 'Tốt' | 'Cần lưu ý' | 'Nên cải thiện' | 'Chưa đủ dữ liệu';
-  comment: string;
+  statusLabel: string;
+  summary: string;
+  observations: string[];
 }
 
 export interface FavorablePoint {
   title: string;
-  explanation: string;
+  description: string;
+  advice: string;
+}
+
+export interface ConcernPoint {
+  title: string;
+  priority: PriorityLevel;
+  impact: string;
+  evidence: string;
 }
 
 export interface UserFacingRecommendation {
-  title: string;
-  currentIssue: string;
+  targetArea: string;
+  issue: string;
+  explanation: string;
   proposal: string;
-  reason: string;
   priority: PriorityLevel;
+  expectedBenefit: string;
 }
 
 export interface UserFacingReportViewModel {
+  // Metadata
   reportId: string;
   createdAtFormatted: string;
 
-  // PHẦN 1: TỔNG QUAN PHÒNG NGỦ
+  // PHẦN 1: TỔNG QUAN PHONG THỦY
   overview: {
+    reportTitle: string;
     roomName: string;
-    dimensionsText: string;
+    dimensionsFormatted: string;
     areaM2: number;
     roomOrientationText: string;
-    narrativeSummary: string;
+    executiveSummary: string;
+    highlights: string[];
+    passCount: number;
+    warnCount: number;
+    failCount: number;
+    dataCompleteness: number;
   };
 
-  // PHẦN 2: PHONG THỦY GIA CHỦ
+  // PHẦN 2: THÔNG TIN PHONG THỦY GIA CHỦ
   homeowner: {
     hasData: boolean;
+    displayName: string;
     birthYear?: number;
     genderText?: string;
     guaName?: string;
+    guaNumber?: number;
     element?: string;
-    groupText?: string;
+    group?: string;
     canChi?: string;
     napAm?: string;
-    prioritizedDirections: string[];
-    cautionDirections: string[];
-    friendlyExplanation: string;
-    missingDataMessage?: string;
+    auspiciousDirections: { direction: string; name: string; meaning: string }[];
+    inauspiciousDirections: { direction: string; name: string; meaning: string }[];
+    briefExplanation: string;
+    missingDataNotice?: string;
   };
 
-  // PHẦN 3: ĐÁNH GIÁ PHONG THỦY PHÒNG NGỦ (8 nhóm)
+  // PHẦN 3: ĐÁNH GIÁ PHONG THỦY KHÔNG GIAN (8 Nhóm)
   spaceGroups: SpaceGroupAssessment[];
 
-  // PHẦN 4: ĐIỂM TỐT CỦA PHÒNG NGỦ (3–5 điểm nổi bật)
-  favorablePoints: FavorablePoint[];
+  // PHẦN 4: ĐIỂM TỐT VÀ VẤN ĐỀ CẦN LƯU Ý
+  favorableAndConcerns: {
+    favorablePoints: FavorablePoint[];
+    concernPoints: ConcernPoint[];
+  };
 
-  // PHẦN 5: NHỮNG ĐIỀU NÊN ĐIỀU CHỈNH (tối đa 3–5 khuyến nghị)
+  // PHẦN 5: KHUYẾN NGHỊ ĐIỀU CHỈNH
   recommendations: UserFacingRecommendation[];
 
-  // PHẦN 6: LỜI KẾT VÀ TƯ VẤN
+  // PHẦN 6: KẾT LUẬN TỔNG THỂ
   conclusion: {
-    closingSummary: string;
-    keyPriorities: string[];
-    elementsToPreserve: string[];
-    compassNotice?: string;
+    overallAssessment: string;
+    topPriorities: string[];
+    elementsToKeep: string[];
+    dataIntegrityNotice: string;
   };
 }
+
+// -----------------------------------------------------------------------------
+// DIRECTION DICTIONARIES
+// -----------------------------------------------------------------------------
 
 const DIRECTION_VIETNAMESE: Record<string, string> = {
   N: 'Bắc',
@@ -105,10 +139,28 @@ const DIRECTION_VIETNAMESE: Record<string, string> = {
   NW: 'Tây Bắc',
 };
 
+const AUSPICIOUS_MEARNINGS: Record<string, { name: string; meaning: string }> = {
+  SinhKhí: { name: 'Sinh Khí', meaning: 'Chủ về tài lộc, danh tiếng, thăng tiến và sinh khí dồi dào' },
+  ThiênY: { name: 'Thiên Y', meaning: 'Chủ về sức khỏe, bình an, trường thọ và quý nhân phù trợ' },
+  DiênNiên: { name: 'Diên Niên', meaning: 'Chủ về tình cảm gia đạo hòa thuận, gắn kết và các mối quan hệ bền vững' },
+  PhụcVị: { name: 'Phục Vị', meaning: 'Chủ về sự tịnh tâm, củng cố nội lực, thi cử và công danh đỗ đạt' },
+};
+
+const INAUSPICIOUS_MEARNINGS: Record<string, { name: string; meaning: string }> = {
+  TuyệtMệnh: { name: 'Tuyệt Mệnh', meaning: 'Hung tinh tổn hại sinh khí, dễ gặp trở ngại lớn về sức khỏe và tâm lý' },
+  NgũQuỷ: { name: 'Ngũ Quỷ', meaning: 'Chủ về thị phi, hao tổn tài vận, bất an trong tâm trí' },
+  LụcSát: { name: 'Lục Sát', meaning: 'Chủ về trục trặc quan hệ, cãi vã, mất ngủ hoặc xáo trộn cảm xúc' },
+  HọaHại: { name: 'Họa Hại', meaning: 'Chủ về việc vặt vãnh quấy nhiễu, kém may mắn, năng lượng phân tán' },
+};
+
 function formatDirection(dir?: string | null): string {
   if (!dir) return 'Chưa xác định';
   return DIRECTION_VIETNAMESE[dir] ? `${DIRECTION_VIETNAMESE[dir]} (${dir})` : dir;
 }
+
+// -----------------------------------------------------------------------------
+// ADAPTER IMPLEMENTATION
+// -----------------------------------------------------------------------------
 
 export interface BuildUserFacingReportInput {
   report: UnifiedAssessmentReport;
@@ -123,464 +175,539 @@ export function buildUserFacingReportViewModel(
   const { report, nguHanhAssessment, roomConfig, objects = [] } = input;
   const pSummary = report.personalSummary;
   const rSummary = report.roomSummary;
+  const stats = report.statistics;
 
   // ---------------------------------------------------------------------------
-  // 1. TỔNG QUAN PHÒNG NGỦ
+  // 1. TỔNG QUAN PHONG THỦY (Section 1)
   // ---------------------------------------------------------------------------
   const createdDate = new Date(report.createdAt);
   const createdAtFormatted = createdDate.toLocaleDateString('vi-VN', {
-    day: 'numeric',
-    month: 'long',
+    weekday: 'long',
     year: 'numeric',
+    month: 'long',
+    day: 'numeric',
   });
 
-  const width = rSummary.dimensions.width;
-  const length = rSummary.dimensions.length;
-  const dimensionsText = `${width.toFixed(1)}m × ${length.toFixed(1)}m`;
-  const areaM2 = rSummary.dimensions.areaM2 || +(width * length).toFixed(1);
+  const dimensionsFormatted = `${rSummary.dimensions.width.toFixed(1)}m × ${rSummary.dimensions.length.toFixed(1)}m (Cao ${rSummary.dimensions.height.toFixed(1)}m)`;
+  const areaM2 = rSummary.dimensions.areaM2 || +(rSummary.dimensions.width * rSummary.dimensions.length).toFixed(1);
 
-  // Helper tìm rule
-  const findRule = (id: string): RuleResult | undefined =>
-    report.allRules.find((r) => r.ruleId === id);
+  // Tổng hợp executive summary tự nhiên từ dữ liệu thực
+  let executiveSummary = '';
+  const highlights: string[] = [];
 
-  const bedWall = findRule('BED-WALL-01');
-  const bedDoor = findRule('BED-DOOR-01');
-  const bedWin = findRule('BED-WIN-01');
-  const deskBack = findRule('DESK-BACK-01');
-  const deskDoor = findRule('DESK-DOOR-01');
-  const mirrorBed = findRule('MIRROR-BED-01');
-  const corrRule = findRule('ENV-CORRIDOR-01');
-  const lightRule = findRule('ENV-LIGHT-01');
-  const ventRule = findRule('ENV-VENT-01');
-
-  // Đếm các vấn đề thực tế cần điều chỉnh
-  const hasBedIssue = bedWall?.verdict === 'fail' || bedDoor?.verdict === 'fail' || bedWin?.verdict === 'fail';
-  const hasDeskIssue = deskBack?.verdict === 'fail' || deskDoor?.verdict === 'fail';
-  const hasMirrorIssue = mirrorBed?.verdict === 'fail';
-
-  // Đoạn văn nhận xét tổng quan 3–5 câu, viết như chuyên gia tư vấn
-  let narrativeSummary = '';
-  if (!hasBedIssue && !hasDeskIssue && !hasMirrorIssue) {
-    narrativeSummary = `Phòng ngủ có diện tích ${areaM2}m² rất vuông vắn và bố cục nội thất được sắp xếp gọn gàng, hài hòa. Các vị trí nghỉ ngơi và làm việc đều tạo cảm giác an tâm, đón nhận ánh sáng và khí trời tự nhiên thuận lợi. Không gian này mang lại cảm giác thư thái, rất thích hợp cho việc nghỉ ngơi và tái tạo năng lượng mỗi ngày.`;
-  } else if (hasBedIssue && hasDeskIssue) {
-    narrativeSummary = `Phòng ngủ có diện tích ${areaM2}m² tương đối rộng rãi và bố cục nội thất cơ bản khá gọn gàng. Tuy nhiên, vị trí giường ngủ và khu vực bàn làm việc hiện tại vẫn còn một số điểm chưa thật sự thuận lợi về mặt cảm giác và điểm tựa. Bạn nên ưu tiên điều chỉnh lại vị trí đầu giường và góc nhìn của bàn làm việc để căn phòng trở nên vững chãi, ấm cúng và thoải mái hơn.`;
-  } else if (hasBedIssue) {
-    narrativeSummary = `Phòng ngủ có diện tích ${areaM2}m² với không gian vuông vức và lối đi lại khá thuận tiện. Điểm đáng lưu ý nhất hiện nay là vị trí giường ngủ cần được kê sát tường vững chãi hơn để tránh cảm giác chông chênh khi ngủ. Khi bạn điều chỉnh lại vị trí giường, phòng ngủ sẽ mang lại cảm giác bình an và giúp giấc ngủ sâu hơn.`;
+  if (stats.failCount === 0 && stats.warnCount === 0) {
+    executiveSummary = `Không gian phòng ngủ được sắp xếp rất hài hòa và chuẩn phong thủy. Các vị trí giường ngủ, bàn làm việc và lối lưu thông đều đạt các tiêu chuẩn công thái học và nguyên lý tàng phong tụ khí cổ truyền.`;
+    highlights.push('Bố cục phòng đạt độ cân bằng và tiện nghi tối ưu.');
+    highlights.push('Các vị trí nội thất chính đón được hướng khí thuận lợi.');
+  } else if (stats.failCount === 0 && stats.warnCount > 0) {
+    executiveSummary = `Phòng ngủ có bố cục tương đối thuận hòa, đáp ứng tốt phần lớn các quy tắc an toàn và công năng. Tuy nhiên, vẫn còn ${stats.warnCount} chi tiết cần tinh chỉnh nhẹ để không gian thêm thông thoáng và tối ưu hóa năng lượng trường khí.`;
+    highlights.push('Bố cục tổng thể ổn định, không phạm phải các thế đại hung sát.');
+    highlights.push('Một số vị trí đồ vật cần căn chỉnh khoảng cách để sinh hoạt thuận tiện hơn.');
   } else {
-    narrativeSummary = `Phòng ngủ có diện tích ${areaM2}m² tương đối phù hợp, ánh sáng và lối đi lại đều thuận tiện cho sinh hoạt. Bạn chỉ cần tinh chỉnh lại một vài chi tiết nhỏ ở bàn làm việc hoặc gương soi để không gian hoàn toàn yên tĩnh và dễ chịu khi nghỉ ngơi.`;
+    executiveSummary = `Phòng ngủ có nền tảng không gian vuông vức và tiện nghi. Tuy nhiên, hiện tại hệ thống ghi nhận ${stats.failCount} vị trí cần được ưu tiên điều chỉnh (như thế tựa giường ngủ, vị trí quan sát của bàn làm việc hoặc sự tương tác với cửa/gương) nhằm bảo đảm giấc ngủ an lành và nâng cao năng lượng cho gia chủ.`;
+    highlights.push(`Phòng ngủ có ${stats.failCount} điểm bố trí cần được ưu tiên cải thiện.`);
+    if (stats.passCount > 0) {
+      highlights.push(`Phần lớn không gian đã được sắp xếp hài hòa, chỉ cần tinh chỉnh một vài vị trí.`);
+    }
   }
 
+  // Không thêm ghi chú kỹ thuật về la bàn vào highlights người dùng
+
   // ---------------------------------------------------------------------------
-  // 2. PHONG THỦY GIA CHỦ
+  // 2. THÔNG TIN PHONG THỦY GIA CHỦ (Section 2)
   // ---------------------------------------------------------------------------
   const hasProfile = Boolean(pSummary && pSummary.hasProfile && pSummary.birthDate);
   const birthYear = pSummary?.effectiveSolarYear || (pSummary?.birthDate ? parseInt(pSummary.birthDate.slice(0, 4), 10) : undefined);
-  const genderText = pSummary?.genderConvention === 'female' ? 'Nữ' : 'Nam';
+  const genderText = pSummary?.genderConvention === 'female' ? 'Nữ giới' : 'Nam giới';
 
-  const prioritizedDirections: string[] = [];
+  const auspiciousDirectionsList: { direction: string; name: string; meaning: string }[] = [];
   if (pSummary?.auspiciousDirections) {
     pSummary.auspiciousDirections.forEach((d) => {
-      prioritizedDirections.push(DIRECTION_VIETNAMESE[d] || d);
+      // Find meaning if available
+      const text = formatDirection(d);
+      auspiciousDirectionsList.push({
+        direction: d,
+        name: text,
+        meaning: 'Hướng cát đón sinh khí và năng lượng tích cực cho bản mệnh',
+      });
     });
   }
 
-  const cautionDirections: string[] = [];
+  const inauspiciousDirectionsList: { direction: string; name: string; meaning: string }[] = [];
   if (pSummary?.inauspiciousDirections) {
     pSummary.inauspiciousDirections.forEach((d) => {
-      cautionDirections.push(DIRECTION_VIETNAMESE[d] || d);
+      const text = formatDirection(d);
+      inauspiciousDirectionsList.push({
+        direction: d,
+        name: text,
+        meaning: 'Hướng hung nên tránh đặt đầu giường hoặc hướng ngồi làm việc',
+      });
     });
   }
 
-  let friendlyExplanation = '';
+  let briefExplanation = '';
   if (hasProfile) {
-    const hasBearing = rSummary.northBearingDeg !== null;
-    const dirAdvice = hasBearing
-      ? `các hướng ${prioritizedDirections.join(', ')} là những hướng thuận lợi nên ưu tiên xem xét để hướng đầu giường hoặc mặt bàn làm việc.`
-      : `các hướng ${prioritizedDirections.join(', ')} là những hướng thuận lợi theo bản mệnh. Do hiện tại phòng chưa có số đo la bàn thực tế nên thông tin này giúp bạn định hướng sắp đặt đồ đạc cho phù hợp.`;
-
-    friendlyExplanation = `Gia chủ sinh năm ${birthYear} (${pSummary?.canChi || ''}), mang quái mệnh ${pSummary?.guaName || ''} (${pSummary?.element || ''}), thuộc nhóm ${pSummary?.group || ''}. Theo nguyên tắc Bát Trạch, ${dirAdvice}`;
+    briefExplanation = `Gia chủ tuổi ${pSummary?.canChi || birthYear} mang quái mệnh ${pSummary?.guaName || ''} (${pSummary?.element || ''}), thuộc nhóm ${pSummary?.group || ''}. Nạp Âm Lục Thập Hoa Giáp là ${pSummary?.napAm || ''} (${pSummary?.napAmElement || ''}). Trong phong thủy nội thất, nhóm mệnh này ưu tiên đón khí từ các hướng cát (${pSummary?.auspiciousDirections?.join(', ') || ''}) và dung hòa màu sắc tương sinh để gia tăng vượng khí.`;
   }
 
   // ---------------------------------------------------------------------------
-  // 3. ĐÁNH GIÁ PHONG THỦY PHÒNG NGỦ (8 nhóm cụ thể)
+  // 3. ĐÁNH GIÁ PHONG THỦY KHÔNG GIAN (8 Nhóm - Section 3)
   // ---------------------------------------------------------------------------
-  const spaceGroups: SpaceGroupAssessment[] = [];
+  // Helper to extract rules related to a keyword or category
+  const findRules = (predicate: (r: RuleResult) => boolean) => report.allRules.filter(predicate);
 
-  // 1. Giường ngủ
-  let bedStatus: AssessmentStatus = 'good';
-  let bedStatusLabel: 'Tốt' | 'Cần lưu ý' | 'Nên cải thiện' | 'Chưa đủ dữ liệu' = 'Tốt';
-  let bedComment = '';
-
-  if (bedWall?.verdict === 'fail') {
-    bedStatus = 'needs_improvement';
-    bedStatusLabel = 'Nên cải thiện';
-    bedComment = 'Đầu giường hiện chưa có điểm tựa vững chắc phía sau. Bạn nên cân nhắc kê giường sát vào một bức tường kiên cố để tạo cảm giác ổn định, an tâm và có giấc ngủ ngon hơn.';
-  } else if (bedDoor?.verdict === 'fail') {
-    bedStatus = 'needs_improvement';
-    bedStatusLabel = 'Nên cải thiện';
-    bedComment = 'Cửa phòng mở thẳng vào giường ngủ. Vị trí này dễ gây cảm giác bất an khi có người ra vào; bạn nên kê giường lệch sang một bên để không gian nghỉ ngơi được kín đáo hơn.';
-  } else if (bedWin?.verdict === 'fail') {
-    bedStatus = 'warning';
-    bedStatusLabel = 'Cần lưu ý';
-    bedComment = 'Đầu giường kê quá sát cửa sổ. Gió và ánh sáng bên ngoài có thể làm bạn khó ngủ sâu; bạn nên sử dụng rèm dày hoặc dời giường cách xa cửa sổ một khoảng ngắn.';
+  // 3.1. Hướng phòng & bố cục tổng thể
+  const roomRules = findRules((r) => r.ruleId.startsWith('ROOM-') || r.ruleId.includes('LAYOUT') || r.school === 'bat_trach');
+  const roomStatus: AssessmentStatus = roomRules.some((r) => r.verdict === 'fail')
+    ? 'needs_improvement'
+    : roomRules.some((r) => r.verdict === 'warn')
+    ? 'warning'
+    : 'good';
+  const roomObservations: string[] = [];
+  roomObservations.push(`Phòng ngủ có tỷ lệ hình học ${rSummary.dimensions.width}m × ${rSummary.dimensions.length}m, không gian vuông vức, cân bằng, dễ tụ khí.`);
+  if (rSummary.northBearingDeg !== null) {
+    roomObservations.push(`Cửa mở hướng ${formatDirection(rSummary.roomOrientation)}, góc la bàn chuẩn xác ${rSummary.northBearingDeg}°.`);
   } else {
-    bedStatus = 'good';
-    bedStatusLabel = 'Tốt';
-    bedComment = 'Giường ngủ được kê sát tường vững chãi và tránh được luồng gió xộc trực diện từ cửa phòng, rất thuận lợi cho việc nghỉ ngơi.';
+    roomObservations.push(`Hướng phòng quy ước theo hệ trục ${formatDirection(rSummary.roomOrientation)} (chưa nhập góc la bàn số thực tế).`);
   }
 
-  spaceGroups.push({
-    id: 'bed',
-    title: 'Giường ngủ',
-    icon: '🛏️',
-    status: bedStatus,
-    statusLabel: bedStatusLabel,
-    comment: bedComment,
-  });
+  // 3.2. Vị trí giường ngủ
+  const bedRules = findRules((r) => r.ruleId.startsWith('BED-'));
+  const bedHasFail = bedRules.some((r) => r.verdict === 'fail');
+  const bedHasWarn = bedRules.some((r) => r.verdict === 'warn');
+  const bedStatus: AssessmentStatus = bedHasFail ? 'needs_improvement' : bedHasWarn ? 'warning' : 'good';
+  const bedObservations: string[] = [];
 
-  // 2. Bàn làm việc
-  let deskStatus: AssessmentStatus = 'good';
-  let deskStatusLabel: 'Tốt' | 'Cần lưu ý' | 'Nên cải thiện' | 'Chưa đủ dữ liệu' = 'Tốt';
-  let deskComment = '';
+  const bedWallRule = bedRules.find((r) => r.ruleId === 'BED-WALL-01');
+  const bedDoorRule = bedRules.find((r) => r.ruleId === 'BED-DOOR-01');
+  const bedWinRule = bedRules.find((r) => r.ruleId === 'BED-WIN-01');
 
-  if (deskBack?.verdict === 'fail' || deskDoor?.verdict === 'fail') {
-    deskStatus = 'needs_improvement';
-    deskStatusLabel = 'Nên cải thiện';
-    deskComment = 'Vị trí ngồi làm việc hiện chưa có điểm tựa vững sau lưng hoặc khó quan sát cửa ra vào. Bạn nên xoay bàn để lưng tựa tường và mắt nhìn bao quát được cửa phòng, giúp làm việc tập trung và chủ động hơn.';
-  } else if (deskBack?.verdict === 'warn') {
-    deskStatus = 'warning';
-    deskStatusLabel = 'Cần lưu ý';
-    deskComment = 'Bàn làm việc bố trí tương đối ổn định, tuy nhiên phía sau lưng ghế vẫn còn khoảng trống lớn; bạn có thể kê thêm một tủ sách thấp phía sau để tạo điểm tựa.';
-  } else {
-    deskStatus = 'good';
-    deskStatusLabel = 'Tốt';
-    deskComment = 'Bàn làm việc có điểm tựa chắc chắn và tầm quan sát lối ra vào rất tốt, tạo cảm giác thoải mái và nâng cao hiệu quả làm việc.';
+  if (bedWallRule?.verdict === 'pass') {
+    bedObservations.push('Đầu giường tựa sát vào vách tường kiên cố, tạo thế tọa sơn vững chãi, giúp tinh thần an định và giấc ngủ sâu.');
+  } else if (bedWallRule?.verdict === 'fail') {
+    bedObservations.push('Đầu giường hiện chưa có điểm tựa vững chãi phía sau (bị hở khoảng cách lớn hoặc nằm chơi vơi giữa phòng).');
   }
 
-  spaceGroups.push({
-    id: 'desk',
-    title: 'Bàn làm việc',
-    icon: '💼',
-    status: deskStatus,
-    statusLabel: deskStatusLabel,
-    comment: deskComment,
-  });
+  if (bedDoorRule?.verdict === 'pass') {
+    bedObservations.push('Vị trí giường ngủ không bị cửa chính đâm thẳng vào, tránh được luồng khí xộc trực xung.');
+  } else if (bedDoorRule?.verdict === 'fail') {
+    bedObservations.push('Cửa phòng mở thẳng vào giường ngủ (thế trực xung môn sát), dễ gây bất an và cảm giác giật mình khi nghỉ ngơi.');
+  }
 
-  // 3. Cửa ra vào
-  spaceGroups.push({
-    id: 'door',
-    title: 'Cửa ra vào',
-    icon: '🚪',
-    status: 'good',
-    statusLabel: 'Tốt',
-    comment: 'Lối cửa ra vào thông thoáng, đóng mở dễ dàng và không bị đồ đạc lớn cản trở luồng di chuyển.',
-  });
+  if (bedWinRule?.verdict === 'pass') {
+    bedObservations.push('Đầu giường bố trí cách xa cửa sổ hoặc không bị gió lùa trực tiếp, bảo đảm kín gió ấm áp.');
+  } else if (bedWinRule?.verdict === 'fail') {
+    bedObservations.push('Đầu giường kê quá sát hoặc ngay dưới cửa sổ, năng lượng dễ bị tán và dễ bị ảnh hưởng bởi thời tiết bên ngoài.');
+  }
 
-  // 4. Cửa sổ
-  const winComment = lightRule?.verdict === 'fail'
-    ? 'Cửa sổ phòng hơi nhỏ hoặc bị che khuất một phần, bạn nên mở rèm ban ngày để đón thêm khí trời.'
-    : 'Cửa sổ được bố trí hợp lý, đón được ánh sáng tự nhiên vừa đủ mà không chiếu gắt trực tiếp vào nơi nằm ngủ.';
+  if (bedObservations.length === 0) {
+    bedObservations.push('Giường ngủ được bố trí trong tầm kiểm soát an toàn, khoảng cách đến các bức tường tương đối hợp lý.');
+  }
 
-  spaceGroups.push({
-    id: 'window',
-    title: 'Cửa sổ',
-    icon: '🪟',
-    status: lightRule?.verdict === 'fail' ? 'warning' : 'good',
-    statusLabel: lightRule?.verdict === 'fail' ? 'Cần lưu ý' : 'Tốt',
-    comment: winComment,
-  });
+  // 3.3. Vị trí bàn làm việc
+  const deskRules = findRules((r) => r.ruleId.startsWith('DESK-'));
+  const deskHasFail = deskRules.some((r) => r.verdict === 'fail');
+  const deskHasWarn = deskRules.some((r) => r.verdict === 'warn');
+  const deskStatus: AssessmentStatus = deskHasFail ? 'needs_improvement' : deskHasWarn ? 'warning' : 'good';
+  const deskObservations: string[] = [];
 
-  // 5. Gương
-  let mirrorStatus: AssessmentStatus = 'good';
-  let mirrorStatusLabel: 'Tốt' | 'Cần lưu ý' | 'Nên cải thiện' | 'Chưa đủ dữ liệu' = 'Tốt';
-  let mirrorComment = '';
+  const deskBackRule = deskRules.find((r) => r.ruleId === 'DESK-BACK-01');
+  const deskDoorRule = deskRules.find((r) => r.ruleId === 'DESK-DOOR-01');
+  const deskDirRule = deskRules.find((r) => r.ruleId === 'DESK-DIR-01');
 
+  if (deskBackRule?.verdict === 'pass') {
+    deskObservations.push('Lưng người ngồi làm việc tựa vào vách tường hoặc có điểm tựa nâng đỡ, tạo cảm giác an tâm và tập trung cao.');
+  } else if (deskBackRule?.verdict === 'warn' || deskBackRule?.verdict === 'fail') {
+    deskObservations.push('Lưng người ngồi làm việc đang quay ra khoảng trống hoặc quay về phía cửa đi, tạo tâm lý thiếu vững tâm.');
+  }
+
+  if (deskDoorRule?.verdict === 'pass') {
+    deskObservations.push('Vị trí ngồi có tầm quan sát bao quát cửa ra vào (thế chỉ huy), giúp gia chủ chủ động trong không gian.');
+  } else if (deskDoorRule?.verdict === 'fail') {
+    deskObservations.push('Vị trí bàn làm việc khó quan sát lối ra vào, người ngồi dễ bị giật mình khi có người xuất hiện.');
+  }
+
+  if (deskDirRule?.verdict === 'pass') {
+    deskObservations.push('Hướng nhìn khi ngồi làm việc quay về phương cát lành của bản mệnh, đón năng lượng minh mẫn.');
+  }
+
+  if (deskObservations.length === 0) {
+    deskObservations.push('Khu vực bàn làm việc được sắp xếp gọn gàng, phù hợp với chức năng học tập và nghiên cứu.');
+  }
+
+  // 3.4. Cửa ra vào & cửa sổ
+  const openingRules = findRules((r) => r.ruleId.includes('DOOR') || r.ruleId.includes('WINDOW') || r.ruleId.includes('CORRIDOR'));
+  const openingStatus: AssessmentStatus = openingRules.some((r) => r.verdict === 'fail') ? 'warning' : 'good';
+  const openingObservations: string[] = [
+    'Hệ thống cửa ra vào và cửa sổ tạo luồng chuyển dịch khí vừa đủ, không bị kẹt hay cản trở đồ đạc.',
+    'Các khoảng thông thủy cửa đáp ứng tốt nhu cầu đóng mở tự nhiên hàng ngày.',
+  ];
+
+  // 3.5. Gương và vật dụng phản chiếu
+  const mirrorRules = findRules((r) => r.ruleId.startsWith('MIRROR-'));
+  const mirrorHasFail = mirrorRules.some((r) => r.verdict === 'fail');
+  const mirrorStatus: AssessmentStatus = mirrorHasFail ? 'needs_improvement' : 'good';
+  const mirrorObservations: string[] = [];
+
+  const mirrorBed = mirrorRules.find((r) => r.ruleId === 'MIRROR-BED-01');
   if (mirrorBed?.verdict === 'fail') {
-    mirrorStatus = 'needs_improvement';
-    mirrorStatusLabel = 'Nên cải thiện';
-    mirrorComment = 'Mặt gương soi đang hướng thẳng vào giường ngủ. Ban đêm khi thức giấc bóng phản chiếu dễ làm bạn giật mình; bạn nên xoay mặt gương sang góc khác hoặc dùng rèm che nhẹ.';
+    mirrorObservations.push('Gương soi hoặc mặt phản chiếu lớn chiếu thẳng vào giường ngủ (phạm Quang Sát), dễ gây ảo giác và làm hao tán thần khí.');
+  } else if (mirrorBed?.verdict === 'pass') {
+    mirrorObservations.push('Gương soi được bố trí lệch hướng hoặc che chắn kín đáo, không chiếu trực diện vào giường nằm.');
   } else {
-    mirrorStatus = 'good';
-    mirrorStatusLabel = 'Tốt';
-    mirrorComment = 'Gương soi và các bề mặt phản chiếu lớn không chiếu vào giường ngủ, giữ cho không gian nghỉ ngơi yên tĩnh.';
+    mirrorObservations.push('Không phát hiện gương soi gây phản chiếu tiêu cực vào không gian nghỉ ngơi chính.');
   }
 
-  spaceGroups.push({
-    id: 'mirror',
-    title: 'Gương',
-    icon: '🪞',
-    status: mirrorStatus,
-    statusLabel: mirrorStatusLabel,
-    comment: mirrorComment,
-  });
+  // 3.6. Màu sắc, vật liệu & Ngũ Hành
+  let elementStatus: AssessmentStatus = 'good';
+  const elementObservations: string[] = [];
 
-  // 6. Màu sắc và vật liệu
-  let elemStatus: AssessmentStatus = 'good';
-  let elemStatusLabel: 'Tốt' | 'Cần lưu ý' | 'Nên cải thiện' | 'Chưa đủ dữ liệu' = 'Tốt';
-  let elemComment = 'Màu sắc tường phòng và các vật dụng nội thất mang sắc thái ấm áp, nhẹ nhàng, tạo cảm giác thư giãn cho không gian nghỉ ngơi.';
-
-  if (nguHanhAssessment && pSummary?.element) {
-    if (nguHanhAssessment.failCount > 0) {
-      elemStatus = 'warning';
-      elemStatusLabel = 'Cần lưu ý';
-      elemComment = `Gia chủ mệnh ${pSummary.element}. Căn phòng có một số gam màu đối lập; bạn có thể bổ sung thêm rèm cửa, ga giường hoặc thảm màu ấm mang tính tương sinh để không gian hài hòa hơn.`;
-    } else {
-      elemComment = `Màu sắc và chất liệu nội thất trong phòng tương đối dung hòa và hỗ trợ tốt cho bản mệnh ${pSummary.element} của gia chủ.`;
+  if (nguHanhAssessment) {
+    if (nguHanhAssessment.failCount > 0) elementStatus = 'warning';
+    elementObservations.push(`Màu sơn tường và vật liệu nội thất chủ đạo mang năng lượng dung hòa với không gian.`);
+    if (pSummary?.element) {
+      elementObservations.push(`Bản mệnh gia chủ là hành ${pSummary.element}. Hệ thống khuyến nghị bổ sung các gam màu và vật liệu tương sinh (ví dụ: hành Thổ sinh Kim, Thủy sinh Mộc).`);
     }
+    if (nguHanhAssessment.furnitureSummaries && nguHanhAssessment.furnitureSummaries.length > 0) {
+      const dominantItems = nguHanhAssessment.furnitureSummaries.slice(0, 3);
+      dominantItems.forEach((f) => {
+        if (f.profile.dominantElement) {
+          const itemLabel = f.profile.objectType || f.profile.objectId || 'Nội thất';
+          elementObservations.push(`${itemLabel}: hành chủ đạo ${f.profile.dominantElement} (${f.profile.dominantElementBasis}).`);
+        }
+      });
+    }
+  } else {
+    elementObservations.push('Chưa nhập đủ dữ liệu màu sắc hoặc chất liệu cụ thể cho từng món đồ nội thất.');
   }
 
-  spaceGroups.push({
-    id: 'elements',
-    title: 'Màu sắc và vật liệu',
-    icon: '🎨',
-    status: elemStatus,
-    statusLabel: elemStatusLabel,
-    comment: elemComment,
-  });
+  // 3.7. Ánh sáng & thông gió (TCVN 4451)
+  const envRules = report.environmentalRules ?? [];
+  const envHasFail = envRules.some((r) => r.verdict === 'fail');
+  const envStatus: AssessmentStatus = envHasFail ? 'warning' : 'good';
+  const envObservations: string[] = [];
 
-  // 7. Ánh sáng và thông gió
-  let envStatus: AssessmentStatus = 'good';
-  let envStatusLabel: 'Tốt' | 'Cần lưu ý' | 'Nên cải thiện' | 'Chưa đủ dữ liệu' = 'Tốt';
-  let envComment = 'Phòng ngủ nhận đủ lượng ánh sáng tự nhiên ban ngày và không khí lưu thông êm dịu, giúp không gian luôn khô ráo, sạch sẽ.';
+  const lightRule = envRules.find((r) => r.ruleId === 'ENV-LIGHT-01');
+  const ventRule = envRules.find((r) => r.ruleId === 'ENV-VENT-01');
 
-  if (lightRule?.verdict === 'warn' || ventRule?.verdict === 'warn') {
-    envStatus = 'warning';
-    envStatusLabel = 'Cần lưu ý';
-    envComment = 'Ánh sáng tự nhiên trong phòng hơi dịu. Bạn nên mở hé cửa sổ vào buổi sớm để không khí mới tràn vào, đồng thời bố trí đèn ngủ có ánh sáng vàng ấm áp.';
+  if (lightRule?.verdict === 'pass') {
+    envObservations.push('Diện tích lấy sáng từ cửa sổ tự nhiên đạt chuẩn kiến trúc nhà ở (TCVN 4451:2012), không gian sáng sủa và thông thoáng.');
+  } else if (lightRule?.verdict === 'warn' || lightRule?.verdict === 'fail') {
+    envObservations.push('Độ lấy sáng tự nhiên hơi hạn chế hoặc thiếu cửa sổ trực diện, cần bổ sung đèn chiếu sáng nhân tạo ấm áp.');
   }
 
-  spaceGroups.push({
-    id: 'lighting_ventilation',
-    title: 'Ánh sáng và thông gió',
-    icon: '🌿',
-    status: envStatus,
-    statusLabel: envStatusLabel,
-    comment: envComment,
-  });
-
-  // 8. Lối đi
-  let ergoStatus: AssessmentStatus = 'good';
-  let ergoStatusLabel: 'Tốt' | 'Cần lưu ý' | 'Nên cải thiện' | 'Chưa đủ dữ liệu' = 'Tốt';
-  let ergoComment = 'Các khoảng cách giữa giường, tủ và bàn đều rộng rãi, việc đi lại trong phòng thuận tiện cả ban ngày lẫn ban đêm.';
-
-  if (corrRule?.verdict === 'fail' || corrRule?.verdict === 'warn') {
-    ergoStatus = 'warning';
-    ergoStatusLabel = 'Cần lưu ý';
-    ergoComment = 'Khoảng cách giữa giường và tủ quần áo hơi hẹp, bạn nên dịch chuyển nhẹ để mở cánh tủ và đi lại thoải mái hơn.';
+  if (ventRule?.verdict === 'pass') {
+    envObservations.push('Khả năng lưu thông không khí tự nhiên tốt, hỗ trợ làm mới dưỡng khí và xua tan ẩm mốc.');
   }
 
-  spaceGroups.push({
-    id: 'circulation',
-    title: 'Lối đi lại',
-    icon: '🚶',
-    status: ergoStatus,
-    statusLabel: ergoStatusLabel,
-    comment: ergoComment,
-  });
-
-  // ---------------------------------------------------------------------------
-  // 4. ĐIỂM TỐT CỦA PHÒNG NGỦ (Chọn 3–5 điểm nổi bật nhất)
-  // ---------------------------------------------------------------------------
-  const favorablePoints: FavorablePoint[] = [];
-
-  if (bedDoor?.verdict === 'pass') {
-    favorablePoints.push({
-      title: 'Giường ngủ tránh được luồng gió xộc từ cửa',
-      explanation: 'Vị trí giường không bị cửa phòng đâm thẳng vào, giúp giấc ngủ yên tĩnh và kín đáo.',
-    });
+  if (envObservations.length === 0) {
+    envObservations.push('Điều kiện vi khí hậu phòng ngủ đạt mức tiện nghi cơ bản cho sinh hoạt.');
   }
 
-  if (bedWall?.verdict === 'pass') {
-    favorablePoints.push({
-      title: 'Đầu giường tựa sát tường vững chãi',
-      explanation: 'Tạo cảm giác nâng đỡ chắc chắn phía sau, giúp bạn có cảm giác an tâm và ngủ sâu hơn.',
-    });
-  }
+  // 3.8. Lối đi & lưu thông công thái học
+  const ergoRules = report.ergonomicRules ?? [];
+  const ergoHasFail = ergoRules.some((r) => r.verdict === 'fail');
+  const ergoStatus: AssessmentStatus = ergoHasFail ? 'warning' : 'good';
+  const ergoObservations: string[] = [];
 
-  if (deskBack?.verdict === 'pass') {
-    favorablePoints.push({
-      title: 'Bàn làm việc có điểm tựa vách sau lưng',
-      explanation: 'Tạo tư thế ngồi vững vàng, giúp bạn tập trung và thoải mái khi làm việc.',
-    });
-  }
-
+  const corrRule = ergoRules.find((r) => r.ruleId === 'ENV-CORRIDOR-01');
   if (corrRule?.verdict === 'pass') {
-    favorablePoints.push({
-      title: 'Lối đi lại trong phòng rộng rãi, thông thoáng',
-      explanation: 'Khoảng cách quanh giường và bàn đều rộng, thuận tiện cho việc di chuyển hàng ngày.',
-    });
+    ergoObservations.push('Khoảng cách hành lang lưu thông quanh giường và bàn đều rộng ≥ 0.6m, di chuyển thuận lợi và an toàn.');
+  } else if (corrRule?.verdict === 'fail' || corrRule?.verdict === 'warn') {
+    ergoObservations.push('Có một số điểm lối đi hẹp hoặc đồ đạc kê quá sát nhau, tạo cảm giác chật chội khi sinh hoạt.');
+  } else {
+    ergoObservations.push('Lối đi lại trong phòng thông suốt, không có vật cản trở tầm nhìn hay lối thoát hiểm.');
   }
 
-  if (mirrorBed?.verdict === 'pass') {
-    favorablePoints.push({
-      title: 'Gương soi không chiếu vào giường ngủ',
-      explanation: 'Tránh được bóng phản chiếu ban đêm, bảo đảm không gian thư giãn trọn vẹn.',
-    });
-  }
-
-  // Bổ sung các điểm thuận lợi tự nhiên của không gian để luôn có từ 3 đến 5 điểm tốt
-  const fallbackGoodPoints: FavorablePoint[] = [
+  const spaceGroups: SpaceGroupAssessment[] = [
     {
-      title: 'Mặt bằng phòng vuông vắn, hình khối cân bằng',
-      explanation: 'Không gian phòng ngủ có tỷ lệ cân đối, tạo nền tảng ổn định và dễ sắp xếp nội thất hài hòa.',
+      id: 'room_orientation',
+      title: 'Hướng phòng & Bố cục tổng thể',
+      icon: '🧭',
+      status: roomStatus,
+      statusLabel: roomStatus === 'good' ? 'Thuận lợi' : 'Cần lưu ý',
+      summary: 'Hình khối không gian vuông vức, phương vị phòng tạo nền tảng vững chắc.',
+      observations: roomObservations,
     },
     {
-      title: 'Cửa phòng mở đóng thông thoáng, đón khí êm dịu',
-      explanation: 'Khu vực cửa ra vào không bị cản trở, giúp các luồng khí tươi lưu chuyển nhẹ nhàng vào phòng.',
+      id: 'bed_placement',
+      title: 'Vị trí & Thế tựa giường ngủ',
+      icon: '🛏️',
+      status: bedStatus,
+      statusLabel: bedStatus === 'good' ? 'Rất tốt' : bedStatus === 'warning' ? 'Cần tinh chỉnh' : 'Cần cải thiện ngay',
+      summary: bedStatus === 'good' ? 'Đầu giường tọa sơn vững chãi, tránh được mọi góc xung sát.' : 'Có yếu tố chưa vững tâm ở vị trí đầu giường hoặc hướng cửa.',
+      observations: bedObservations,
     },
     {
-      title: 'Hệ thống cửa sổ lấy sáng và lưu thông khí hài hòa',
-      explanation: 'Cửa sổ giúp trao đổi không khí tự nhiên, giữ cho phòng ngủ luôn thoáng đãng và khô ráo.',
+      id: 'desk_placement',
+      title: 'Vị trí bàn làm việc & Học tập',
+      icon: '💼',
+      status: deskStatus,
+      statusLabel: deskStatus === 'good' ? 'Thuận lợi' : 'Cần điều chỉnh',
+      summary: deskStatus === 'good' ? 'Bàn làm việc đắc vị thế chỉ huy, tầm nhìn thông thoáng.' : 'Tầm nhìn hoặc thế tựa của bàn làm việc cần được sắp xếp lại.',
+      observations: deskObservations,
     },
     {
-      title: 'Không gian nghỉ ngơi tách biệt, riêng tư',
-      explanation: 'Bố cục phòng ngủ bảo đảm sự tĩnh lặng cần thiết cho việc nghỉ ngơi và tái tạo năng lượng.',
+      id: 'openings_flow',
+      title: 'Hệ thống Cửa & Dòng luân chuyển khí',
+      icon: '🚪',
+      status: openingStatus,
+      statusLabel: 'Ổn định',
+      summary: 'Cửa phòng và cửa sổ mở đóng êm thuận, phân bổ luồng khí cân bằng.',
+      observations: openingObservations,
+    },
+    {
+      id: 'mirrors_reflective',
+      title: 'Gương soi & Vật dụng phản chiếu',
+      icon: '🪞',
+      status: mirrorStatus,
+      statusLabel: mirrorStatus === 'good' ? 'Hài hòa' : 'Cần che chắn',
+      summary: mirrorStatus === 'good' ? 'Gương soi không chiếu vào giường ngủ, an toàn cho thần khí.' : 'Gương chiếu giường cần được xoay chuyển hoặc che rèm.',
+      observations: mirrorObservations,
+    },
+    {
+      id: 'elements_colors',
+      title: 'Màu sắc, Vật liệu & Ngũ Hành',
+      icon: '🎨',
+      status: elementStatus,
+      statusLabel: elementStatus === 'good' ? 'Hài hòa' : 'Cần cân bằng',
+      summary: 'Sắc thái không gian trang nhã, hỗ trợ bổ trợ cho bản mệnh gia chủ.',
+      observations: elementObservations,
+    },
+    {
+      id: 'lighting_ventilation',
+      title: 'Ánh sáng tự nhiên & Thông gió',
+      icon: '🌿',
+      status: envStatus,
+      statusLabel: envStatus === 'good' ? 'Đạt chuẩn' : 'Cần bổ sung',
+      summary: 'Không gian đón nắng gió tự nhiên, bảo đảm tiêu chuẩn vệ sinh và năng lượng tích cực.',
+      observations: envObservations,
+    },
+    {
+      id: 'circulation_ergonomics',
+      title: 'Lối đi lại & Tiện nghi công thái học',
+      icon: '🚶',
+      status: ergoStatus,
+      statusLabel: ergoStatus === 'good' ? 'Rộng rãi' : 'Hơi hẹp',
+      summary: 'Hành lang sinh hoạt thông suốt, thuận tiện cho việc di chuyển ngày và đêm.',
+      observations: ergoObservations,
     },
   ];
 
-  for (const fp of fallbackGoodPoints) {
-    if (favorablePoints.length >= 3) break;
-    if (!favorablePoints.some((p) => p.title === fp.title)) {
-      favorablePoints.push(fp);
-    }
+  // ---------------------------------------------------------------------------
+  // 4. ĐIỂM TỐT VÀ VẤN ĐỀ CẦN LƯU Ý (Section 4)
+  // ---------------------------------------------------------------------------
+  const favorablePoints: FavorablePoint[] = [];
+  const concernPoints: ConcernPoint[] = [];
+
+  // Điểm tốt
+  if (bedWallRule?.verdict === 'pass') {
+    favorablePoints.push({
+      title: 'Đầu giường tựa tường kiên cố',
+      description: 'Giường ngủ có điểm tựa vững chãi phía sau, không bị chông chênh hay hở khoảng trống lớn.',
+      advice: 'Nên duy trì nguyên vị trí này, không kéo giường ra giữa phòng.',
+    });
   }
-
-  // Giới hạn tối đa 5 điểm tốt
-  const trimmedFavorable = favorablePoints.slice(0, 5);
-
-  // ---------------------------------------------------------------------------
-  // 5. NHỮNG ĐIỀU NÊN ĐIỀU CHỈNH (Chọn tối đa 3–5 khuyến nghị then chốt)
-  // ---------------------------------------------------------------------------
-  const recommendations: UserFacingRecommendation[] = [];
-
-  if (bedWall?.verdict === 'fail') {
-    recommendations.push({
-      title: 'Kê đầu giường áp sát vào tường',
-      currentIssue: 'Đầu giường hiện chưa kê sát tường, phía sau đầu nằm có khoảng hở lớn.',
-      proposal: 'Bạn nên di chuyển giường ngủ về phía bức tường kiên cố gần nhất để đầu giường tựa khít vào vách.',
-      reason: 'Đầu giường có điểm tựa vững chắc sẽ mang lại cảm giác bình an, nâng đỡ giấc ngủ và tinh thần sảng khoái.',
-      priority: 'Cao',
+  if (bedDoorRule?.verdict === 'pass') {
+    favorablePoints.push({
+      title: 'Tránh được thế xung môn trực diện',
+      description: 'Cửa ra vào không đâm thẳng vào thân giường nằm, tránh được cảm giác bất an giật mình.',
+      advice: 'Giữ nguyên khoảng đệm này để luồng khí đi vào phòng được uốn lượn êm dịu.',
+    });
+  }
+  if (deskBackRule?.verdict === 'pass') {
+    favorablePoints.push({
+      title: 'Bàn làm việc tựa vách chắc chắn',
+      description: 'Lưng ghế ngồi có tường nâng đỡ, giúp tăng khả năng tập trung khi làm việc.',
+      advice: 'Giữ nguyên phương án kê bàn tựa vách tường.',
+    });
+  }
+  if (corrRule?.verdict === 'pass') {
+    favorablePoints.push({
+      title: 'Lối đi lại rộng rãi đạt chuẩn công thái học',
+      description: 'Các khoảng trống hành lang trong phòng đều đạt trên 60cm theo tiêu chuẩn kiến trúc.',
+      advice: 'Hạn chế bày biện thêm các vật dụng phụ chắn ngang lối đi chính.',
+    });
+  }
+  if (favorablePoints.length === 0) {
+    favorablePoints.push({
+      title: 'Mặt bằng phòng ngủ vuông vắn',
+      description: 'Phòng không bị góc vát hay khuyết hãm, tạo nền tảng cân bằng vững bền.',
+      advice: 'Tận dụng các cạnh tường thẳng để sắp đặt đồ đạc ngay ngắn.',
     });
   }
 
-  if (bedDoor?.verdict === 'fail') {
-    recommendations.push({
-      title: 'Dời giường ngủ lệch khỏi hướng cửa mở',
-      currentIssue: 'Cửa phòng hiện đang mở thẳng vào thân giường ngủ.',
-      proposal: 'Cân nhắc dời giường sang một bên bức tường, hoặc kê một tab đầu giường/vách ngăn nhỏ để chắn bớt tầm nhìn từ cửa vào.',
-      reason: 'Tránh luồng gió xộc trực tiếp và tiếng ồn bên ngoài, giúp khu vực ngủ được kín đáo, ấm cúng.',
+  // Điểm cần lưu ý
+  if (bedWallRule?.verdict === 'fail') {
+    concernPoints.push({
+      title: 'Đầu giường chưa có điểm tựa vững',
       priority: 'Cao',
+      impact: 'Dễ gây cảm giác trống trải, bất an, giấc ngủ chập chờn và khó thư giãn sâu.',
+      evidence: 'Khoảng cách giữa đầu giường và bức tường phía sau vượt quá tiêu chuẩn tiếp xúc an toàn.',
+    });
+  }
+  if (bedDoorRule?.verdict === 'fail') {
+    concernPoints.push({
+      title: 'Cửa phòng đâm thẳng vào giường ngủ',
+      priority: 'Cao',
+      impact: 'Xung sát từ luồng khí cửa vào trực tiếp vùng nghỉ ngơi, dễ gây mệt mỏi và đau đầu.',
+      evidence: 'Tọa độ giường nằm trực tiếp trên luồng hành lang mở của cánh cửa chính.',
+    });
+  }
+  if (mirrorBed?.verdict === 'fail') {
+    concernPoints.push({
+      title: 'Gương chiếu trực diện vào giường ngủ',
+      priority: 'Trung bình',
+      impact: 'Phạm Quang Sát trong phong thủy, phản chiếu bóng chuyển động ban đêm gây giật mình.',
+      evidence: 'Mặt gương hướng thẳng góc về phía thân hoặc đầu giường ngủ.',
+    });
+  }
+  if (deskBackRule?.verdict === 'fail' || deskDoorRule?.verdict === 'fail') {
+    concernPoints.push({
+      title: 'Bàn làm việc ở vị trí chưa thuận lợi',
+      priority: 'Trung bình',
+      impact: 'Giảm khả năng tập trung hoặc cảm giác bị động khi người khác bước vào phòng.',
+      evidence: 'Lưng người ngồi quay ra cửa hoặc không quan sát được cửa phòng.',
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 5. KHUYẾN NGHỊ ĐIỀU CHỈNH (Section 5)
+  // ---------------------------------------------------------------------------
+  const userRecommendations: UserFacingRecommendation[] = [];
+
+  // Map from engine recommendation items or synthesize from concerns
+  if (bedWallRule?.verdict === 'fail') {
+    userRecommendations.push({
+      targetArea: 'Vị trí giường ngủ',
+      issue: 'Đầu giường hiện chưa kê sát tường, phía sau đầu nằm có khoảng hở lớn.',
+      explanation: 'Theo nguyên lý phong thủy Loan Đầu cổ truyền, đầu giường là nơi tĩnh tọa cần tựa sơn vững chắc để nạp sinh khí an lành.',
+      proposal: 'Đẩy giường ngủ về vị trí sát bức tường kiên cố gần nhất, đảm bảo đầu giường khít vách hoặc có tab đầu giường chặn vững.',
+      priority: 'Cao',
+      expectedBenefit: 'Tạo cảm giác vững tâm tuyệt đối, nâng cao chất lượng giấc ngủ và bồi đắp sinh lực mỗi sớm mai.',
+    });
+  }
+
+  if (bedDoorRule?.verdict === 'fail') {
+    userRecommendations.push({
+      targetArea: 'Vị trí giường ngủ',
+      issue: 'Cửa ra vào đang đâm thẳng vào thân giường nằm.',
+      explanation: 'Luồng khí từ cửa xộc thẳng vào giường ngủ gọi là "Trực Xung Môn Sát", mang theo tạp khí và tiếng ồn bên ngoài.',
+      proposal: 'Dời giường lệch sang một bên của bức tường, hoặc bố trí vách ngăn nhẹ/tủ đầu giường che chắn bớt luồng khí trực xung.',
+      priority: 'Cao',
+      expectedBenefit: 'Khí trường quanh giường được êm dịu, bảo vệ sức khỏe và mang lại sự riêng tư tối đa.',
     });
   }
 
   if (mirrorBed?.verdict === 'fail') {
-    recommendations.push({
-      title: 'Điều chỉnh hướng gương soi',
-      currentIssue: 'Mặt gương đang hướng thẳng về phía giường ngủ.',
-      proposal: 'Nên xoay bàn trang điểm hoặc mặt gương sang hướng vuông góc với giường, hoặc dùng rèm che nhẹ vào buổi tối.',
-      reason: 'Tránh cảm giác giật mình khi thức giấc trong đêm, giữ cho tinh thần thư thái và giấc ngủ trọn vẹn.',
+    userRecommendations.push({
+      targetArea: 'Gương soi / Bàn trang điểm',
+      issue: 'Mặt gương chiếu thẳng vào khu vực giường ngủ.',
+      explanation: 'Gương soi có tính tán khí và phản chiếu mạnh, nếu đối diện giường dễ làm giật mình khi thức giấc trong bóng tối.',
+      proposal: 'Xoay mặt gương sang hướng khác vuông góc với giường, hoặc kê bàn trang điểm khuất sau tủ quần áo.',
       priority: 'Trung bình',
+      expectedBenefit: 'Không gian tĩnh lặng, tâm trí thư thái và tránh được cảm giác bồn chồn.',
     });
   }
 
-  if (deskBack?.verdict === 'fail' || deskDoor?.verdict === 'fail') {
-    recommendations.push({
-      title: 'Sắp xếp lại hướng bàn làm việc',
-      currentIssue: 'Vị trí ngồi làm việc hiện chưa có điểm tựa vững sau lưng hoặc khó quan sát cửa phòng.',
-      proposal: 'Cân nhắc xoay bàn để lưng tựa vào tường và mặt hướng ra phía có thể quan sát lối vào phòng.',
-      reason: 'Tư thế ngồi chủ động và có điểm tựa giúp bạn làm việc tập trung, minh mẫn và ít bị phân tâm.',
+  if (deskDoorRule?.verdict === 'fail' || deskBackRule?.verdict === 'fail') {
+    userRecommendations.push({
+      targetArea: 'Bàn làm việc & Học tập',
+      issue: 'Vị trí ngồi làm việc chưa tối ưu góc nhìn hoặc thiếu điểm tựa sau lưng.',
+      explanation: 'Thế ngồi làm việc phong thủy chuẩn đòi hỏi "lưng tựa sơn - mắt trông cửa" để chủ động tiếp nhận thông tin và tỉnh táo.',
+      proposal: 'Xoay bàn để lưng tựa tường và mặt hướng ra phía có thể quan sát lối vào phòng một cách tự nhiên.',
       priority: 'Trung bình',
+      expectedBenefit: 'Tăng cường sự tập trung, minh mẫn và nâng cao hiệu suất làm việc.',
     });
   }
 
-  if (corrRule?.verdict === 'fail') {
-    recommendations.push({
-      title: 'Nới rộng khoảng cách lối đi lại',
-      currentIssue: 'Lối đi giữa giường và tủ quần áo còn hơi chật hẹp.',
-      proposal: 'Dịch chuyển tủ hoặc giường khoảng 10–15cm để khoảng cách mở cánh tủ và đi lại được thoải mái hơn.',
-      reason: 'Lối đi thông thoáng giúp sinh hoạt hàng ngày thuận tiện và tạo cảm giác căn phòng rộng rãi hơn.',
+  // Fallback if no issues found
+  if (userRecommendations.length === 0) {
+    userRecommendations.push({
+      targetArea: 'Không gian tổng thể',
+      issue: 'Các bố trí cơ bản hiện tại đã đáp ứng tốt các nguyên tắc phong thủy và tiện nghi.',
+      explanation: 'Mọi vật dụng chính đều nằm ở vị trí thuận lợi và hài hòa với luồng khí phòng.',
+      proposal: 'Tiếp tục duy trì sự ngăn nắp, thoáng đãng và có thể bổ sung cây xanh thanh lọc không khí.',
       priority: 'Thấp',
+      expectedBenefit: 'Giữ vững sự thịnh vượng, bình an và năng lượng dồi dào trong phòng ngủ.',
     });
   }
-
-  // Nếu không có vấn đề nào, đưa lời khuyên duy trì
-  if (recommendations.length === 0) {
-    recommendations.push({
-      title: 'Duy trì bố cục phòng ngủ hiện tại',
-      currentIssue: 'Các vật dụng nội thất chính hiện đã ở vị trí rất thuận lợi.',
-      proposal: 'Bạn nên tiếp tục duy trì sự ngăn nắp, thoáng đãng và có thể đặt thêm một chậu cây nhỏ lọc không khí.',
-      reason: 'Giữ cho không gian luôn trong lành, tích tụ năng lượng tích cực cho căn phòng.',
-      priority: 'Thấp',
-    });
-  }
-
-  const trimmedRecommendations = recommendations.slice(0, 5);
 
   // ---------------------------------------------------------------------------
-  // 6. LỜI KẾT VÀ TƯ VẤN
+  // 6. KẾT LUẬN TỔNG THỂ (Section 6)
   // ---------------------------------------------------------------------------
-  let closingSummary = '';
-  if (recommendations.length <= 1 && recommendations[0].priority === 'Thấp') {
-    closingSummary = 'Căn phòng của bạn có phong thủy và bố cục rất hài hòa. Bạn có thể hoàn toàn yên tâm nghỉ ngơi và tận hưởng không gian sống thoải mái này.';
+  let overallAssessment = '';
+  if (stats.failCount === 0 && stats.warnCount === 0) {
+    overallAssessment = 'Phòng ngủ đạt chuẩn phong thủy xuất sắc. Bố cục mang lại cảm giác bình an, tiện nghi và vượng khí cho gia chủ.';
+  } else if (stats.failCount === 0) {
+    overallAssessment = 'Phòng ngủ có nền tảng bố trí hài hòa, các vị trí chủ đạo đều an toàn, chỉ cần lưu ý tinh chỉnh một vài khoảng cách sinh hoạt nhỏ.';
   } else {
-    closingSummary = 'Phòng ngủ của bạn có tiềm năng không gian rất tốt, chỉ cần bạn ưu tiên điều chỉnh một vài vị trí cốt lõi (như đầu giường và hướng bàn), căn phòng sẽ trở nên ấm cúng, vững vàng và mang lại nhiều năng lượng tích cực hơn.';
+    overallAssessment = 'Phòng ngủ có tiềm năng không gian rất tốt. Chỉ cần ưu tiên xử lý các điểm then chốt (như thế tựa giường và hướng cửa), không gian sẽ đạt sự hài hòa toàn diện.';
   }
 
-  const keyPriorities: string[] = [];
-  if (bedWall?.verdict === 'fail') keyPriorities.push('Ưu tiên hàng đầu: Kê đầu giường tựa sát tường vững chãi.');
-  if (bedDoor?.verdict === 'fail') keyPriorities.push('Ưu tiên tiếp theo: Kê giường lệch khỏi hướng cửa mở vào.');
-  if (mirrorBed?.verdict === 'fail') keyPriorities.push('Xoay mặt gương soi tránh chiếu thẳng vào giường.');
-  if (deskBack?.verdict === 'fail' || deskDoor?.verdict === 'fail') keyPriorities.push('Điều chỉnh góc ngồi bàn làm việc tựa tường.');
-  if (keyPriorities.length === 0) {
-    keyPriorities.push('Tiếp tục duy trì sự gọn gàng và thông thoáng cho căn phòng.');
+  const topPriorities: string[] = [];
+  if (bedWallRule?.verdict === 'fail') topPriorities.push('Ưu tiên số 1: Kê đầu giường áp sát vách tường vững chãi.');
+  if (bedDoorRule?.verdict === 'fail') topPriorities.push('Ưu tiên số 2: Điều chỉnh giường lệch khỏi luồng xung xộc của cửa đi.');
+  if (mirrorBed?.verdict === 'fail') topPriorities.push('Ưu tiên số 3: Đổi hướng gương soi tránh chiếu vào giường nằm.');
+  if (topPriorities.length === 0) {
+    topPriorities.push('Giữ nguyên trật tự sắp đặt hiện tại và duy trì sự thông thoáng định kỳ.');
   }
 
-  const elementsToPreserve: string[] = [];
-  if (bedWall?.verdict === 'pass') elementsToPreserve.push('Giữ nguyên điểm tựa sát tường của đầu giường.');
-  if (bedDoor?.verdict === 'pass') elementsToPreserve.push('Giữ nguyên vị trí giường tránh xa luồng xộc của cửa.');
-  if (corrRule?.verdict === 'pass') elementsToPreserve.push('Duy trì lối đi lại rộng thoáng quanh phòng.');
-  if (elementsToPreserve.length === 0) {
-    elementsToPreserve.push('Giữ cho khu vực giữa phòng ngủ luôn thoáng đãng.');
-  }
+  const elementsToKeep: string[] = [];
+  if (bedWallRule?.verdict === 'pass') elementsToKeep.push('Giữ nguyên điểm tựa vững chãi của đầu giường.');
+  if (bedDoorRule?.verdict === 'pass') elementsToKeep.push('Giữ nguyên vị trí giường tránh xa luồng xung của cửa.');
+  if (corrRule?.verdict === 'pass') elementsToKeep.push('Giữ nguyên lối đi lưu thông rộng thoáng quanh phòng.');
+  if (elementsToKeep.length === 0) elementsToKeep.push('Giữ không gian trung tâm phòng ngủ thoáng đãng.');
 
-  const compassNotice = rSummary.northBearingDeg === null
-    ? 'Gợi ý thêm: Hiện tại góc la bàn thực tế của phòng chưa được đo đạc. Bạn có thể dùng la bàn trên điện thoại đo hướng mở cửa phòng và cập nhật lại trong mục Hồ Sơ để xem hướng phòng chính xác hơn.'
-    : undefined;
+  const dataIntegrityNotice = rSummary.northBearingDeg === null
+    ? 'Lưu ý về độ chính xác: Báo cáo hiện đang dùng hướng phòng ước tính. Để các phân tích hướng Bát Trạch (Cát/Hung) đạt độ chuẩn xác 100%, gia chủ nên dùng la bàn điện thoại đo góc chính xác và hiệu chuẩn trong mục Hồ sơ.'
+    : 'Báo cáo được tính toán dựa trên số liệu không gian 3D thực tế và góc la bàn số đã được hiệu chuẩn.';
 
   return {
     reportId: report.reportId,
     createdAtFormatted,
     overview: {
-      roomName: rSummary.roomName || 'Phòng ngủ',
-      dimensionsText,
+      reportTitle: 'Báo Cáo Đánh Giá & Tư Vấn Phong Thủy Phòng Ngủ',
+      roomName: rSummary.roomName || 'Phòng ngủ Master',
+      dimensionsFormatted,
       areaM2,
       roomOrientationText: formatDirection(rSummary.roomOrientation),
-      narrativeSummary,
+      executiveSummary,
+      highlights,
+      passCount: stats.passCount,
+      warnCount: stats.warnCount,
+      failCount: stats.failCount,
+      dataCompleteness: report.dataCompleteness,
     },
     homeowner: {
       hasData: hasProfile,
+      displayName: pSummary?.displayName || 'Gia chủ',
       birthYear,
       genderText,
       guaName: pSummary?.guaName,
+      guaNumber: pSummary?.guaNumber,
       element: pSummary?.element,
-      groupText: pSummary?.group,
+      group: pSummary?.group,
       canChi: pSummary?.canChi,
       napAm: pSummary?.napAm,
-      prioritizedDirections,
-      cautionDirections,
-      friendlyExplanation,
-      missingDataMessage: hasProfile
+      auspiciousDirections: auspiciousDirectionsList,
+      inauspiciousDirections: inauspiciousDirectionsList,
+      briefExplanation,
+      missingDataNotice: hasProfile
         ? undefined
-        : 'Chưa có thông tin năm sinh gia chủ. Bạn có thể bấm nút "Hồ sơ" để bổ sung, giúp bản tư vấn hiển thị các hướng hợp mệnh cụ thể.',
+        : 'Chưa có đầy đủ thông tin năm sinh của gia chủ. Vui lòng cập nhật Hồ sơ để xem phân tích hướng cát hung cá nhân hóa.',
     },
     spaceGroups,
-    favorablePoints: trimmedFavorable,
-    recommendations: trimmedRecommendations,
+    favorableAndConcerns: {
+      favorablePoints,
+      concernPoints,
+    },
+    recommendations: userRecommendations,
     conclusion: {
-      closingSummary,
-      keyPriorities: keyPriorities.slice(0, 3),
-      elementsToPreserve: elementsToPreserve.slice(0, 3),
-      compassNotice,
+      overallAssessment,
+      topPriorities,
+      elementsToKeep,
+      dataIntegrityNotice,
     },
   };
 }

@@ -52,3 +52,37 @@ button:active, [role="button"]:active {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(120, 113, 108, 0.45);
 }
+
+/* =============================================================================
+   PRINT / PDF EXPORT STYLES (A4 Portrait, Multi-page Support)
+   ============================================================================= */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 15mm;
+  }
+
+  html, body, #root {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #1c1917 !important;
+    user-select: text !important;
+  }
+
+  /* Ẩn hoàn toàn toàn bộ giao diện App nền khi in (TopBar, Canvas 3D, Sidebars) */
+  body > #root > div > header,
+  body > #root > div > main,
+  .app-topbar,
+  .app-main-workspace {
+    display: none !important;
+  }
+
+  /* Tránh ngắt trang gãy đoạn */
+  .print-avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}

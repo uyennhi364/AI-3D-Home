@@ -782,11 +782,11 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col w-screen h-screen overflow-hidden bg-[#14171A] font-sans antialiased select-none">
+    <div className="flex flex-col w-screen h-screen overflow-hidden bg-[#14171A] font-sans antialiased select-none print:h-auto print:w-full print:overflow-visible print:bg-white">
       {/* =========================================================================
           1. TOP APP BAR (Professional Interior Architecture Toolbar)
          ========================================================================= */}
-      <header className="h-14 bg-[#14171A] border-b border-stone-800/80 px-4 flex items-center justify-between shrink-0 z-30 shadow-md text-stone-200">
+      <header className="h-14 bg-[#14171A] border-b border-stone-800/80 px-4 flex items-center justify-between shrink-0 z-30 shadow-md text-stone-200 print:hidden app-topbar">
         {/* Left: Lotus Icon & Studio Title & Panel Toggle */}
         <div className="flex items-center gap-3">
           <div className="w-8.5 h-8.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center shadow-xs">
@@ -956,7 +956,7 @@ export default function App() {
       {/* =========================================================================
           2. THREE-COLUMN ARCHITECTURAL FLEXBOX LAYOUT (NO ABSOLUTE OVERLAP)
          ========================================================================= */}
-      <main className="flex-1 w-full h-[calc(100vh-56px)] flex overflow-hidden bg-[#14171A] p-2.5 sm:p-3 gap-2.5 sm:gap-3 select-none">
+      <main className="flex-1 w-full h-[calc(100vh-56px)] flex overflow-hidden bg-[#14171A] p-2.5 sm:p-3 gap-2.5 sm:gap-3 select-none print:hidden app-main-workspace">
         {/* -------------------------------------------------------------------
             COLUMN 1: LEFT SIDEBAR (Hồ sơ gia chủ & Hướng phòng)
            ------------------------------------------------------------------- */}
@@ -1131,19 +1131,17 @@ export default function App() {
       />
 
       {/* Unified Assessment Report Modal (Phase P5 + P8.4) */}
-      {isReportModalOpen && (
-        <UnifiedAssessmentReportModal
-          isOpen={isReportModalOpen}
-          onClose={() => setIsReportModalOpen(false)}
-          report={unifiedReport}
-          onRefresh={handleTriggerAiAnalysis}
-          nguHanhAssessment={nguHanhAssessment}
-          personalElement={userProfile.element}
-          onOpenProfile={() => setIsProfileModalOpen(true)}
-          roomConfig={roomConfig}
-          objects={objects}
-        />
-      )}
+      <UnifiedAssessmentReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        report={unifiedReport}
+        onRefresh={handleTriggerAiAnalysis}
+        nguHanhAssessment={nguHanhAssessment}
+        personalElement={userProfile.element}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
+        roomConfig={roomConfig}
+        objects={objects}
+      />
     </div>
   );
 }
