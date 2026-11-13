@@ -13,7 +13,7 @@ RUN apk add --no-cache python3 make g++
 
 # Install dependencies using lockfile
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 # Copy application source code
 COPY index.html tsconfig.json vite.config.ts server.ts ./
@@ -30,7 +30,7 @@ FROM node:22-alpine AS prod-deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm ci --omit=dev --ignore-scripts --legacy-peer-deps
 
 # --- Stage 3: Minimal Production Runtime ---
 FROM node:22-alpine AS runner
