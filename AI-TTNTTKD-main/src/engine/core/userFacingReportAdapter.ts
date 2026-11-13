@@ -23,8 +23,20 @@
 
 import { RoomConfig, RoomObject, CompassDirection } from '../../types/fengshui.js';
 import { UnifiedAssessmentReport, RecommendationItem } from './unifiedAssessment.js';
-import { DetailedRoomElementAssessment } from './nguHanh/elementAssessment.js';
 import { RuleVerdict, RuleResult } from './ruleTypes.js';
+
+// Structural interface for optional element assessment (decouples presentation adapter from nguHanh engine)
+export interface RoomElementAssessmentSummary {
+  failCount: number;
+  furnitureSummaries?: Array<{
+    profile: {
+      dominantElement?: string | null;
+      dominantElementBasis?: string | null;
+      objectType?: string | null;
+      objectId?: string;
+    };
+  }>;
+}
 
 // -----------------------------------------------------------------------------
 // VIEW MODEL INTERFACES
@@ -164,7 +176,7 @@ function formatDirection(dir?: string | null): string {
 
 export interface BuildUserFacingReportInput {
   report: UnifiedAssessmentReport;
-  nguHanhAssessment?: DetailedRoomElementAssessment | null;
+  nguHanhAssessment?: RoomElementAssessmentSummary | null;
   roomConfig?: RoomConfig;
   objects?: RoomObject[];
 }
