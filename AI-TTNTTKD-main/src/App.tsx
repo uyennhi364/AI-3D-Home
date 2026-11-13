@@ -1131,15 +1131,19 @@ export default function App() {
       />
 
       {/* Unified Assessment Report Modal (Phase P5 + P8.4) */}
-      <UnifiedAssessmentReportModal
-        isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
-        report={unifiedReport}
-        onRefresh={handleTriggerAiAnalysis}
-        nguHanhAssessment={nguHanhAssessment}
-        personalElement={userProfile.element}
-        onOpenProfile={() => setIsProfileModalOpen(true)}
-      />
+      {isReportModalOpen && (
+        <UnifiedAssessmentReportModal
+          isOpen={isReportModalOpen}
+          onClose={() => setIsReportModalOpen(false)}
+          report={unifiedReport}
+          onRefresh={handleTriggerAiAnalysis}
+          nguHanhAssessment={nguHanhAssessment}
+          personalElement={userProfile.element}
+          onOpenProfile={() => setIsProfileModalOpen(true)}
+          roomConfig={roomConfig}
+          objects={objects}
+        />
+      )}
     </div>
   );
 }

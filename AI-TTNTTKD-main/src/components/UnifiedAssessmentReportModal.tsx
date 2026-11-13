@@ -23,6 +23,9 @@ import { SourceReference } from '../engine/core/sourceRegistry.js';
 import { DetailedRoomElementAssessment } from '../engine/core/nguHanh/elementAssessment.js';
 import { NguHanhElement } from '../engine/core/nguHanh/elementTypes.js';
 import { NguHanhAssessmentPanel } from './NguHanhAssessmentPanel.js';
+import { RoomConfig, RoomObject } from '../types/fengshui.js';
+import { buildUserFacingReportViewModel } from '../engine/core/userFacingReportAdapter.js';
+import { UserFacingFengShuiReport } from './UserFacingFengShuiReport.js';
 
 interface UnifiedAssessmentReportModalProps {
   isOpen: boolean;
@@ -32,6 +35,8 @@ interface UnifiedAssessmentReportModalProps {
   nguHanhAssessment?: DetailedRoomElementAssessment | null;
   personalElement?: NguHanhElement | null;
   onOpenProfile?: () => void;
+  roomConfig?: RoomConfig;
+  objects?: RoomObject[];
 }
 
 export const UnifiedAssessmentReportModal: React.FC<UnifiedAssessmentReportModalProps> = ({
@@ -42,35 +47,28 @@ export const UnifiedAssessmentReportModal: React.FC<UnifiedAssessmentReportModal
   nguHanhAssessment,
   personalElement,
   onOpenProfile,
+  roomConfig,
+  objects,
 }) => {
+  const [viewMode, setViewMode] = useState<'user_friendly' | 'technical'>('user_friendly');
   const [activeTab, setActiveTab] = useState<'all' | 'geometric' | 'traditional' | 'personal' | 'environmental' | 'ergonomic' | 'data_quality' | 'sources' | 'ngu_hanh'>('all');
   const [verdictFilter, setVerdictFilter] = useState<'all' | RuleVerdict>('all');
   const [expandedRuleIds, setExpandedRuleIds] = useState<Set<string>>(new Set());
 
-  if (!isOpen || !report) return null;
-
-  const toggleExpand = (ruleId: string) => {
-    setExpandedRuleIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(ruleId)) {
-        next.delete(ruleId);
-      } else {
-        next.add(ruleId);
-      }
-      return next;
+  // Build simplified, professional user-facing report view model
+  const userFacingData = useMemo(() => {
+    if (!report) return null;
+    return buildUserFacingReportViewModel({
+      report,
+      nguHanhAssessment,
+      roomConfig,
+      objects,
     });
-  };
+  }, [report, nguHanhAssessment, roomConfig, objects]);
 
-  const expandAll = () => {
-    setExpandedRuleIds(new Set(report.allRules.map((r) => r.ruleId)));
-  };
-
-  const collapseAll = () => {
-    setExpandedRuleIds(new Set());
-  };
-
-  // Filter rules by active tab and verdict
+  // Filter rules by active tab and verdict (Hook must run unconditionally on every render)
   const displayedRules = useMemo(() => {
+    if (!report) return [];
     let list: RuleResult[] = [];
     if (activeTab === 'all') {
       list = report.allRules;
@@ -91,6 +89,44 @@ export const UnifiedAssessmentReportModal: React.FC<UnifiedAssessmentReportModal
     }
     return list;
   }, [report, activeTab, verdictFilter]);
+
+  // Check if developer debug mode is explicitly requested via URL (?debug=true)
+  const isDebugMode = typeof window !== 'undefined' && window.location.search.includes('debug=true');
+
+  if (!isOpen || !report) return null;
+
+  // Always present clean, professional User-Facing Feng Shui Consultation Report for end users
+  if (!isDebugMode && userFacingData) {
+    return (
+      <UserFacingFengShuiReport
+        data={userFacingData}
+        onClose={onClose}
+        onRefresh={onRefresh}
+        onOpenProfile={onOpenProfile}
+      />
+    );
+  }
+
+  const toggleExpand = (ruleId: string) => {
+    setExpandedRuleIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(ruleId)) {
+        next.delete(ruleId);
+      } else {
+        next.add(ruleId);
+      }
+      return next;
+    });
+  };
+
+  const expandAll = () => {
+    if (!report) return;
+    setExpandedRuleIds(new Set(report.allRules.map((r) => r.ruleId)));
+  };
+
+  const collapseAll = () => {
+    setExpandedRuleIds(new Set());
+  };
 
   const handlePrint = () => {
     window.print();
@@ -124,6 +160,15 @@ export const UnifiedAssessmentReportModal: React.FC<UnifiedAssessmentReportModal
           </div>
 
           <div className="flex items-center gap-2 print:hidden">
+            <button
+              onClick={() => setViewMode('user_friendly')}
+              className="px-3 py-1.5 rounded-lg border border-emerald-600 bg-emerald-950/80 hover:bg-emerald-900 text-xs font-bold text-emerald-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              title="Quay lại giao diện Báo cáo tư vấn tổng quan dễ hiểu"
+            >
+              <span>📖</span>
+              <span>Báo cáo tư vấn</span>
+            </button>
+
             {onRefresh && (
               <button
                 onClick={onRefresh}
