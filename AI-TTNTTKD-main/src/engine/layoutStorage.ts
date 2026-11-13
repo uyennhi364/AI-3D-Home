@@ -1,4 +1,10 @@
 import { RoomConfig, RoomObject, UserFengShuiProfile } from '../types/fengshui';
+import {
+  safeLocalStorageSet,
+  safeLocalStorageGet,
+  registerMigrator,
+  StorageResult,
+} from '../services/storageResilience';
 
 export interface SavedLayoutEntry {
   id: string;
@@ -11,17 +17,60 @@ export interface SavedLayoutEntry {
 }
 
 const STORAGE_KEY = 'ai_feng_shui_saved_layouts';
+const CURRENT_STORAGE_VERSION = 1;
+
+// Register v0 -> v1 schema migrator (legacy plain array -> versioned envelope)
+registerMigrator(STORAGE_KEY, {
+  fromVersion: 0,
+  toVersion: 1,
+  migrate: (raw: unknown) => {
+    if (Array.isArray(raw)) return raw;
+    return [];
+  },
+});
 
 export function getSavedLayouts(): SavedLayoutEntry[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
+    const res = safeLocalStorageGet<SavedLayoutEntry[]>(STORAGE_KEY, 0);
+    if (!res.ok || !res.data) {
+      // Fallback: raw read in case of legacy unversioned data
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+    return Array.isArray(res.data.data) ? res.data.data : [];
   } catch (e) {
     console.error('Failed to parse saved layouts:', e);
     return [];
   }
+}
+
+export function saveLayoutToLocalSafe(
+  name: string,
+  roomConfig: RoomConfig,
+  objects: RoomObject[],
+  userProfile?: UserFengShuiProfile,
+  score?: number
+): StorageResult<SavedLayoutEntry> {
+  const list = getSavedLayouts();
+  const entry: SavedLayoutEntry = {
+    id: `layout_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    name: name.trim() || `Bố cục ${list.length + 1}`,
+    savedAt: new Date().toLocaleString('vi-VN'),
+    roomConfig,
+    objects,
+    userProfile,
+    score,
+  };
+  list.unshift(entry);
+  const writeRes = safeLocalStorageSet(STORAGE_KEY, list, CURRENT_STORAGE_VERSION);
+  if (!writeRes.ok) {
+    console.warn(`[STORAGE_RESILIENCE] saveLayoutToLocal failed: ${writeRes.message}`);
+    return writeRes;
+  }
+  return { ok: true, data: entry };
 }
 
 export function saveLayoutToLocal(
@@ -31,9 +80,14 @@ export function saveLayoutToLocal(
   userProfile?: UserFengShuiProfile,
   score?: number
 ): SavedLayoutEntry {
+  const res = saveLayoutToLocalSafe(name, roomConfig, objects, userProfile, score);
+  if (res.ok) {
+    return res.data;
+  }
+  // Return memory representation on quota error so application scene state doesn't crash
   const list = getSavedLayouts();
-  const entry: SavedLayoutEntry = {
-    id: `layout_${Date.now()}`,
+  return {
+    id: `layout_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     name: name.trim() || `Bố cục ${list.length + 1}`,
     savedAt: new Date().toLocaleString('vi-VN'),
     roomConfig,
@@ -41,14 +95,11 @@ export function saveLayoutToLocal(
     userProfile,
     score,
   };
-  list.unshift(entry);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  return entry;
 }
 
 export function deleteSavedLayout(id: string): void {
   const list = getSavedLayouts().filter((item) => item.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  safeLocalStorageSet(STORAGE_KEY, list, CURRENT_STORAGE_VERSION);
 }
 
 export function exportLayoutToJson(

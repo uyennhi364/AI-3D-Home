@@ -20,12 +20,18 @@ import {
 } from '../engine/core/unifiedAssessment.js';
 import { RuleResult, RuleVerdict } from '../engine/core/ruleTypes.js';
 import { SourceReference } from '../engine/core/sourceRegistry.js';
+import { DetailedRoomElementAssessment } from '../engine/core/nguHanh/elementAssessment.js';
+import { NguHanhElement } from '../engine/core/nguHanh/elementTypes.js';
+import { NguHanhAssessmentPanel } from './NguHanhAssessmentPanel.js';
 
 interface UnifiedAssessmentReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   report: UnifiedAssessmentReport | null;
   onRefresh?: () => void;
+  nguHanhAssessment?: DetailedRoomElementAssessment | null;
+  personalElement?: NguHanhElement | null;
+  onOpenProfile?: () => void;
 }
 
 export const UnifiedAssessmentReportModal: React.FC<UnifiedAssessmentReportModalProps> = ({
@@ -33,8 +39,11 @@ export const UnifiedAssessmentReportModal: React.FC<UnifiedAssessmentReportModal
   onClose,
   report,
   onRefresh,
+  nguHanhAssessment,
+  personalElement,
+  onOpenProfile,
 }) => {
-  const [activeTab, setActiveTab] = useState<'all' | 'geometric' | 'traditional' | 'personal' | 'environmental' | 'ergonomic' | 'data_quality' | 'sources'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'geometric' | 'traditional' | 'personal' | 'environmental' | 'ergonomic' | 'data_quality' | 'sources' | 'ngu_hanh'>('all');
   const [verdictFilter, setVerdictFilter] = useState<'all' | RuleVerdict>('all');
   const [expandedRuleIds, setExpandedRuleIds] = useState<Set<string>>(new Set());
 
@@ -267,10 +276,20 @@ export const UnifiedAssessmentReportModal: React.FC<UnifiedAssessmentReportModal
             >
               📚 Nguồn tài liệu ({Object.keys(report.sourcesMap).length})
             </button>
+            <button
+              onClick={() => setActiveTab('ngu_hanh')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                activeTab === 'ngu_hanh'
+                  ? 'bg-emerald-100 text-emerald-900 font-bold'
+                  : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800'
+              }`}
+            >
+              🌿 Ngũ Hành {nguHanhAssessment ? `(${nguHanhAssessment.totalEvaluated})` : ''}
+            </button>
           </div>
 
           {/* Quick Verdict Filters & Expand Buttons */}
-          {activeTab !== 'data_quality' && activeTab !== 'sources' && (
+          {activeTab !== 'data_quality' && activeTab !== 'sources' && activeTab !== 'ngu_hanh' && (
             <div className="flex items-center gap-2">
               <select
                 value={verdictFilter}
@@ -305,6 +324,15 @@ export const UnifiedAssessmentReportModal: React.FC<UnifiedAssessmentReportModal
             4. MAIN SCROLLABLE CONTENT BODY
            ========================================================================= */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs text-stone-300">
+
+          {/* P8.4: NGŨ HÀNH TAB VIEW */}
+          {activeTab === 'ngu_hanh' && (
+            <NguHanhAssessmentPanel
+              assessment={nguHanhAssessment ?? null}
+              personalElement={personalElement ?? null}
+              onOpenProfile={onOpenProfile}
+            />
+          )}
 
           {/* 4.1 CULTURAL DISCLAIMER FOR TRADITIONAL FENG SHUI */}
           {(activeTab === 'all' || activeTab === 'traditional' || activeTab === 'personal') && (
@@ -544,7 +572,7 @@ export const UnifiedAssessmentReportModal: React.FC<UnifiedAssessmentReportModal
           )}
 
           {/* 4.6 EVALUATED RULE CARDS LIST */}
-          {activeTab !== 'data_quality' && activeTab !== 'sources' && (
+          {activeTab !== 'data_quality' && activeTab !== 'sources' && activeTab !== 'ngu_hanh' && (
             <section className="space-y-3">
               <div className="flex items-center justify-between border-b border-stone-800 pb-2">
                 <h2 className="text-xs font-bold text-white uppercase tracking-wider">

@@ -5,6 +5,9 @@ import {
   RoomObject,
 } from '../types/fengshui';
 import { DIRECTION_NAMES_VI } from '../engine/batTrach';
+import { FurnitureAssessmentSummary } from '../engine/core/nguHanh/elementAssessment.js';
+import { NguHanhElement } from '../engine/core/nguHanh/elementTypes.js';
+import { NguHanhObjectCard } from './NguHanhObjectCard.js';
 
 interface ObjectPropertiesPanelProps {
   selectedObject: RoomObject | null;
@@ -15,6 +18,8 @@ interface ObjectPropertiesPanelProps {
   onDuplicateObject: (id: string) => void;
   onAskAiForBetterPlacement?: (objectName: string) => void;
   onClose?: () => void;
+  nguHanhSummary?: FurnitureAssessmentSummary | null;
+  personalElement?: NguHanhElement | null;
 }
 
 export const ObjectPropertiesPanel: React.FC<ObjectPropertiesPanelProps> = ({
@@ -26,6 +31,8 @@ export const ObjectPropertiesPanel: React.FC<ObjectPropertiesPanelProps> = ({
   onDuplicateObject,
   onAskAiForBetterPlacement,
   onClose,
+  nguHanhSummary,
+  personalElement,
 }) => {
   if (!selectedObject) {
     return (
@@ -193,6 +200,23 @@ export const ObjectPropertiesPanel: React.FC<ObjectPropertiesPanelProps> = ({
                 "{evaluationItem.recommendation}"
               </div>
             )}
+          </div>
+        )}
+
+        {/* 3.1 Five Elements Assessment Card (Phase P8.4) */}
+        {nguHanhSummary && (
+          <div className="space-y-1.5 pt-1">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-bold text-stone-600">
+                NGŨ HÀNH ĐỒ VẬT
+              </span>
+              <span className="text-[10px] text-stone-400 font-mono">P8 Engine</span>
+            </div>
+            <NguHanhObjectCard
+              summary={nguHanhSummary}
+              personalElement={personalElement ?? null}
+              defaultExpanded={false}
+            />
           </div>
         )}
 

@@ -1,0 +1,88 @@
+name: Production Gate CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  production-verification:
+    name: Lint, Test, Build & Container Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22 Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Lint & TypeScript Compilation Check
+        run: npm run lint
+
+      - name: Run Core Regression Suites (P0–P7.5)
+        run: |
+          npx tsx tests/p0_characterization_baseline.ts
+          npx tsx tests/phase_h_intent_guard.test.ts
+          npx tsx tests/p1_spatial_orientation.test.ts
+          npx tsx tests/p2_room_layout_sector.test.ts
+          npx tsx tests/p3_furniture_rules.test.ts
+          npx tsx tests/p4_personal_house_room.test.ts
+          npx tsx tests/p5_assessment_report.test.ts
+          npx tsx tests/p6_environmental_ergonomics.test.ts
+          npx tsx tests/p7_agent_execution.test.ts
+          npx tsx tests/p7_5_targeted_verification.test.ts
+          npx tsx tests/p1_defect_remediation.test.ts
+
+      - name: Run Ngũ Hành Engine Suites (P8-M0–M3 & P8.4)
+        run: |
+          npx tsx tests/p8_m0_architecture_guard.test.ts
+          npx tsx tests/p8_m1_element_mapping.test.ts
+          npx tsx tests/p8_m2_relationship_rule_engine.test.ts
+          npx tsx tests/p8_m3_assessment_explainer.test.ts
+          npx tsx tests/p8_4_ui_integration.test.ts
+
+      - name: Run P9-M1 Hardening & Core Stability Suite
+        run: npx tsx tests/p9_m1_hardening.test.ts
+
+      - name: Build Production Client & Server Bundles
+        run: npm run build
+
+      - name: Build Docker Production Image
+        run: docker build -t ai-feng-shui-studio:latest .
+
+      - name: Verify Docker Container Startup & Healthcheck
+        run: |
+          echo "Starting container in detached mode..."
+          docker run -d --name prod-test-container \
+            -p 3000:3000 \
+            -e NODE_ENV=production \
+            -e ALLOWED_ORIGINS="http://localhost:3000" \
+            ai-feng-shui-studio:latest
+
+          echo "Waiting 5 seconds for initialization..."
+          sleep 5
+
+          echo "Checking /health endpoint..."
+          curl -f http://127.0.0.1:3000/health || (docker logs prod-test-container && exit 1)
+
+          echo "Verifying unprivileged non-root execution..."
+          RUNNING_USER=$(docker exec prod-test-container whoami)
+          echo "Container running as user: $RUNNING_USER"
+          if [ "$RUNNING_USER" != "node" ]; then
+            echo "ERROR: Container is not running as unprivileged user 'node'!"
+            exit 1
+          fi
+
+          echo "Cleaning up container..."
+          docker stop prod-test-container
+          docker rm prod-test-container
+          echo "Docker verification completed successfully."
+

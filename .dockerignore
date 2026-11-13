@@ -1,0 +1,45 @@
+# =============================================================================
+# .dockerignore — AI Feng Shui Studio
+# Exclude dev dependencies, secrets, tests, documentation, and Git metadata
+# =============================================================================
+
+# Version control & internal tools
+.git
+.github
+.agents
+.aistudio
+
+# Secrets & Environment variables (Strict Isolation)
+.env
+.env.*
+!.env.example
+
+# Test suites & Reports
+tests
+reports
+scripts
+docs
+*.test.ts
+*.spec.ts
+
+# Artifacts & Local builds
+dist
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+bun.lock
+
+# Documentation & Internal Notes
+PILOT_TEST_REPORT.md
+AI_UPGRADE_NOTES.md
+DESIGN.md
+AGENTS.md
+metadata.json
+README.md
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+

@@ -23,7 +23,7 @@
       "expectedRulesFired": true,
       "fabricationDetected": [],
       "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-DOOR-01, BED-WALL-01, BED-DOOR-01]",
-      "durationMs": 11
+      "durationMs": 8
     },
     {
       "id": "C-02",
@@ -55,7 +55,7 @@
       "expectedRulesFired": true,
       "fabricationDetected": [],
       "evidence": "P3: 6 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [MIRROR-BED-01, BED-WALL-01, BED-WALL-01, MIRROR-BED-01]",
-      "durationMs": 2
+      "durationMs": 1
     },
     {
       "id": "C-04",
@@ -92,7 +92,7 @@
       "expectedRulesFired": true,
       "fabricationDetected": [],
       "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, ERG-CIRC-01, ERG-BED-01, ERG-WARD-01, BED-WALL-01, ERG-CIRC-01]",
-      "durationMs": 2
+      "durationMs": 1
     },
     {
       "id": "C-06",
@@ -106,7 +106,7 @@
       "expectedRulesFired": true,
       "fabricationDetected": [],
       "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-WALL-01]",
-      "durationMs": 0
+      "durationMs": 1
     },
     {
       "id": "C-07",
@@ -165,7 +165,7 @@
       "expectedRulesFired": true,
       "fabricationDetected": [],
       "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-WIN-01, ERG-CIRC-01, ERG-BED-01, ERG-WARD-01, BED-WALL-01]",
-      "durationMs": 1
+      "durationMs": 0
     },
     {
       "id": "C-10",
@@ -186,7 +186,7 @@
       "expectedRulesFired": true,
       "fabricationDetected": [],
       "evidence": "P3: 7 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, ERG-CIRC-01, ERG-DESK-01, BED-WALL-01, ERG-CIRC-01, ERG-DESK-01]",
-      "durationMs": 2
+      "durationMs": 1
     },
     {
       "id": "C-11",
@@ -204,7 +204,7 @@
       "expectedRulesFired": true,
       "fabricationDetected": [],
       "evidence": "P3: 7 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, ERG-CIRC-01, ERG-BED-01, BED-WALL-01, ERG-CIRC-01, ERG-BED-01]",
-      "durationMs": 1
+      "durationMs": 0
     },
     {
       "id": "C-12",
@@ -242,7 +242,7 @@
       "expectedRulesFired": true,
       "fabricationDetected": [],
       "evidence": "P3: 8 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [MIRROR-BED-01, MIRROR-BED-01, BED-WALL-01, ERG-CIRC-01, BED-WALL-01, MIRROR-BED-01]",
-      "durationMs": 1
+      "durationMs": 0
     },
     {
       "id": "C-14",
@@ -267,7 +267,7 @@
       "expectedRulesFired": true,
       "fabricationDetected": [],
       "evidence": "P3: 7 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-DOOR-01, DESK-DOOR-01, ERG-CIRC-01, ERG-BED-01, ERG-WARD-01]",
-      "durationMs": 1
+      "durationMs": 0
     },
     {
       "id": "C-15",
@@ -315,7 +315,7 @@
       "expectedRulesFired": true,
       "fabricationDetected": [],
       "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, ERG-CIRC-01, ERG-BED-01, ERG-WARD-01, BED-WALL-01, ERG-CIRC-01]",
-      "durationMs": 0
+      "durationMs": 1
     },
     {
       "id": "C-18",
@@ -331,7 +331,7 @@
       "expectedRulesFired": true,
       "fabricationDetected": [],
       "evidence": "P3: 4 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, BED-WALL-01]",
-      "durationMs": 1
+      "durationMs": 0
     },
     {
       "id": "C-19",
@@ -351,7 +351,7 @@
       "expectedRulesFired": true,
       "fabricationDetected": [],
       "evidence": "P3: 9 rules | P4: 0 rules | P6_env: 6 P6_erg: 5 | Fired: [BED-WALL-01, ERG-CIRC-01, ERG-BED-01, ERG-WARD-01, BED-WALL-01, ERG-CIRC-01]",
-      "durationMs": 0
+      "durationMs": 3
     },
     {
       "id": "C-20",

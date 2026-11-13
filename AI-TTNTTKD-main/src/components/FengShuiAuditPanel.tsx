@@ -7,6 +7,8 @@ interface FengShuiAuditPanelProps {
   onSelectObject: (id: string | null) => void;
   onTriggerAiAnalysis: () => void;
   isAiAnalyzing: boolean;
+  nguHanhLevel?: 'excellent' | 'good' | 'neutral' | 'poor' | 'unknown' | null;
+  personalElement?: string | null;
 }
 
 export const FengShuiAuditPanel: React.FC<FengShuiAuditPanelProps> = ({
@@ -15,6 +17,8 @@ export const FengShuiAuditPanel: React.FC<FengShuiAuditPanelProps> = ({
   onSelectObject,
   onTriggerAiAnalysis,
   isAiAnalyzing,
+  nguHanhLevel,
+  personalElement,
 }) => {
   const getScoreColor = (score: number) => {
     if (score >= 85) return 'text-emerald-700 bg-emerald-50 border-emerald-200';
@@ -55,6 +59,27 @@ export const FengShuiAuditPanel: React.FC<FengShuiAuditPanelProps> = ({
           </span>
           <span className="text-stone-400 font-medium">/ 100</span>
         </div>
+
+        {/* Five Elements Harmony Badge (Phase P8.4 - Text-only, strictly no score) */}
+        {nguHanhLevel && (
+          <div className="flex items-center justify-between pt-2 border-t border-white/10 text-xs">
+            <span className="text-stone-300 text-[11px] flex items-center gap-1">
+              <span>🌿</span>
+              <span>Ngũ Hành ({personalElement || 'Gia chủ'}):</span>
+            </span>
+            <span className="font-semibold text-[11px] text-emerald-300">
+              {nguHanhLevel === 'excellent'
+                ? '🌟 Rất hài hòa'
+                : nguHanhLevel === 'good'
+                ? '✅ Hài hòa'
+                : nguHanhLevel === 'neutral'
+                ? '🔵 Trung bình'
+                : nguHanhLevel === 'poor'
+                ? '⚠️ Chưa hài hòa'
+                : '❓ Chưa xác định'}
+            </span>
+          </div>
+        )}
 
         {/* Sub-Score Breakdown Bars */}
         <div className="space-y-1.5 pt-2 border-t border-white/10 text-xs">

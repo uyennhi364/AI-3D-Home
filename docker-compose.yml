@@ -1,0 +1,37 @@
+# =============================================================================
+# DOCKER-COMPOSE — AI FENG SHUI STUDIO
+# Local Production-Like Container Orchestration
+# =============================================================================
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ai-feng-shui-studio:latest
+    container_name: ai_feng_shui_studio
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+    # Resource constraints for predictable local deployment
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 512M
+        reservations:
+          memory: 128M
+

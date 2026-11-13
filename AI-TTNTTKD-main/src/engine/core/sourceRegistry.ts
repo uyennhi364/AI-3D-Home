@@ -13,7 +13,7 @@ export interface SourceReference {
   originalTitle?: string;
   authorOrOrigin: string;
   category: 'classical_feng_shui' | 'architectural_standard' | 'ergonomics' | 'heuristic_experimental';
-  school: 'bat_trach' | 'loan_dau' | 'huyen_khong' | 'ergonomics' | 'engineering';
+  school: 'bat_trach' | 'loan_dau' | 'huyen_khong' | 'ergonomics' | 'engineering' | 'ngu_hanh' | 'general';
   publicationEra?: string;
   description: string;
   status: VerificationStatus;
@@ -141,6 +141,81 @@ export const SOURCE_REGISTRY: Record<string, SourceReference> = {
     description: 'Các ngưỡng heuristic tạm thời cho đánh giá chiếu sáng, thông gió và lưu thông không gian. Chỉ dùng khi không có tiêu chuẩn chính thức áp dụng được.',
     status: 'pending',
     notes: 'Đây là các tham số kỹ thuật tạm thời phục vụ đánh giá môi trường P6, không phải tiêu chuẩn chính thức.',
+  },
+  'SRC-NGU-HANH-DAI-NGHIA': {
+    id: 'SRC-NGU-HANH-DAI-NGHIA',
+    code: 'NHDN-CLASSIC',
+    title: 'Ngũ Hành Đại Nghĩa',
+    originalTitle: '五行大義',
+    authorOrOrigin: 'Tiêu Cát (蕭吉) — Thời Tùy',
+    category: 'classical_feng_shui',
+    school: 'ngu_hanh',
+    publicationEra: 'Tùy triều (khoảng 581–604 SCN)',
+    description: 'Bộ sách hệ thống hóa lý thuyết Ngũ Hành: Quyển 2 thiên 4 (Luận Tương Sinh), Quyển 2 thiên 6 (Tạp Phối Phương Vị), Quyển 2 thiên 10 (Luận Tương Khắc), Quyển 3 thiên 14 (Tạp Phối bao gồm Ngũ Sắc).',
+    status: 'pending',
+    notes: 'Chương mục và thiên đối chiếu chính xác theo bản Tứ Khố Toàn Thư. Đang chờ nghiệm thu văn bản chi tiết.',
+  },
+  'SRC-HOANG-DE-NOI-KINH': {
+    id: 'SRC-HOANG-DE-NOI-KINH',
+    code: 'HDNK-SO-VAN',
+    title: 'Hoàng Đế Nội Kinh — Tố Vấn',
+    originalTitle: '黃帝內經·素問',
+    authorOrOrigin: 'Y gia cổ đại Trung Hoa tổng hợp',
+    category: 'classical_feng_shui',
+    school: 'general',
+    publicationEra: 'Tiền Hán — Hậu Hán',
+    description: 'Thiên 5 (Âm Dương Ứng Tượng Đại Luận), Thiên 67 (Ngũ Vận Hưng Suy Đại Luận): Ngũ Sắc tương ứng Ngũ Hành và tác động khí trường cư trú.',
+    status: 'pending',
+    notes: 'Bổ trợ nền tảng y lý và triết học ngũ hành khí trường; đang thẩm định đối soát.',
+  },
+  'SRC-BAT-TRACH-MINH-KINH-NGUHANH': {
+    id: 'SRC-BAT-TRACH-MINH-KINH-NGUHANH',
+    code: 'BTMK-NGUHANH',
+    title: 'Bát Trạch Minh Kính — Ngũ Hành Bát Quái Khí Cục',
+    originalTitle: '八宅明鏡',
+    authorOrOrigin: 'Khuyết danh (khắc bản đời Thanh, thác danh Dương Quân Tùng truyền bản)',
+    category: 'classical_feng_shui',
+    school: 'bat_trach',
+    publicationEra: 'Thanh triều',
+    description: 'Quyển Thượng và Quyển Hạ: Bát Quái Cung Vị Ngũ Hành sở thuộc và phối mệnh biện hướng định khí cục.',
+    status: 'pending',
+    notes: 'Attribution status: Thác danh truyền bản, tác quyền thư mục thực tế đời Thanh đang trong quá trình thẩm định. Chưa khẳng định tác giả lịch sử.',
+  },
+  'SRC-PHONG-THUY-NOI-THAT-HIEN-DAI': {
+    id: 'SRC-PHONG-THUY-NOI-THAT-HIEN-DAI',
+    code: 'INTERNAL/APPLIED PROVISIONAL',
+    title: 'Quy ước Ngũ Hành Nội Thất Hiện Đại (Provisional Applied Specification)',
+    authorOrOrigin: 'Quy ước thực hành phong thủy kiến trúc đương đại (chưa xác minh thư mục học thuật)',
+    category: 'heuristic_experimental',
+    school: 'ngu_hanh',
+    publicationEra: 'Hiện đại',
+    description: 'Quy ước màu sắc mở rộng và vật liệu công nghiệp (MDF, kính, đá nhân tạo, vải tổng hợp) trong không gian nội thất đương đại.',
+    status: 'unverified',
+    notes: 'INTERNAL/APPLIED PROVISIONAL: Không coi là nguồn học thuật cổ điển đã xác minh. Dùng tạm thời cho phân loại vật liệu/màu sắc mở rộng.',
+  },
+  'SRC-HEURISTIC-HARMONY-SCORE': {
+    id: 'SRC-HEURISTIC-HARMONY-SCORE',
+    code: 'HEURISTIC-SCORE-V1',
+    title: 'Quy ước Thang điểm Hoà Hợp Ngũ Hành Nội Bộ (Studio Harmony Score)',
+    authorOrOrigin: 'Nhóm phát triển AI Feng Shui Studio',
+    category: 'heuristic_experimental',
+    school: 'engineering',
+    publicationEra: '2026',
+    description: 'Trọng số định lượng 0.0–1.0 cho 6 loại quan hệ Ngũ Hành: SAME=0.90, GENERATES=0.85, GENERATED_BY=0.75, OVERCOME_BY=0.25, OVERCOMES=0.20, UNKNOWN=0.50.',
+    status: 'pending',
+    notes: 'Chỉ số heuristic quy ước nội bộ, phục vụ sắp xếp thứ tự khuyến nghị giao diện; tuyệt đối không đưa vào overallScore P5.',
+  },
+  'SRC-HEURISTIC-SHAPE-DIMENSIONS': {
+    id: 'SRC-HEURISTIC-SHAPE-DIMENSIONS',
+    code: 'HEURISTIC-SHAPE-V1',
+    title: 'Quy tắc Heuristic Phân Loại Hình Dạng Ngũ Hành từ Kích Thước 3D (OBB)',
+    authorOrOrigin: 'Nhóm phát triển AI Feng Shui Studio',
+    category: 'heuristic_experimental',
+    school: 'engineering',
+    publicationEra: '2026',
+    description: 'Tỉ lệ số học chiều kích OBB: height / max(w, l) > 2.0 (Mộc), < 0.3 (Thổ), vuông cân (Kim).',
+    status: 'pending',
+    notes: 'Quy tắc xấp xỉ hình học heuristic của hệ thống; không phải nguyên lý cổ thư có số đo cố định.',
   },
 };
 

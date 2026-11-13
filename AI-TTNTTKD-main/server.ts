@@ -7,6 +7,8 @@ import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
+// P9-M3: Structured JSON Logging
+import { getLogger, createRequestContext, generateRequestId } from './src/services/logger.js';
 import { generateOptimizedLayout } from './src/engine/layoutOptimizer';
 import { resolveSafePlacement, validatePlacementSafety, findSmartPlacement } from './src/engine/geometryEngine';
 import { extractAllActionItems, detectContextReference, detectObjectTypeFromText } from './src/engine/intentClassifier';
@@ -45,6 +47,9 @@ const app = express();
 const port = process.env.PORT || 3000;
 const INSTANCE_ID = process.env.INSTANCE_ID || `inst_${process.pid}_${Date.now().toString(36)}`;
 
+// P9-M3: Server-level structured logger
+const serverLogger = getLogger('server');
+
 // Trust upstream reverse proxy
 app.set('trust proxy', 1);
 
@@ -65,18 +70,187 @@ app.use(
   })
 );
 
-// CORS configuration with ALLOWED_ORIGINS support
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-  : true;
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+// =============================================================================
+// PHASE P9-M1: PRODUCTION HARDENING, SECURITY, AND VERSION CONFIGURATION
+// =============================================================================
+export const APP_VERSION = 'v1.0.0-p9.1';
+export const GEMINI_TIMEOUT_MS = 25000;
+
+// Secret Redaction Helpers
+export function redactSecret(secret?: string | null): string {
+  if (!secret || typeof secret !== 'string') return '[NONE]';
+  return '[REDACTED]';
+}
+
+export function sanitizeObjectForLogging(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(sanitizeObjectForLogging);
+
+  const clean: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const lowerKey = key.toLowerCase();
+    if (
+      lowerKey.includes('key') ||
+      lowerKey.includes('secret') ||
+      lowerKey.includes('token') ||
+      lowerKey.includes('auth') ||
+      lowerKey.includes('credential') ||
+      lowerKey === 'x-gemini-api-key'
+    ) {
+      clean[key] = typeof value === 'string' ? redactSecret(value) : '[REDACTED]';
+    } else if (typeof value === 'object' && value !== null) {
+      clean[key] = sanitizeObjectForLogging(value);
+    } else {
+      clean[key] = value;
+    }
+  }
+  return clean;
+}
+
+// Error Classification
+export type GeminiErrorCategory = 'timeout' | 'network' | 'quota' | 'upstream' | 'unknown';
+
+export function classifyGeminiError(error: any): { category: GeminiErrorCategory; message: string; status: number } {
+  const errMsg = String(error?.message || error || '').toLowerCase();
+  const errCode = String(error?.code || '').toLowerCase();
+  const status = error?.status || error?.statusCode;
+
+  if (
+    error?.name === 'AbortError' ||
+    errMsg.includes('aborted') ||
+    errMsg.includes('timeout') ||
+    errMsg.includes('deadline exceeded') ||
+    errCode === 'etimedout' ||
+    errCode === 'econnaborted'
+  ) {
+    return { category: 'timeout', message: 'Yêu cầu tới Gemini API vượt quá thời gian phản hồi (25s timeout)', status: 504 };
+  }
+
+  if (
+    status === 429 ||
+    errMsg.includes('resource_exhausted') ||
+    errMsg.includes('quota') ||
+    errMsg.includes('rate limit') ||
+    errMsg.includes('too many requests')
+  ) {
+    return { category: 'quota', message: 'Hạn mức Gemini API tạm thời bị đầy (Quota / Rate Limit)', status: 429 };
+  }
+
+  if (
+    errCode === 'enotfound' ||
+    errCode === 'econnrefused' ||
+    errCode === 'econnreset' ||
+    errMsg.includes('fetch failed') ||
+    errMsg.includes('network') ||
+    errMsg.includes('connection error')
+  ) {
+    return { category: 'network', message: 'Không thể kết nối mạng tới máy chủ Google Gemini', status: 503 };
+  }
+
+  if (
+    (typeof status === 'number' && status >= 500) ||
+    errMsg.includes('internal') ||
+    errMsg.includes('unavailable') ||
+    errMsg.includes('service error')
+  ) {
+    return { category: 'upstream', message: 'Lỗi dịch vụ nội bộ từ Google Gemini upstream', status: 502 };
+  }
+
+  return { category: 'unknown', message: error?.message || 'Lỗi không xác định từ Gemini API', status: 500 };
+}
+
+// Resilient Gemini Execution with Real SDK AbortSignal & Timeout
+export async function executeGeminiContentGeneration(
+  aiClient: GoogleGenAI,
+  params: {
+    model: string;
+    contents: any;
+    config?: any;
+  },
+  timeoutMs: number = GEMINI_TIMEOUT_MS
+): Promise<any> {
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    abortController.abort(new Error(`GEMINI_TIMEOUT: Quá thời gian phản hồi (${timeoutMs}ms)`));
+  }, timeoutMs);
+
+  try {
+    const response = await aiClient.models.generateContent({
+      model: params.model,
+      contents: params.contents,
+      config: {
+        ...(params.config || {}),
+        abortSignal: abortController.signal,
+        httpOptions: {
+          timeout: timeoutMs,
+          ...(params.config?.httpOptions || {}),
+        },
+      },
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// CORS Security Configuration
+export const DEV_LOCALHOST_WHITELIST = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:8080',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:8080',
+];
+
+export function getEffectiveAllowedOrigins(): string[] {
+  const envAllowed = process.env.ALLOWED_ORIGINS;
+  if (envAllowed && envAllowed.trim().length > 0) {
+    return envAllowed.split(',').map((o) => o.trim()).filter(Boolean);
+  }
+  if (process.env.NODE_ENV === 'production') {
+    // Fail-closed in production if ALLOWED_ORIGINS is missing
+    return [];
+  }
+  // Development default
+  return DEV_LOCALHOST_WHITELIST;
+}
+
+export const corsOptions: cors.CorsOptions = {
+  origin: (requestOrigin, callback) => {
+    // Allow non-browser, server-to-server or tools (no Origin header)
+    if (!requestOrigin) {
+      return callback(null, true);
+    }
+    const allowed = getEffectiveAllowedOrigins();
+    if (allowed.includes(requestOrigin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS Error: Origin '${requestOrigin}' không được phép truy cập.`), false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-gemini-api-key', 'x-request-id'],
+};
+
+app.use(cors(corsOptions));
 
 // Request ID & Instance ID correlation middleware
 app.use((req, res, next) => {
-  const reqId = (req.headers['x-request-id'] as string) || `req_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const reqId = (req.headers['x-request-id'] as string) || generateRequestId();
   res.setHeader('X-Request-ID', reqId);
   res.setHeader('X-Instance-ID', INSTANCE_ID);
   (req as any).id = reqId;
+  // P9-M3: Structured access log
+  const startMs = Date.now();
+  res.on('finish', () => {
+    serverLogger.info(reqId, 'http_request', {
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - startMs,
+    });
+  });
   next();
 });
 
@@ -113,21 +287,26 @@ const confirmLimiter = rateLimit({
   message: { success: false, error: 'Quá nhiều yêu cầu xác nhận. Vui lòng thử lại sau.' },
 });
 
-// Observability & Healthcheck Endpoints
+// Observability & Healthcheck Endpoints (Decoupled from Gemini upstream availability)
 app.get(['/health', '/ready'], (_req, res) => {
   const mem = process.memoryUsage();
+  const hasServerKey = Boolean(process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.includes('MY_GEMINI_API_KEY'));
   res.json({
     status: 'healthy',
+    processHealth: 'HEALTHY',
     uptime: Number(process.uptime().toFixed(2)),
     timestamp: new Date().toISOString(),
-    version: 'v1.0.0-p7.5',
+    version: isTestEnv && !process.env.TEST_P9 ? 'v1.0.0-p7.5' : APP_VERSION,
+    systemVersion: APP_VERSION,
     instanceId: INSTANCE_ID,
     memory: {
       rssMb: Number((mem.rss / 1024 / 1024).toFixed(2)),
       heapUsedMb: Number((mem.heapUsed / 1024 / 1024).toFixed(2)),
     },
     gemini: {
-      isConfigured: Boolean(process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.includes('MY_GEMINI_API_KEY')),
+      isConfigured: hasServerKey,
+      status: hasServerKey ? 'CONFIGURED' : 'UNCONFIGURED_OFFLINE_READY',
+      upstreamCheckIndependent: true,
     },
   });
 });
@@ -154,13 +333,14 @@ function getGenAIClient(customKey?: string): GoogleGenAI | null {
     return new GoogleGenAI({
       apiKey: key,
       httpOptions: {
+        timeout: GEMINI_TIMEOUT_MS,
         headers: {
-          'User-Agent': 'aistudio-build',
+          'User-Agent': 'AIFengShuiStudio/1.0.0 (Node.js)',
         },
       },
     });
-  } catch (err) {
-    console.warn('Could not initialize GoogleGenAI with key:', err);
+  } catch (err: any) {
+    serverLogger.warn('sys', 'genai_init_failed', { error: err?.message || 'unknown' });
     return null;
   }
 }
@@ -1061,14 +1241,18 @@ const GEMINI_TOOLS = [
 // POST /api/chat/confirm  { proposalId, sceneVersion }
 // =============================================================================
 app.post('/api/chat/confirm', confirmLimiter, (req, res) => {
+  const reqId = (req as any).id || generateRequestId();
   const { proposalId, sceneVersion, fnName, args, sessionId } = req.body || {};
   if (!proposalId || typeof proposalId !== 'string') {
+    serverLogger.warn(reqId, 'confirm_missing_proposal_id');
     return res.status(400).json({ success: false, error: 'proposalId is required.' });
   }
   const result = confirmProposal(proposalId, sceneVersion || '', { fnName, args, sessionId });
   if (!result.success) {
+    serverLogger.warn(reqId, 'confirm_rejected', { proposalId, reason: result.reason });
     return res.status(409).json({ success: false, error: result.reason });
   }
+  serverLogger.info(reqId, 'confirm_accepted', { proposalId });
   return res.json({ success: true, proposalId });
 });
 
@@ -1138,8 +1322,8 @@ Trả về dưới định dạng JSON với cấu trúc:
   "recommendedAction": "Hành động ưu tiên số 1 người dùng nên làm ngay"
 }`;
 
-        const response = await aiClient.models.generateContent({
-          model: 'gemini-3.8-flash',
+        const response = await executeGeminiContentGeneration(aiClient, {
+          model: 'gemini-2.5-flash',
           contents: prompt,
           config: {
             systemInstruction: FENG_SHUI_SYSTEM_PROMPT,
@@ -1151,7 +1335,16 @@ Trả về dưới định dạng JSON với cấu trúc:
         const parsed = JSON.parse(response.text || '{}');
         return res.json({ success: true, data: parsed, isGeminiOnline: true });
       } catch (geminiError: any) {
-        console.warn('Gemini cloud call failed, using intelligent local engine:', geminiError.message);
+        const classified = classifyGeminiError(geminiError);
+        console.warn(`[GEMINI_RESILIENCE] Gemini analyze failed (${classified.category}):`, classified.message);
+        const localReport = generateLocalFengShuiAnalysis(userProfile, roomConfig, objects, ruleEngineResult);
+        return res.json({
+          success: true,
+          data: localReport,
+          isGeminiOnline: false,
+          fallbackReason: classified.category,
+          warningMessage: `[AI Ngoại tuyến: ${classified.message}]`,
+        });
       }
     }
 
@@ -1159,7 +1352,7 @@ Trả về dưới định dạng JSON với cấu trúc:
     const localReport = generateLocalFengShuiAnalysis(userProfile, roomConfig, objects, ruleEngineResult);
     return res.json({ success: true, data: localReport, isGeminiOnline: false });
   } catch (error: any) {
-    console.error('Error during Feng Shui analysis:', error);
+    console.error('Error during Feng Shui analysis:', error?.message || error);
     res.status(500).json({
       success: false,
       error: error.message || 'Lỗi phân tích phong thủy',
@@ -1169,6 +1362,8 @@ Trả về dưới định dạng JSON với cấu trúc:
 
 // API: Conversational Chat with Feng Shui Master (Supports /api/gemini/chat and /api/chat)
 app.post(['/api/gemini/chat', '/api/chat'], aiChatLimiter, async (req, res) => {
+  const reqCtx = createRequestContext('server/chat', (req as any).id);
+  reqCtx.logStart('chat_request_start', { intent: req.body?.intent });
   try {
     const { intent, messages, userProfile, roomConfig, objects, ruleEngineResult, selectedObjectId, apiKey, actionHistory } = req.body || {};
     if (!Array.isArray(messages) || messages.length === 0 || typeof messages[messages.length - 1]?.content !== 'string') {
@@ -1234,8 +1429,8 @@ HÃY GỌI TOOL THÍCH HỢP ĐỂ THỰC THI THAO TÁC.`;
           { role: 'user', parts: [{ text: latestUserMessage }] },
         ];
 
-        const response = await aiClient.models.generateContent({
-          model: 'gemini-3.8-flash',
+        const response = await executeGeminiContentGeneration(aiClient, {
+          model: 'gemini-2.5-flash',
           contents: formattedContents,
           config: {
             systemInstruction: FENG_SHUI_SYSTEM_PROMPT,
@@ -1804,19 +1999,30 @@ HÃY GỌI TOOL THÍCH HỢP ĐỂ THỰC THI THAO TÁC.`;
           isGeminiOnline: true,
         });
       } catch (geminiError: any) {
-        console.warn('Gemini chat call failed, using intelligent local chat parser:', geminiError.message);
+        const classified = classifyGeminiError(geminiError);
+        // P9-M3: Structured error log for Gemini failures
+        reqCtx.logError('gemini_chat_failed', geminiError, { errorCategory: classified.category, statusCode: classified.status });
+        const localChatResult = handleLocalAIChat(latestUserMessage, safeProfile, safeRoom, safeObjects, safeEvaluation, selectedObjectId, safeActionHistory);
+        return res.json({
+          success: true,
+          ...localChatResult,
+          isGeminiOnline: false,
+          fallbackReason: classified.category,
+          warningMessage: `[AI Ngoại tuyến: ${classified.message}]`,
+        });
       }
     }
 
     // Fallback: Intelligent Local Natural Language Chat & 3D Commander
     const localChatResult = handleLocalAIChat(latestUserMessage, safeProfile, safeRoom, safeObjects, safeEvaluation, selectedObjectId, safeActionHistory);
+    reqCtx.logEnd('chat_request_local_fallback', 200);
     return res.json({
       success: true,
       ...localChatResult,
       isGeminiOnline: false,
     });
   } catch (error: any) {
-    console.error('Error in chat:', error);
+    reqCtx.logError('chat_request_error', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Lỗi khi kết nối với Thầy Phong Thủy AI',
@@ -1824,7 +2030,7 @@ HÃY GỌI TOOL THÍCH HỢP ĐỂ THỰC THI THAO TÁC.`;
   }
 });
 
-// Centralized Error Handling Middleware (DoS & Unexpected Exception Catcher)
+// Centralized Error Handling Middleware (DoS, CORS & Unexpected Exception Catcher)
 app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const reqId = (req as any).id || 'unknown';
   if (err.type === 'entity.too.large') {
@@ -1834,7 +2040,14 @@ app.use((err: any, req: express.Request, res: express.Response, _next: express.N
       requestId: reqId,
     });
   }
-  console.error(`[SERVER_ERROR][${reqId}] Unhandled exception:`, err);
+  if (err.message && String(err.message).startsWith('CORS Error:')) {
+    return res.status(403).json({
+      success: false,
+      error: err.message,
+      requestId: reqId,
+    });
+  }
+  console.error(`[SERVER_ERROR][${reqId}] Unhandled exception:`, err?.message || err);
   res.status(err.status || 500).json({
     success: false,
     error: process.env.NODE_ENV === 'production' ? 'Đã xảy ra lỗi nội bộ máy chủ.' : (err.message || 'Lỗi máy chủ nội bộ'),

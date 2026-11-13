@@ -19,7 +19,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 83
+      "durationMs": 111
     },
     {
       "id": "B-02",
@@ -32,7 +32,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 10
+      "durationMs": 9
     },
     {
       "id": "B-03",
@@ -45,7 +45,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 4
+      "durationMs": 5
     },
     {
       "id": "B-04",
@@ -58,7 +58,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 7
+      "durationMs": 6
     },
     {
       "id": "B-05",
@@ -73,7 +73,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 12
+      "durationMs": 8
     },
     {
       "id": "B-06",
@@ -88,7 +88,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 7
+      "durationMs": 4
     },
     {
       "id": "B-07",
@@ -101,7 +101,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Clarification handled",
-      "durationMs": 6
+      "durationMs": 4
     },
     {
       "id": "B-08",
@@ -114,7 +114,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Clarification handled",
-      "durationMs": 6
+      "durationMs": 3
     },
     {
       "id": "B-09",
@@ -129,7 +129,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 17
+      "durationMs": 38
     },
     {
       "id": "B-10",
@@ -144,7 +144,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 6
+      "durationMs": 5
     },
     {
       "id": "B-11",
@@ -159,7 +159,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 4
+      "durationMs": 2
     },
     {
       "id": "B-12",
@@ -172,7 +172,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 4
+      "durationMs": 2
     },
     {
       "id": "B-13",
@@ -185,7 +185,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 2
+      "durationMs": 1
     },
     {
       "id": "B-14",
@@ -213,7 +213,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 12
+      "durationMs": 85
     },
     {
       "id": "B-16",
@@ -228,7 +228,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 3
+      "durationMs": 4
     },
     {
       "id": "B-17",
@@ -243,7 +243,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 2
+      "durationMs": 4
     },
     {
       "id": "B-18",
@@ -256,7 +256,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Clarification handled",
-      "durationMs": 2
+      "durationMs": 4
     },
     {
       "id": "B-19",
@@ -269,7 +269,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 3
+      "durationMs": 4
     },
     {
       "id": "B-20",
@@ -297,7 +297,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 3
+      "durationMs": 5
     },
     {
       "id": "B-22",
@@ -310,7 +310,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 2
+      "durationMs": 3
     },
     {
       "id": "B-23",
@@ -323,7 +323,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 2
+      "durationMs": 3
     },
     {
       "id": "B-24",
@@ -338,7 +338,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 3
+      "durationMs": 4
     },
     {
       "id": "B-25",
@@ -351,7 +351,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 4
+      "durationMs": 3
     },
     {
       "id": "B-26",
@@ -405,7 +405,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 5
+      "durationMs": 4
     },
     {
       "id": "B-30",

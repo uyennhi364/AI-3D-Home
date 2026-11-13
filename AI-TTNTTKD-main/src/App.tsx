@@ -27,6 +27,10 @@ import { LayoutComparisonModal } from './components/LayoutComparisonModal';
 import { AIAnalysisReportModal } from './components/AIAnalysisReportModal';
 import { UnifiedAssessmentReportModal } from './components/UnifiedAssessmentReportModal';
 import { buildUnifiedAssessmentReport, UnifiedAssessmentReport } from './engine/core/unifiedAssessment';
+import {
+  evaluateRoomElementAssessment,
+  DetailedRoomElementAssessment,
+} from './engine/core/nguHanh/elementAssessment.js';
 import { PersonalProfile } from './engine/core/personalProfile';
 import { validateAICommand } from './services/aiCommandHandler';
 import {
@@ -92,6 +96,7 @@ export default function App() {
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [unifiedReport, setUnifiedReport] = useState<UnifiedAssessmentReport | null>(null);
+  const [nguHanhAssessment, setNguHanhAssessment] = useState<DetailedRoomElementAssessment | null>(null);
   const [isAiAnalyzing, setIsAiAnalyzing] = useState<boolean>(false);
   const [aiReportData, setAiReportData] = useState<any>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -753,7 +758,15 @@ export default function App() {
         roomName: 'Phòng ngủ Master',
       });
 
+      const nhAssessment = evaluateRoomElementAssessment(
+        roomConfig,
+        objects,
+        userProfile.element,
+        { northBearingDeg: (roomConfig as any).northBearingDeg ?? null }
+      );
+
       setUnifiedReport(report);
+      setNguHanhAssessment(nhAssessment);
       setIsReportModalOpen(true);
       showToast('✓ Đã cập nhật báo cáo phong thủy không gian sống.');
     } catch (e) {
@@ -1117,12 +1130,15 @@ export default function App() {
         onApply={handleApplyMultipleAdjustments}
       />
 
-      {/* Unified Assessment Report Modal (Phase P5) */}
+      {/* Unified Assessment Report Modal (Phase P5 + P8.4) */}
       <UnifiedAssessmentReportModal
         isOpen={isReportModalOpen}
         onClose={() => setIsReportModalOpen(false)}
         report={unifiedReport}
         onRefresh={handleTriggerAiAnalysis}
+        nguHanhAssessment={nguHanhAssessment}
+        personalElement={userProfile.element}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
       />
     </div>
   );

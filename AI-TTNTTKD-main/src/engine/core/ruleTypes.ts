@@ -8,14 +8,16 @@ export type RuleCategory =
   | 'traditional_feng_shui'      // Bát Trạch, Cung Vị, Hướng Cát/Hung
   | 'geometric_layout'           // Va chạm OBB, biên phòng, lối đi, hành lang cửa
   | 'environmental_ergonomics'   // Ánh sáng, thông gió, khoảng cách sử dụng
-  | 'advanced_flying_stars';     // Huyền Không Phi Tinh (chỉ bật khi đủ tham số)
+  | 'advanced_flying_stars'      // Huyền Không Phi Tinh (chỉ bật khi đủ tham số)
+  | 'ngu_hanh';                  // Ngũ Hành tương sinh tương khắc (P8 additive)
 
 export type FengShuiSchool =
   | 'bat_trach'       // Bát Trạch Minh Kính / Bát Trạch Tam Yếu
   | 'loan_dau'        // Loan Đầu Hình Thế Học
   | 'huyen_khong'     // Huyền Không Phi Tinh
   | 'ergonomics'      // Tiêu chuẩn Nhân trắc học & Kiến trúc nội thất
-  | 'general';        // Nguyên lý không gian cơ bản
+  | 'general'         // Nguyên lý không gian cơ bản
+  | 'ngu_hanh';       // Học thuyết Ngũ Hành cổ điển & ứng dụng
 
 export type RuleVerdict = 'pass' | 'warn' | 'fail' | 'unknown' | 'n/a';
 

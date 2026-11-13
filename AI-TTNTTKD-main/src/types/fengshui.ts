@@ -41,6 +41,8 @@ export interface RoomConfig {
   direction: CompassDirection; // Room facing direction
   doorWall?: 'east' | 'west' | 'south' | 'north' | string;
   windowWall?: 'east' | 'west' | 'south' | 'north' | string;
+  wallColor?: string;  // P8: Optional wall color hex (e.g. '#ffffff')
+  floorColor?: string; // P8: Optional floor color hex (e.g. '#8b4513')
 }
 
 export type RoomObjectType =
@@ -72,6 +74,7 @@ export interface RoomObject {
   rotation: { x: number; y: number; z: number }; // radians
   dimensions: { width: number; length: number; height: number }; // meters
   color?: string;
+  material?: string; // P8: Optional material key (e.g. 'wood', 'metal', 'ceramic')
   subType?: string; // e.g. 'double_1m6', 'double_1m8', 'single'
 }
 

@@ -5,6 +5,7 @@
 
 import { SceneProposal, ProposalStatus } from './agentTypes.js';
 import { computeArgsHash } from './sceneHasher.js';
+import { IProposalStore, createDefaultProposalStore } from './proposalStore.js';
 
 export const DEFAULT_PROPOSAL_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -24,11 +25,19 @@ export interface ValidationConfirmationResult {
 }
 
 export class ProposalManager {
-  private proposals: Map<string, SceneProposal> = new Map();
+  private store: IProposalStore;
   private ttlMs: number;
 
-  constructor(ttlMs: number = DEFAULT_PROPOSAL_TTL_MS) {
+  constructor(ttlMs: number = DEFAULT_PROPOSAL_TTL_MS, store?: IProposalStore) {
     this.ttlMs = ttlMs;
+    this.store = store ?? createDefaultProposalStore();
+  }
+
+  /**
+   * Access to underlying proposal store (for testing / administration).
+   */
+  public get proposals(): IProposalStore {
+    return this.store;
   }
 
   /**
@@ -72,7 +81,7 @@ export class ProposalManager {
       ruleEvaluationAfter: params.ruleEvaluationAfter,
     };
 
-    this.proposals.set(proposalId, proposal);
+    this.store.set(proposalId, proposal);
     return proposal;
   }
 
@@ -80,11 +89,11 @@ export class ProposalManager {
    * Retrieves proposal by ID, checking expiration.
    */
   public getProposal(proposalId: string): SceneProposal | null {
-    const prop = this.proposals.get(proposalId);
+    const prop = this.store.get(proposalId);
     if (!prop) return null;
     if (Date.now() > prop.expiresAt) {
       prop.status = 'expired';
-      this.proposals.delete(proposalId);
+      this.store.delete(proposalId);
       return null;
     }
     return prop;
@@ -96,7 +105,7 @@ export class ProposalManager {
   public validateConfirmation(input: ValidateConfirmationInput): ValidationConfirmationResult {
     const { proposalId, sessionId, fnName, args, currentSceneVersion } = input;
 
-    const proposal = this.proposals.get(proposalId);
+    const proposal = this.store.get(proposalId);
     if (!proposal) {
       return {
         valid: false,
@@ -108,7 +117,7 @@ export class ProposalManager {
     // 1. Expiration Check
     if (Date.now() > proposal.expiresAt || proposal.status === 'expired') {
       proposal.status = 'expired';
-      this.proposals.delete(proposalId);
+      this.store.delete(proposalId);
       return {
         valid: false,
         error: `Proposal ID "${proposalId}" đã hết thời hạn hiệu lực (${this.ttlMs / 1000}s). Vui lòng tạo đề xuất mới.`,
@@ -172,7 +181,7 @@ export class ProposalManager {
     // 6. Scene Version Staleness Check
     if (proposal.sceneVersion !== currentSceneVersion) {
       proposal.status = 'cancelled';
-      this.proposals.delete(proposalId);
+      this.store.delete(proposalId);
       return {
         valid: false,
         error: 'Bố cục phòng 3D đã bị thay đổi kể từ khi tạo đề xuất. Đề xuất cũ không còn an toàn để áp dụng.',
@@ -217,11 +226,11 @@ export class ProposalManager {
    * Marks as cancelled and removes from active store so no corrupted proposal lingers.
    */
   public releaseClaim(proposalId: string, finalStatus: 'cancelled' | 'pending' = 'cancelled'): void {
-    const prop = this.proposals.get(proposalId);
+    const prop = this.store.get(proposalId);
     if (!prop) return;
     prop.status = finalStatus;
     if (finalStatus === 'cancelled') {
-      this.proposals.delete(proposalId);
+      this.store.delete(proposalId);
     }
   }
 
@@ -229,11 +238,11 @@ export class ProposalManager {
    * Marks a proposal as executed.
    */
   public markExecuted(proposalId: string): boolean {
-    const prop = this.proposals.get(proposalId);
+    const prop = this.store.get(proposalId);
     if (!prop) return false;
     prop.status = 'executed';
     // Remove to prevent replay attacks
-    this.proposals.delete(proposalId);
+    this.store.delete(proposalId);
     return true;
   }
 
@@ -241,10 +250,10 @@ export class ProposalManager {
    * Cancels a pending proposal.
    */
   public cancelProposal(proposalId: string): boolean {
-    const prop = this.proposals.get(proposalId);
+    const prop = this.store.get(proposalId);
     if (!prop) return false;
     prop.status = 'cancelled';
-    this.proposals.delete(proposalId);
+    this.store.delete(proposalId);
     return true;
   }
 
@@ -253,16 +262,16 @@ export class ProposalManager {
    */
   public cleanExpired(): void {
     const now = Date.now();
-    for (const [id, prop] of this.proposals.entries()) {
+    for (const [id, prop] of this.store.entries()) {
       if (now > prop.expiresAt) {
         prop.status = 'expired';
-        this.proposals.delete(id);
+        this.store.delete(id);
       }
     }
   }
 
   public clearAll(): void {
-    this.proposals.clear();
+    this.store.clear();
   }
 }
 
