@@ -9,7 +9,7 @@ import rateLimit from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 // P9-M3: Structured JSON Logging
 import { getLogger, createRequestContext, generateRequestId } from './src/services/logger.js';
-import { generateOptimizedLayout } from './src/engine/layoutOptimizer';
+import { generateOptimizedLayout, generateMultipleLayoutProposals } from './src/engine/layoutOptimizer';
 import { resolveSafePlacement, validatePlacementSafety, findSmartPlacement } from './src/engine/geometryEngine';
 import { extractAllActionItems, detectContextReference, detectObjectTypeFromText } from './src/engine/intentClassifier';
 import { resolveContextTargets } from './src/engine/contextResolver';
@@ -621,6 +621,38 @@ function handleLocalAIChat(userText: string, userProfile: any, roomConfig: any, 
 
     const isMultiProposalRequest = /(?:các\s*phương\s*án|3\s*phương\s*án|nhiều\s*phương\s*án|phương\s*án\s*khác\s*nhau)/i.test(lower);
 
+    if (isMultiProposalRequest) {
+      const multi = generateMultipleLayoutProposals(userProfile, roomConfig, objects, ruleEngineResult);
+      const primaryProposal = multi.options[0].proposal;
+      const opt1 = multi.options[0];
+      const opt2 = multi.options[1];
+      const opt3 = multi.options[2];
+
+      const replyText = `Tôi đã lập **3 phương án bố trí phòng ngủ hoàn toàn khác biệt** về vị trí và mục tiêu tối ưu cho gia chủ mệnh ${userProfile.guaName}:\n\n` +
+        `• **Phương án 1 (Ưu tiên Phong Thủy):** ${opt1.tagline} (Phong Thủy: ${opt1.scoreBreakdown.fengShui}đ, Công Năng: ${opt1.scoreBreakdown.usability}đ, Thẩm Mỹ: ${opt1.scoreBreakdown.aesthetics}đ)\n` +
+        `• **Phương án 2 (Ưu tiên Công Năng):** ${opt2.tagline} (Phong Thủy: ${opt2.scoreBreakdown.fengShui}đ, Công Năng: ${opt2.scoreBreakdown.usability}đ, Thẩm Mỹ: ${opt2.scoreBreakdown.aesthetics}đ)\n` +
+        `• **Phương án 3 (Ưu tiên Thẩm Mỹ):** ${opt3.tagline} (Phong Thủy: ${opt3.scoreBreakdown.fengShui}đ, Công Năng: ${opt3.scoreBreakdown.usability}đ, Thẩm Mỹ: ${opt3.scoreBreakdown.aesthetics}đ)\n\n` +
+        `Bạn có thể chọn từng phương án trên giao diện để xem trước bóng mờ 3D hoặc bấm Áp dụng!`;
+
+      return {
+        reply: replyText,
+        aiActions: {
+          actions: [
+            {
+              type: 'optimize_room',
+              description: 'Đề xuất 3 phương án bố trí phòng ngủ khác biệt',
+              adjustments: primaryProposal.adjustments,
+            },
+          ],
+          optimizationProposal: primaryProposal,
+          multipleProposals: multi,
+        },
+        proposedAdjustment: primaryProposal.adjustments[0] || null,
+        optimizationProposal: primaryProposal,
+        multipleProposals: multi,
+      };
+    }
+
     const { proposal, optimizedObjects } = generateOptimizedLayout(
       userProfile,
       roomConfig,
@@ -630,10 +662,6 @@ function handleLocalAIChat(userText: string, userProfile: any, roomConfig: any, 
 
     const improvementList = proposal.improvements.map((imp: string, i: number) => `${i + 1}. ${imp}`).join('\n');
     let replyText = `Tôi đã sử dụng Layout Optimization Engine để phân tích toàn bộ ${objects.length} đồ vật trong phòng ${roomConfig.width}m × ${roomConfig.length}m của gia chủ mệnh ${userProfile.guaName} (${userProfile.element} - ${userProfile.group}).\n\nĐề xuất phương án tối ưu hình học & phong thủy:\n• Điểm phong thủy: nâng từ **${proposal.beforeScore}** lên **${proposal.afterScore}/100**\n${improvementList ? `\nCác cải tiến chính:\n${improvementList}` : ''}`;
-
-    if (isMultiProposalRequest) {
-      replyText += `\n\nCác phương án bố trí gợi ý cho bạn lựa chọn:\n• **Phương án 1 (Bát Trạch Cát Vị):** Đặt giường hướng Bắc (Phục Vị) và bàn làm việc hướng Đông/Đông Nam (Thiên Y, Sinh Khí).\n• **Phương án 2 (Tối ưu vi khí hậu & chiếu sáng):** Giữ khoảng cách thông gió tự nhiên, bàn làm việc cạnh cửa sổ đón sáng tự nhiên, tủ quần áo tựa góc tường.\n• **Phương án 3 (Công năng & lưu thông tiện nghi):** Đảm bảo hành lang di chuyển tối thiểu 80cm, khoảng mở cánh tủ và giường thông thoáng.`;
-    }
 
     replyText += `\n\nBạn có thể bấm **Xem trước** để xem bóng mờ 3D hoặc bấm **Áp dụng** để cập nhật toàn bộ vị trí mới!`;
 

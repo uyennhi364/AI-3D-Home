@@ -49,4 +49,7 @@ execSync('npx tsx tests/p1_defect_remediation.test.ts', { stdio: 'inherit' });
 console.log('\n>>> RUNNING SUITE 14: PHASE P8.2 PRODUCTION READINESS & SECURITY HARDENING <<<');
 execSync('npx tsx tests/p8_2_production_readiness.test.ts', { stdio: 'inherit' });
 
+console.log('\n>>> RUNNING SUITE 15: THREE DISTINCT ROOM LAYOUT ALTERNATIVES <<<');
+execSync('npx tsx tests/three_distinct_layouts.test.ts', { stdio: 'inherit' });
+
 console.log('\n>>> ALL TEST SUITES EXECUTED SUCCESSFULLY! <<<');

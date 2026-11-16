@@ -215,6 +215,17 @@ export interface GroundTruthSpatialContext {
 
 export type LayoutStrategyType = 'feng_shui_priority' | 'balance_usability' | 'balance_aesthetics';
 
+export interface StrategicLayoutMetrics {
+  changedCount: number;
+  rotatedCount: number;
+  unchangedCount: number;
+  circulationWidth: number;
+  bedFacingDirection: string;
+  isDistinct: boolean;
+  tradeOff: string;
+  heuristicAesthetics?: boolean;
+}
+
 export interface StrategicLayoutOption {
   strategy: LayoutStrategyType;
   title: string;
@@ -228,12 +239,14 @@ export interface StrategicLayoutOption {
     usability: number;
     aesthetics: number;
   };
+  metrics?: StrategicLayoutMetrics;
 }
 
 export interface MultipleLayoutProposals {
   options: StrategicLayoutOption[];
   activeStrategy: LayoutStrategyType;
   roomSummary: string;
+  isAllDistinct?: boolean;
 }
 
 export interface ExplainableRuleDetail {

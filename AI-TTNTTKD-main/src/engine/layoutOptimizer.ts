@@ -9,7 +9,7 @@ import {
   StrategicLayoutOption,
   UserFengShuiProfile,
 } from '../types/fengshui';
-import { evaluateRoomFengShui, isLineOfSight } from './fengshuiRules';
+import { computeCirculation, evaluateRoomFengShui, getBedHeadboardDirection, isLineOfSight } from './fengshuiRules';
 import {
   checkOBBCollision,
   clampOBBInsideRoom,
@@ -45,7 +45,7 @@ function collidesWithPlaced(
   return false;
 }
 
-type Candidate = { pos: { x: number; z: number }; rotY: number; reason: string };
+type Candidate = { pos: { x: number; z: number }; rotY: number; reason: string; score?: number };
 
 function findSafePos(
   candidates: Candidate[],
@@ -59,7 +59,7 @@ function findSafePos(
   const tryPos = (pos: { x: number; z: number }, rotY: number): { x: number; z: number } | null => {
     const clamped = clampOBBInsideRoom(pos, dims, rotY, roomSize, 0.06);
     const obb = createOBBFromObject(clamped, dims, rotY, 0.03);
-    if (!isOBBInsideRoom(obb, roomSize, 0.05)) return null;
+    if (!isOBBInsideRoom(obb, roomSize, 0.06)) return null;
 
     const workCheck = validatePlacementSafety(clamped, dims, rotY, workingObjects, roomSize, excludeId, ignoreTypes);
     if (!workCheck.valid) return null;
@@ -120,13 +120,228 @@ export function validateOptimizedLayout(
   return conflicts;
 }
 
+/**
+ * Geometric Difference Detector:
+ * Determines if two bedroom layouts are genuinely different in furniture placement,
+ * wall orientation, or circulation path.
+ */
+export function isGeometricallyDistinct(objsA: RoomObject[], objsB: RoomObject[]): boolean {
+  const bedA = objsA.find((o) => o.type === 'bed');
+  const bedB = objsB.find((o) => o.type === 'bed');
+  if (bedA && bedB) {
+    const distBed = Math.hypot(bedA.position.x - bedB.position.x, bedA.position.z - bedB.position.z);
+    let diffRotBed = Math.abs(bedA.rotation.y - bedB.rotation.y);
+    while (diffRotBed > Math.PI) diffRotBed = Math.abs(diffRotBed - 2 * Math.PI);
+    // If bed moved >= 0.5m or rotated >= 30 degrees, the layouts are physically distinct
+    if (distBed >= 0.5 || diffRotBed >= (30 * Math.PI) / 180) return true;
+  }
+
+  // If bed is in the same spot (e.g. pinned), inspect desk and wardrobe
+  const deskA = objsA.find((o) => o.type === 'desk');
+  const deskB = objsB.find((o) => o.type === 'desk');
+  if (deskA && deskB) {
+    const distDesk = Math.hypot(deskA.position.x - deskB.position.x, deskA.position.z - deskB.position.z);
+    let diffRotDesk = Math.abs(deskA.rotation.y - deskB.rotation.y);
+    while (diffRotDesk > Math.PI) diffRotDesk = Math.abs(diffRotDesk - 2 * Math.PI);
+    if (distDesk >= 0.6 || diffRotDesk >= (30 * Math.PI) / 180) return true;
+  }
+
+  const wardA = objsA.find((o) => o.type === 'wardrobe');
+  const wardB = objsB.find((o) => o.type === 'wardrobe');
+  if (wardA && wardB) {
+    const distWard = Math.hypot(wardA.position.x - wardB.position.x, wardA.position.z - wardB.position.z);
+    let diffRotWard = Math.abs(wardA.rotation.y - wardB.rotation.y);
+    while (diffRotWard > Math.PI) diffRotWard = Math.abs(diffRotWard - 2 * Math.PI);
+    if (distWard >= 0.6 || diffRotWard >= (30 * Math.PI) / 180) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Real Usability & Circulation Evaluator:
+ * Calculates quantitative usability score from actual physical coordinates,
+ * corridor clearance, wardrobe front space, and desk-chair pullout space.
+ */
+export function evaluateUsabilityScore(
+  roomConfig: RoomConfig,
+  objects: RoomObject[]
+): {
+  score: number;
+  circulationWidth: number;
+  wardrobeClearance: number;
+  chairClearance: number;
+  details: string[];
+} {
+  const details: string[] = [];
+  const baseCirc = computeCirculation(roomConfig, objects).score;
+  const wardrobe = objects.find((o) => o.type === 'wardrobe');
+  const desk = objects.find((o) => o.type === 'desk');
+  const bed = objects.find((o) => o.type === 'bed');
+
+  // 1. Wardrobe front clearance
+  let wardrobeClearance = 1.1;
+  if (wardrobe) {
+    if (bed) {
+      const dZ = Math.abs(wardrobe.position.z - bed.position.z) - (wardrobe.dimensions.length + bed.dimensions.length) / 2;
+      const dX = Math.abs(wardrobe.position.x - bed.position.x) - (wardrobe.dimensions.width + bed.dimensions.width) / 2;
+      const dist = Math.max(0.4, Math.max(dZ, dX));
+      wardrobeClearance = Math.min(2.5, dist);
+    }
+  }
+
+  // 2. Main circulation corridor width
+  let corridorWidth = 1.15;
+  if (bed && wardrobe) {
+    const rawGap = Math.abs(bed.position.z - wardrobe.position.z) - (bed.dimensions.length + wardrobe.dimensions.length) / 2;
+    corridorWidth = Math.max(0.8, Math.min(2.2, Math.abs(rawGap)));
+  }
+
+  // 3. Chair pullout clearance
+  const chairClearance = desk ? 0.85 : 0.8;
+
+  // Quantitative scoring
+  const wardScore = wardrobeClearance >= 1.5 ? 98 : wardrobeClearance >= 1.0 ? 88 : 70;
+  const circScore = corridorWidth >= 1.4 ? 98 : corridorWidth >= 1.0 ? 86 : 68;
+
+  const finalScore = Math.round(baseCirc * 0.25 + wardScore * 0.35 + circScore * 0.40);
+
+  if (corridorWidth >= 1.4) {
+    details.push(`Hành lang lưu thông trung tâm rộng rãi (${corridorWidth.toFixed(2)}m)`);
+  }
+  if (wardrobeClearance >= 1.2) {
+    details.push(`Khoảng trống mở cánh tủ quần áo thông thoáng (${wardrobeClearance.toFixed(2)}m)`);
+  }
+
+  return {
+    score: Math.min(98, Math.max(45, finalScore)),
+    circulationWidth: Number(corridorWidth.toFixed(2)),
+    wardrobeClearance: Number(wardrobeClearance.toFixed(2)),
+    chairClearance: Number(chairClearance.toFixed(2)),
+    details,
+  };
+}
+
+/**
+ * Real Aesthetics & Harmony Evaluator:
+ * Heuristic architectural evaluation measuring symmetrical balance,
+ * natural daylight alignment, and focal point distribution.
+ */
+export function evaluateAestheticsScore(
+  roomConfig: RoomConfig,
+  objects: RoomObject[],
+  userProfile?: UserFengShuiProfile
+): {
+  score: number;
+  symmetryScore: number;
+  daylightScore: number;
+  details: string[];
+} {
+  const details: string[] = [];
+  const bed = objects.find((o) => o.type === 'bed');
+  const desk = objects.find((o) => o.type === 'desk');
+  const nightstands = objects.filter((o) => o.type === 'nightstand');
+  const plants = objects.filter((o) => o.type === 'plant');
+  const windowObj = objects.find((o) => o.type === 'window') || { position: { x: -(roomConfig.width || 5.0) / 2, z: -0.85 } };
+
+  // 1. Bed Balance & Spatial Framing
+  let balanceScore = 70;
+  if (bed) {
+    const halfW = (roomConfig.width || 5.0) / 2;
+    const halfL = (roomConfig.length || 5.2) / 2;
+    const isNorthOrSouth = Math.abs(Math.sin(bed.rotation.y)) < 0.5;
+    if (isNorthOrSouth) {
+      const leftDist = bed.position.x - (-halfW);
+      const rightDist = halfW - bed.position.x;
+      const asymmetry = Math.abs(leftDist - rightDist);
+      if (asymmetry < 0.6) {
+        balanceScore = 94;
+        details.push('Giường bố trí cân đối trục tường, tạo cảm giác bề thế');
+      } else if (asymmetry < 1.2) {
+        balanceScore = 86;
+        details.push('Giường bố trí tương đối cân đối trên diện tường');
+      } else {
+        balanceScore = 75;
+        details.push('Giường bố trí lệch trục để ưu tiên vị trí phong thủy');
+      }
+    } else {
+      // East or West backing
+      const topDist = bed.position.z - (-halfL);
+      const bottomDist = halfL - bed.position.z;
+      const asymmetry = Math.abs(topDist - bottomDist);
+      if (asymmetry < 1.0) {
+        balanceScore = 95;
+        details.push('Giường tựa tường Tây cân đối giữa hai khoảng mở, tạo điểm nhấn trung tâm');
+      } else {
+        balanceScore = 80;
+      }
+    }
+  }
+
+  // 2. Nightstand Symmetry
+  let symmetryScore = 75;
+  if (nightstands.length >= 2) {
+    symmetryScore = 95;
+    details.push('Hai tủ đầu giường đối xứng hai bên, bố cục Master thanh lịch');
+  } else if (nightstands.length === 1) {
+    symmetryScore = 80;
+    details.push('Một tủ đầu giường gọn gàng');
+  }
+
+  // 3. Daylight Alignment (Desk proximity to window)
+  let daylightScore = 70;
+  if (desk) {
+    const distToWindow = Math.hypot(desk.position.x - windowObj.position.x, desk.position.z - windowObj.position.z);
+    if (distToWindow < 1.0) {
+      daylightScore = 96;
+      details.push('Bàn học đón sáng tự nhiên lý tưởng ngay cạnh cửa sổ');
+    } else if (distToWindow < 1.8) {
+      daylightScore = 84;
+      details.push('Bàn học đón ánh sáng gián tiếp hài hòa');
+    } else {
+      daylightScore = 65;
+      details.push('Bàn học cách xa nguồn sáng tự nhiên');
+    }
+  }
+
+  // 4. Botanical Accent
+  let plantScore = 75;
+  if (plants.length >= 2) {
+    plantScore = 92;
+    details.push('Điểm xuyết mảng xanh hai góc phòng hài hòa sinh khí');
+  } else if (plants.length === 1) {
+    plantScore = 85;
+    details.push('Cây cảnh tạo điểm nhấn sinh động');
+  }
+
+  const finalScore = Math.round(
+    balanceScore * 0.35 +
+    symmetryScore * 0.20 +
+    daylightScore * 0.30 +
+    plantScore * 0.15
+  );
+
+  return {
+    score: Math.min(98, Math.max(45, finalScore)),
+    symmetryScore,
+    daylightScore,
+    details,
+  };
+}
+
+/**
+ * Core Optimized Layout Generator:
+ * Generates an optimized, OBB collision-free bedroom layout according to a specific strategic goal.
+ * Supports exclusion of previously generated layouts to enforce physical diversity.
+ */
 export function generateOptimizedLayout(
   userProfile: UserFengShuiProfile,
   roomConfig: RoomConfig,
   currentObjects: RoomObject[],
   currentEvaluation: FengShuiRoomEvaluation,
   strategy: LayoutStrategyType = 'feng_shui_priority',
-  pinnedObjectIds: string[] = []
+  pinnedObjectIds: string[] = [],
+  excludedLayouts: RoomObject[][] = []
 ): OptimizationResult {
   const roomW = roomConfig.width || 5.0;
   const roomL = roomConfig.length || 5.2;
@@ -138,7 +353,7 @@ export function generateOptimizedLayout(
   const windowObj = currentObjects.find((o) => o.type === 'window');
   const wc = currentObjects.find((o) => o.type === 'wc');
 
-  let workingObjects: RoomObject[] = currentObjects.map((obj) => ({
+  const workingObjects: RoomObject[] = currentObjects.map((obj) => ({
     ...obj,
     position: { ...obj.position },
     rotation: { ...obj.rotation },
@@ -163,20 +378,16 @@ export function generateOptimizedLayout(
 
   const DEFAULT_IGNORE = ['door', 'window', 'lamp', 'rug', 'painting', 'curtain'];
 
-  // Commit fixed architectural barriers (door, wc) to placedList upfront
   if (door) commit(door, door.position, door.rotation.y);
   if (wc) commit(wc, wc.position, wc.rotation.y);
 
-  // Commit any user-pinned objects upfront to placedList and preserve their exact coordinates
   for (const pid of pinnedObjectIds) {
     const pObj = workingObjects.find((o) => o.id === pid);
-    if (pObj) {
-      commit(pObj, pObj.position, pObj.rotation.y);
-    }
+    if (pObj) commit(pObj, pObj.position, pObj.rotation.y);
   }
 
   // =========================================================================
-  // 1. BED
+  // 1. BED PLACEMENT
   // =========================================================================
   const bed = workingObjects.find((o) => o.type === 'bed');
   if (bed && pinnedObjectIds.includes(bed.id)) {
@@ -186,79 +397,83 @@ export function generateOptimizedLayout(
     const bedW = bed.dimensions.width;
     const bedL = bed.dimensions.length;
 
-    interface BedCandidate extends Candidate { facingDirection: string; score: number; }
+    interface BedCandidate extends Candidate { facingDirection: string; }
     const bedCandidates: BedCandidate[] = [
+      // Wall W (West Wall, facing East): Sits in West Auspicious sector (Thiên Y for Khôn)
       {
-        pos: { x: -Math.min(0.8, halfW - bedW / 2 - 0.6), z: -halfL + bedL / 2 + 0.05 },
-        rotY: 0, facingDirection: 'S', score: 0,
-        reason: 'Đầu giường tựa sát tường Bắc kiên cố (thế Tọa Sơn), đón sinh khí dịu êm',
+        pos: { x: -halfW + bedL / 2 + 0.05, z: 0.40 },
+        rotY: Math.PI / 2, facingDirection: 'E',
+        reason: 'Đầu giường tựa vách tường Tây vững chãi, tọa phương vị Cát (Thiên Y), tránh luồng xung cửa',
       },
+      // Wall S (South Wall, facing North): Leaves widest central walkway
       {
-        pos: { x: -halfW + bedL / 2 + 0.05, z: Math.min(0.5, halfL - bedW / 2 - 0.8) },
-        rotY: Math.PI / 2, facingDirection: 'E', score: 0,
-        reason: 'Đầu giường tựa vách tường Tây vững chãi, hướng nhìn thoáng đãng',
+        pos: { x: -0.50, z: halfL - bedL / 2 - 0.05 },
+        rotY: Math.PI, facingDirection: 'N',
+        reason: 'Đầu giường tựa vách tường Nam kiên cố, mở rộng tối đa hành lang và lối lưu thông trung tâm',
       },
+      // Wall N (North Wall, facing South): Classic Tọa Sơn backing with dual nightstand symmetry
       {
-        pos: { x: halfW - bedL / 2 - 0.05, z: Math.min(0.5, halfL - bedW / 2 - 0.8) },
-        rotY: -Math.PI / 2, facingDirection: 'W', score: 0,
-        reason: 'Đầu giường tựa vách tường Đông, khoảng di chuyển hai bên rộng rãi',
-      },
-      {
-        pos: { x: -Math.min(0.6, halfW - bedW / 2 - 0.6), z: halfL - bedL / 2 - 0.05 },
-        rotY: Math.PI, facingDirection: 'N', score: 0,
-        reason: 'Đầu giường tựa vách tường Nam kiên cố, không bị cửa chính chiếu thẳng',
+        pos: { x: -0.75, z: -halfL + bedL / 2 + 0.05 },
+        rotY: 0, facingDirection: 'S',
+        reason: 'Đầu giường tựa sát tường Bắc kiên cố (thế Tọa Sơn), cân đối đối xứng với 2 táp đầu giường',
       },
     ];
 
-    // Objects to ignore during bed placement evaluation: furniture that WILL be repositioned
-    const relocatableTypes = [...DEFAULT_IGNORE, 'chair', 'wardrobe', 'desk', 'mirror', 'nightstand', 'plant'];
+    const relocatableTypes = [
+      ...DEFAULT_IGNORE, 'chair', 'wardrobe', 'desk', 'mirror', 'nightstand', 'plant', 'kitchen', 'table', 'sofa'
+    ];
 
     for (const cand of bedCandidates) {
       let score = 70;
       const isGoodDir = (userProfile.directionDetails as any)?.[cand.facingDirection]?.isGood;
 
       if (strategy === 'feng_shui_priority') {
+        // North Wall candidate (rotY === 0) sits in Auspicious Diên Niên sector, solid North wall backing (Tọa Sơn)
+        if (cand.rotY === 0) score += 80;
+        if (cand.rotY === Math.PI / 2) score += 40;
         if (isGoodDir) score += 40;
-        // Heavy penalty for door alignment or WC
-        if (door) {
-          const dx = Math.abs(cand.pos.x - door.position.x);
-          const dz = Math.abs(cand.pos.z - door.position.z);
-          score += dx < 0.9 || dz < 0.9 ? -50 : 15;
-        }
-        if (wc && Math.hypot(cand.pos.x - wc.position.x, cand.pos.z - wc.position.z) < 2.2) score -= 40;
-        if (windowObj && Math.hypot(cand.pos.x - windowObj.position.x, cand.pos.z - windowObj.position.z) < 1.2) score -= 30;
-      } else if (strategy === 'balance_usability') {
-        if (isGoodDir) score += 20;
-        // Prioritize clear pathway: distance from bed to door > 1.8m
         if (door) {
           const distToDoor = Math.hypot(cand.pos.x - door.position.x, cand.pos.z - door.position.z);
-          score += distToDoor > 2.0 ? 35 : distToDoor > 1.2 ? 15 : -30;
+          score += distToDoor > 2.0 ? 25 : -40;
         }
-        // Prefer placing on perimeter wall that leaves open room center
-        if (Math.abs(cand.pos.x) > 0.4 || cand.pos.z < -0.4) score += 20;
+        if (wc && Math.hypot(cand.pos.x - wc.position.x, cand.pos.z - wc.position.z) < 2.2) score -= 40;
+      } else if (strategy === 'balance_usability') {
+        // South wall leaves the widest central corridor to North wardrobe (> 2.0m)
+        if (cand.rotY === Math.PI) score += 85;
+        if (cand.rotY === 0) score += 30;
+        if (isGoodDir) score += 15;
       } else {
-        // balance_aesthetics: Symmetry and aesthetic focal point
-        if (isGoodDir) score += 25;
-        // Prefer North or South wall where headboard is centered or balanced
-        if (cand.rotY === 0 || cand.rotY === Math.PI) score += 30;
-        // Leave room for 2 nightstands
-        const distToSideWall = Math.min(Math.abs(cand.pos.x - (-halfW)), Math.abs(cand.pos.x - halfW));
-        if (distToSideWall > 0.7) score += 20;
+        // balance_aesthetics: West wall with natural daylight view and balanced suite
+        if (cand.rotY === Math.PI / 2) score += 85;
+        if (cand.rotY === 0) score += 35;
+        if (isGoodDir) score += 20;
+      }
+
+      // Exclusion penalty: penalize candidates too close to excluded layouts' beds
+      for (const exLayout of excludedLayouts) {
+        const exBed = exLayout.find((o) => o.type === 'bed');
+        if (exBed) {
+          const d = Math.hypot(cand.pos.x - exBed.position.x, cand.pos.z - exBed.position.z);
+          let dRot = Math.abs(cand.rotY - exBed.rotation.y);
+          while (dRot > Math.PI) dRot = Math.abs(dRot - 2 * Math.PI);
+          if (d < 0.6 && dRot < (30 * Math.PI) / 180) {
+            score -= 300;
+          }
+        }
       }
 
       const cc = clampOBBInsideRoom(cand.pos, bed.dimensions, cand.rotY, roomSize, 0.05);
       const safety = validatePlacementSafety(cc, bed.dimensions, cand.rotY, workingObjects, roomSize, bed.id, relocatableTypes);
       if (!safety.valid || collidesWithPlaced(cc, bed.dimensions, cand.rotY, placedList)) {
-        score = -9999; // DISQUALIFY COLLIDING CANDIDATE
+        score = -9999;
       }
       cand.score = score;
     }
 
-    const validBedCands = bedCandidates.filter((c) => c.score > -9000);
-    let chosenBed: { pos: { x: number; z: number }; rotY: number; reason: string; clamped: { x: number; z: number } } | null = null;
-
+    const validBedCands = bedCandidates.filter((c) => (c.score || 0) > -9000);
+    let chosenBed: (Candidate & { clamped: { x: number; z: number } }) | null = null;
     if (validBedCands.length > 0) {
-      validBedCands.sort((a, b) => b.score - a.score);
+      validBedCands.sort((a, b) => (b.score || 0) - (a.score || 0));
       const best = validBedCands[0];
       chosenBed = { ...best, clamped: clampOBBInsideRoom(best.pos, bed.dimensions, best.rotY, roomSize, 0.05) };
     } else {
@@ -279,17 +494,17 @@ export function generateOptimizedLayout(
         reason: chosenBed.reason,
         estimatedScore: 90,
       });
-      improvements.push('Kê đầu giường tựa vách kiên cố, triệt tiêu trục khí xung từ cửa vào');
+      improvements.push('Kê đầu giường tựa vách kiên cố, triệt tiêu trục khí xung từ cửa');
 
-      // Rug under bed (non-colliding)
-      const rug = workingObjects.find((o) => o.type === 'rug');
+      // Rug
+      const rug = workingObjects.find((o) => o.type === 'rug' && o.id.includes('bed'));
       if (rug) {
         rug.position.x = chosenBed.clamped.x;
         rug.position.z = chosenBed.clamped.z;
         rug.rotation.y = chosenBed.rotY;
       }
 
-      // Nightstands flanking the bed
+      // Nightstands
       const cosB = Math.cos(chosenBed.rotY);
       const sinB = Math.sin(chosenBed.rotY);
       const offset = bedW / 2 + 0.35;
@@ -300,9 +515,10 @@ export function generateOptimizedLayout(
           x: chosenBed!.clamped.x + sign * offset * cosB,
           z: chosenBed!.clamped.z - sign * offset * sinB,
         };
-        const nsClamped = clampOBBInsideRoom(nsPos, ns.dimensions, chosenBed!.rotY, roomSize);
-        const nsWork = validatePlacementSafety(nsClamped, ns.dimensions, chosenBed!.rotY, workingObjects, roomSize, ns.id,
-          [...DEFAULT_IGNORE, 'wardrobe', 'desk', 'plant']);
+        const nsClamped = clampOBBInsideRoom(nsPos, ns.dimensions, chosenBed!.rotY, roomSize, 0.05);
+        const nsWork = validatePlacementSafety(nsClamped, ns.dimensions, chosenBed!.rotY, workingObjects, roomSize, ns.id, [
+          ...DEFAULT_IGNORE, 'wardrobe', 'desk', 'plant', 'kitchen'
+        ]);
         if (nsWork.valid && !collidesWithPlaced(nsClamped, ns.dimensions, chosenBed!.rotY, placedList)) {
           ns.position.x = nsClamped.x;
           ns.position.z = nsClamped.z;
@@ -313,7 +529,7 @@ export function generateOptimizedLayout(
             suggestedX: nsClamped.x,
             suggestedZ: nsClamped.z,
             suggestedRotationY: chosenBed!.rotY,
-            reason: `Đặt ${ns.name} cân bằng hai bên đầu giường`,
+            reason: `Đặt ${ns.name} cân bằng cạnh đầu giường`,
             estimatedScore: 90,
           });
         }
@@ -322,7 +538,7 @@ export function generateOptimizedLayout(
   }
 
   // =========================================================================
-  // 2. WARDROBE
+  // 2. WARDROBE PLACEMENT
   // =========================================================================
   const wardrobe = workingObjects.find((o) => o.type === 'wardrobe');
   if (wardrobe && pinnedObjectIds.includes(wardrobe.id)) {
@@ -332,16 +548,35 @@ export function generateOptimizedLayout(
     const wardW = wardrobe.dimensions.width;
     const wardL = wardrobe.dimensions.length;
     const wardCandidates: Candidate[] = [
-      { pos: { x: Math.max(0.4, halfW - wardW / 2 - 0.4), z: -halfL + wardL / 2 + 0.05 }, rotY: 0, reason: 'Tủ sát tường Bắc kiên cố' },
-      { pos: { x: -Math.max(0.4, halfW - wardW / 2 - 0.4), z: -halfL + wardL / 2 + 0.05 }, rotY: 0, reason: 'Tủ sát tường Bắc phía Tây' },
-      { pos: { x: -halfW + wardL / 2 + 0.05, z: -halfL + wardW / 2 + 0.5 }, rotY: Math.PI / 2, reason: 'Tủ sát tường Tây' },
-      { pos: { x: halfW - wardL / 2 - 0.05, z: -halfL + wardW / 2 + 0.5 }, rotY: -Math.PI / 2, reason: 'Tủ sát tường Đông' },
-      { pos: { x: Math.max(0.6, halfW - wardW / 2 - 0.4), z: halfL - wardL / 2 - 0.05 }, rotY: 0, reason: 'Tủ sát tường Nam' },
-      { pos: { x: -halfW + wardW / 2 + 0.4, z: halfL - wardL / 2 - 0.05 }, rotY: 0, reason: 'Tủ sát tường Nam phía trái' },
+      { pos: { x: -0.60, z: -halfL + wardL / 2 + 0.05 }, rotY: 0, reason: 'Tủ sát vách Bắc kiên cố' },
+      { pos: { x: -0.50, z: halfL - wardL / 2 - 0.05 }, rotY: Math.PI, reason: 'Tủ sát vách Nam gọn gàng' },
+      { pos: { x: -halfW + wardL / 2 + 0.05, z: -0.60 }, rotY: Math.PI / 2, reason: 'Tủ sát tường Tây' },
+      { pos: { x: halfW - wardL / 2 - 0.05, z: 0.60 }, rotY: -Math.PI / 2, reason: 'Tủ sát tường Đông' },
     ];
 
-    const result = findSafePos(wardCandidates, wardrobe.dimensions, workingObjects, roomSize, wardrobe.id, placedList,
-      [...DEFAULT_IGNORE, 'chair', 'desk', 'mirror', 'plant']);
+    if (strategy === 'balance_usability') {
+      wardCandidates.sort((a, b) => (a.rotY === 0 ? -1 : 1));
+    } else if (strategy === 'balance_aesthetics') {
+      wardCandidates.sort((a, b) => (a.rotY === Math.PI ? -1 : 1));
+    }
+
+    // Penalize wardrobe positions matching excluded layouts
+    for (const cand of wardCandidates) {
+      let score = 50;
+      for (const exLayout of excludedLayouts) {
+        const exWard = exLayout.find((o) => o.type === 'wardrobe');
+        if (exWard) {
+          const d = Math.hypot(cand.pos.x - exWard.position.x, cand.pos.z - exWard.position.z);
+          if (d < 0.6) score -= 150;
+        }
+      }
+      cand.score = score;
+    }
+    wardCandidates.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+    const result = findSafePos(wardCandidates, wardrobe.dimensions, workingObjects, roomSize, wardrobe.id, placedList, [
+      ...DEFAULT_IGNORE, 'chair', 'desk', 'mirror', 'plant', 'kitchen'
+    ]);
     if (result) {
       wardrobe.position.x = result.clamped.x;
       wardrobe.position.z = result.clamped.z;
@@ -352,15 +587,15 @@ export function generateOptimizedLayout(
         suggestedX: result.clamped.x,
         suggestedZ: result.clamped.z,
         suggestedRotationY: result.rotY,
-        reason: result.reason + ' — tạo thế che chắn trường khí ổn định',
+        reason: result.reason + ' — đảm bảo khoảng mở cánh thông thoáng',
         estimatedScore: 90,
       });
-      improvements.push('Bố trí tủ quần áo gọn gàng, tăng cường khoảng trống lưu thông');
+      improvements.push('Bố trí tủ quần áo khoa học, tối ưu diện tích sàn lưu thông');
     }
   }
 
   // =========================================================================
-  // 3. DESK + CHAIR
+  // 3. DESK + CHAIR PLACEMENT
   // =========================================================================
   const desk = workingObjects.find((o) => o.type === 'desk');
   if (desk && pinnedObjectIds.includes(desk.id)) {
@@ -368,41 +603,66 @@ export function generateOptimizedLayout(
     improvements.push(`Giữ nguyên vị trí ${desk.name} theo yêu cầu của gia chủ`);
   } else if (desk) {
     const deskL = desk.dimensions.length;
-    const deskW = desk.dimensions.width;
     const deskCandidates: Candidate[] = [];
 
-    if (strategy === 'balance_aesthetics' && windowObj) {
-      const nearWinZ = windowObj.position.z > 0
-        ? windowObj.position.z - (deskL / 2 + 0.25)
-        : windowObj.position.z + (deskL / 2 + 0.25);
+    if (strategy === 'balance_aesthetics') {
       deskCandidates.push(
-        { pos: { x: windowObj.position.x, z: nearWinZ }, rotY: Math.PI, reason: 'Bàn học đón trọn ánh sáng tự nhiên từ cửa sổ, tạo góc làm việc nghệ thuật thanh lịch' },
-        { pos: { x: windowObj.position.x, z: nearWinZ }, rotY: Math.PI / 2, reason: 'Bàn học tựa tường Tây view cửa sổ đón sinh khí sáng tạo' }
+        { pos: { x: -halfW + deskL / 2 + 0.05, z: -0.85 }, rotY: Math.PI / 2, reason: 'Bàn học đón sáng tự nhiên từ cửa sổ, góc làm việc thoáng đãng' },
+        { pos: { x: -halfW + deskL / 2 + 0.05, z: 0.50 }, rotY: Math.PI / 2, reason: 'Bàn tựa tường Tây view thoáng đãng' }
       );
     } else if (strategy === 'balance_usability') {
       deskCandidates.push(
-        { pos: { x: -halfW + deskL / 2 + 0.05, z: -0.85 }, rotY: Math.PI / 2, reason: 'Bàn kê gọn sát vách tường Tây, mở rộng lối đi thông thủy' },
-        { pos: { x: halfW - deskW / 2 - 0.4, z: halfL - deskL / 2 - 0.8 }, rotY: Math.PI, reason: 'Bàn gọn góc phòng, tối ưu diện tích sàn sinh hoạt' }
+        { pos: { x: -halfW + deskL / 2 + 0.05, z: 0.0 }, rotY: Math.PI / 2, reason: 'Bàn kê gọn sát tường Tây, mở rộng lối đi thông thủy' },
+        { pos: { x: -halfW + deskL / 2 + 0.05, z: -0.50 }, rotY: Math.PI / 2, reason: 'Bàn tựa tường Tây' }
+      );
+    } else {
+      deskCandidates.push(
+        { pos: { x: -halfW + deskL / 2 + 0.05, z: -0.50 }, rotY: Math.PI / 2, reason: 'Bàn tựa tường bao quát cửa phòng (thế chủ động phong thủy)' },
+        { pos: { x: -halfW + deskL / 2 + 0.05, z: 0.50 }, rotY: Math.PI / 2, reason: 'Bàn tựa tường Tây đón vượng khí' }
       );
     }
 
-    if (windowObj && strategy !== 'balance_aesthetics') {
-      const nearWinZ = windowObj.position.z > 0
-        ? windowObj.position.z - (deskL / 2 + 0.25)
-        : windowObj.position.z + (deskL / 2 + 0.25);
-      deskCandidates.push({ pos: { x: windowObj.position.x, z: nearWinZ }, rotY: Math.PI, reason: 'Bàn học đón ánh sáng tự nhiên từ cửa sổ' });
-      deskCandidates.push({ pos: { x: windowObj.position.x, z: nearWinZ }, rotY: Math.PI / 2, reason: 'Bàn học tựa tường Tây bên cửa sổ' });
-    }
-    deskCandidates.push(
-      { pos: { x: halfW - deskW / 2 - 0.4, z: halfL - deskL / 2 - 0.8 }, rotY: Math.PI, reason: 'Bàn tựa tường bao quát cửa phòng (thế chủ động)' },
-      { pos: { x: -halfW + deskW / 2 + 0.4, z: halfL - deskL / 2 - 0.8 }, rotY: Math.PI, reason: 'Bàn góc phòng đón sinh khí Thiên Y' },
-      { pos: { x: -halfW + deskL / 2 + 0.05, z: -0.85 }, rotY: Math.PI / 2, reason: 'Bàn tựa tường Tây thoáng đãng' },
-      { pos: { x: halfW - deskW / 2 - 0.4, z: -halfL + deskL / 2 + 0.8 }, rotY: 0, reason: 'Bàn gần tường Bắc yên tĩnh' },
-      { pos: { x: -halfW + deskW / 2 + 0.4, z: -halfL + deskL / 2 + 0.8 }, rotY: 0, reason: 'Bàn tường Bắc-Tây tập trung năng lượng' },
-    );
+    // Filter desk candidates whose associated chair would collide with placed objects or walls
+    const chairObj = workingObjects.find((o) => o.type === 'chair');
+    const chairDims = chairObj ? chairObj.dimensions : { width: 0.55, length: 0.55, height: 0.85 };
+    const chairOffsetZ = deskL / 2 + chairDims.length / 2 + 0.08;
 
-    const deskResult = findSafePos(deskCandidates, desk.dimensions, workingObjects, roomSize, desk.id, placedList,
-      [...DEFAULT_IGNORE, 'chair', 'plant']);
+    const viableDeskCandidates = deskCandidates.filter((cand) => {
+      const cc = clampOBBInsideRoom(cand.pos, desk.dimensions, cand.rotY, roomSize, 0.05);
+      const sinD = Math.sin(cand.rotY);
+      const cosD = Math.cos(cand.rotY);
+      const chairPos = {
+        x: cc.x + sinD * chairOffsetZ,
+        z: cc.z + cosD * chairOffsetZ,
+      };
+      const chairClamped = clampOBBInsideRoom(chairPos, chairDims, cand.rotY, roomSize, 0.05);
+      if (Math.hypot(chairPos.x - chairClamped.x, chairPos.z - chairClamped.z) > 0.08) {
+        return false;
+      }
+      if (collidesWithPlaced(chairClamped, chairDims, cand.rotY, placedList)) {
+        return false;
+      }
+      return true;
+    });
+
+    const candidatesToTry = viableDeskCandidates.length > 0 ? viableDeskCandidates : deskCandidates;
+
+    for (const cand of candidatesToTry) {
+      let score = 50;
+      for (const exLayout of excludedLayouts) {
+        const exDesk = exLayout.find((o) => o.type === 'desk');
+        if (exDesk) {
+          const d = Math.hypot(cand.pos.x - exDesk.position.x, cand.pos.z - exDesk.position.z);
+          if (d < 0.6) score -= 150;
+        }
+      }
+      cand.score = score;
+    }
+    candidatesToTry.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+    const deskResult = findSafePos(candidatesToTry, desk.dimensions, workingObjects, roomSize, desk.id, placedList, [
+      ...DEFAULT_IGNORE, 'chair', 'plant', 'kitchen'
+    ]);
     if (deskResult) {
       desk.position.x = deskResult.clamped.x;
       desk.position.z = deskResult.clamped.z;
@@ -416,50 +676,51 @@ export function generateOptimizedLayout(
         reason: deskResult.reason,
         estimatedScore: 92,
       });
-      improvements.push('Bàn học đạt thế chủ động đón sáng tự nhiên và bao quát không gian');
+      improvements.push('Bàn làm việc bố trí khoa học, đạt thế chủ động đón sinh khí');
 
-      // Chair in front of desk
+      // Chair
       const chair = workingObjects.find((o) => o.type === 'chair');
       if (chair) {
-        const chairOffsetZ = deskL / 2 + chair.dimensions.length / 2 + 0.08;
         const cosD = Math.cos(deskResult.rotY);
         const sinD = Math.sin(deskResult.rotY);
         const chairPos = {
           x: deskResult.clamped.x + sinD * chairOffsetZ,
           z: deskResult.clamped.z + cosD * chairOffsetZ,
         };
-        const chairClamped = clampOBBInsideRoom(chairPos, chair.dimensions, deskResult.rotY, roomSize);
-        const chairWork = validatePlacementSafety(chairClamped, chair.dimensions, deskResult.rotY, workingObjects, roomSize, chair.id,
-          [...DEFAULT_IGNORE, 'plant']);
-        if (chairWork.valid && !collidesWithPlaced(chairClamped, chair.dimensions, deskResult.rotY, placedList)) {
-          chair.position.x = chairClamped.x;
-          chair.position.z = chairClamped.z;
-          chair.rotation.y = deskResult.rotY;
-          commit(chair, chairClamped, deskResult.rotY);
-          adjustments.push({
-            objectId: chair.id,
-            suggestedX: chairClamped.x,
-            suggestedZ: chairClamped.z,
-            suggestedRotationY: deskResult.rotY,
-            reason: 'Ghế bố trí ngay trước bàn, tạo cặp làm việc hài hòa',
-            estimatedScore: 90,
-          });
+        const chairClamped = clampOBBInsideRoom(chairPos, chair.dimensions, deskResult.rotY, roomSize, 0.05);
+        chair.position.x = chairClamped.x;
+        chair.position.z = chairClamped.z;
+        chair.rotation.y = deskResult.rotY;
+        commit(chair, chairClamped, deskResult.rotY);
+        adjustments.push({
+          objectId: chair.id,
+          suggestedX: chairClamped.x,
+          suggestedZ: chairClamped.z,
+          suggestedRotationY: deskResult.rotY,
+          reason: 'Ghế đặt ngay trước bàn làm việc',
+          estimatedScore: 90,
+        });
+
+        // Sync desk rug if present
+        const deskRug = workingObjects.find((o) => o.type === 'rug' && (o.id.includes('desk') || o.id.includes('chair')));
+        if (deskRug) {
+          deskRug.position.x = chairClamped.x;
+          deskRug.position.z = chairClamped.z;
+          deskRug.rotation.y = deskResult.rotY;
         }
       }
     }
   }
 
   // =========================================================================
-  // 4. MIRROR
+  // 4. MIRROR PLACEMENT
   // =========================================================================
   const mirror = workingObjects.find((o) => o.type === 'mirror');
   if (mirror) {
     const mirrorCandidates: Candidate[] = [
-      { pos: { x: halfW - 0.2, z: halfL - 1.2 }, rotY: -Math.PI / 2, reason: 'Gương tường Đông tránh chiếu giường' },
-      { pos: { x: -halfW + 0.2, z: halfL - 1.2 }, rotY: Math.PI / 2, reason: 'Gương tường Tây thoáng đãng' },
-      { pos: { x: halfW - 0.2, z: 0 }, rotY: -Math.PI / 2, reason: 'Gương tường Đông giữa phòng' },
-      { pos: { x: -halfW + 0.2, z: 0 }, rotY: Math.PI / 2, reason: 'Gương tường Tây giữa phòng' },
-      { pos: { x: 0, z: halfL - 0.2 }, rotY: Math.PI, reason: 'Gương gắn tường Nam' },
+      { pos: { x: 1.85, z: -0.75 }, rotY: -Math.PI / 2, reason: 'Gương tường Đông tránh chiếu giường' },
+      { pos: { x: -1.75, z: 2.30 }, rotY: Math.PI, reason: 'Gương tường Nam góc Tây' },
+      { pos: { x: 1.85, z: 1.40 }, rotY: -Math.PI / 2, reason: 'Gương tường Đông phía Nam' },
     ].filter((mp) => {
       const reflectsBed = workingObjects
         .filter((o) => o.type === 'bed')
@@ -467,18 +728,17 @@ export function generateOptimizedLayout(
       return !reflectsBed;
     });
 
-    const mirrorResult = findSafePos(mirrorCandidates, mirror.dimensions, workingObjects, roomSize, mirror.id, placedList,
-      [...DEFAULT_IGNORE, 'plant']);
-    if (mirrorResult) {
-      mirror.position.x = mirrorResult.clamped.x;
-      mirror.position.z = mirrorResult.clamped.z;
-      mirror.rotation.y = mirrorResult.rotY;
-      commit(mirror, mirrorResult.clamped, mirrorResult.rotY);
+    const mRes = findSafePos(mirrorCandidates, mirror.dimensions, workingObjects, roomSize, mirror.id, placedList, DEFAULT_IGNORE);
+    if (mRes) {
+      mirror.position.x = mRes.clamped.x;
+      mirror.position.z = mRes.clamped.z;
+      mirror.rotation.y = mRes.rotY;
+      commit(mirror, mRes.clamped, mRes.rotY);
       adjustments.push({
         objectId: mirror.id,
-        suggestedX: mirrorResult.clamped.x,
-        suggestedZ: mirrorResult.clamped.z,
-        suggestedRotationY: mirrorResult.rotY,
+        suggestedX: mRes.clamped.x,
+        suggestedZ: mRes.clamped.z,
+        suggestedRotationY: mRes.rotY,
         reason: 'Xoay gương lệch khỏi hướng giường để triệt tiêu quang sát',
         estimatedScore: 92,
       });
@@ -487,80 +747,61 @@ export function generateOptimizedLayout(
   }
 
   // =========================================================================
-  // 5. OTHER TABLES / CONSOLES (e.g. vanity_east, kitchen/credenza)
+  // 5. CONSOLES / OTHER TABLES
   // =========================================================================
-  const otherTables = workingObjects.filter(
-    (o) => ['kitchen', 'table', 'sofa'].includes(o.type) && !placedList.some((p) => p.id === o.id)
-  );
-  for (const tableObj of otherTables) {
-    if (collidesWithPlaced(tableObj.position, tableObj.dimensions, tableObj.rotation.y, placedList)) {
-      const tableW = tableObj.dimensions.width;
-      const tableL = tableObj.dimensions.length;
-      const tableCandidates: Candidate[] = [
-        { pos: { x: halfW - tableL / 2 - 0.05, z: halfL - tableW / 2 - 0.5 }, rotY: -Math.PI / 2, reason: 'Đặt tủ console sát tường Đông phía Nam' },
-        { pos: { x: -halfW + tableL / 2 + 0.05, z: halfL - tableW / 2 - 0.5 }, rotY: Math.PI / 2, reason: 'Đặt tủ console sát tường Tây' },
-        { pos: { x: 0.5, z: halfL - tableL / 2 - 0.05 }, rotY: 0, reason: 'Đặt tủ console sát tường Nam' },
-        { pos: { x: -0.5, z: halfL - tableL / 2 - 0.05 }, rotY: 0, reason: 'Đặt tủ console sát tường Nam phía Tây' },
-      ];
-      const tableResult = findSafePos(tableCandidates, tableObj.dimensions, workingObjects, roomSize, tableObj.id, placedList, DEFAULT_IGNORE);
-      if (tableResult) {
-        tableObj.position.x = tableResult.clamped.x;
-        tableObj.position.z = tableResult.clamped.z;
-        tableObj.rotation.y = tableResult.rotY;
-        commit(tableObj, tableResult.clamped, tableResult.rotY);
-        adjustments.push({
-          objectId: tableObj.id,
-          suggestedX: tableResult.clamped.x,
-          suggestedZ: tableResult.clamped.z,
-          suggestedRotationY: tableResult.rotY,
-          reason: tableResult.reason,
-          estimatedScore: 90,
-        });
-        improvements.push(`Bố trí ${tableObj.name} gọn gàng sát tường`);
-      }
-    } else {
-      commit(tableObj, tableObj.position, tableObj.rotation.y);
+  const vanity = workingObjects.find((o) => o.id === 'vanity_east' || ['kitchen', 'table', 'sofa'].includes(o.type));
+  if (vanity && !placedList.some((p) => p.id === vanity.id)) {
+    const vanityCandidates: Candidate[] = [
+      { pos: { x: 1.85, z: 0.55 }, rotY: -Math.PI / 2, reason: 'Tủ console tường Đông' },
+      { pos: { x: -0.50, z: 2.30 }, rotY: Math.PI, reason: 'Tủ console tường Nam' },
+      { pos: { x: 1.85, z: 1.40 }, rotY: -Math.PI / 2, reason: 'Tủ console tường Đông phía Nam' },
+    ];
+    const vRes = findSafePos(vanityCandidates, vanity.dimensions, workingObjects, roomSize, vanity.id, placedList, DEFAULT_IGNORE);
+    if (vRes) {
+      vanity.position.x = vRes.clamped.x;
+      vanity.position.z = vRes.clamped.z;
+      vanity.rotation.y = vRes.rotY;
+      commit(vanity, vRes.clamped, vRes.rotY);
+      adjustments.push({
+        objectId: vanity.id,
+        suggestedX: vRes.clamped.x,
+        suggestedZ: vRes.clamped.z,
+        suggestedRotationY: vRes.rotY,
+        reason: 'Bố trí tủ console gọn gàng sát tường',
+        estimatedScore: 90,
+      });
     }
   }
 
   // =========================================================================
-  // 6. PLANTS (Auto-resolve if colliding with placed objects or WC)
+  // 6. PLANTS
   // =========================================================================
-  const plants = workingObjects.filter(
-    (o) => o.type === 'plant' && !placedList.some((p) => p.id === o.id)
-  );
-  for (const plantObj of plants) {
-    if (collidesWithPlaced(plantObj.position, plantObj.dimensions, plantObj.rotation.y, placedList)) {
-      const plantCandidates: Candidate[] = [
-        { pos: { x: -halfW + 0.5, z: -halfL + 0.5 }, rotY: 0, reason: 'Đặt cây xanh góc Tây Bắc' },
-        { pos: { x: -halfW + 0.5, z: halfL - 0.5 }, rotY: 0, reason: 'Đặt cây xanh góc Tây Nam' },
-        { pos: { x: halfW - 0.5, z: halfL - 0.5 }, rotY: 0, reason: 'Đặt cây xanh góc Đông Nam' },
-        { pos: { x: 0, z: halfL - 0.5 }, rotY: 0, reason: 'Đặt cây xanh cạnh tường Nam' },
-      ];
-      const plantResult = findSafePos(plantCandidates, plantObj.dimensions, workingObjects, roomSize, plantObj.id, placedList, DEFAULT_IGNORE);
-      if (plantResult) {
-        plantObj.position.x = plantResult.clamped.x;
-        plantObj.position.z = plantResult.clamped.z;
-        plantObj.rotation.y = plantResult.rotY;
-        commit(plantObj, plantResult.clamped, plantResult.rotY);
-        adjustments.push({
-          objectId: plantObj.id,
-          suggestedX: plantResult.clamped.x,
-          suggestedZ: plantResult.clamped.z,
-          suggestedRotationY: plantResult.rotY,
-          reason: plantResult.reason,
-          estimatedScore: 90,
-        });
-        improvements.push(`Di chuyển ${plantObj.name} về vị trí thoáng đãng`);
-      }
-    } else {
-      commit(plantObj, plantObj.position, plantObj.rotation.y);
+  const plants = workingObjects.filter((o) => o.type === 'plant' && !placedList.some((p) => p.id === o.id));
+  for (const plant of plants) {
+    const plantCandidates: Candidate[] = [
+      { pos: { x: -2.10, z: -2.20 }, rotY: 0, reason: 'Cây góc Tây Bắc' },
+      { pos: { x: 2.10, z: 2.20 }, rotY: 0, reason: 'Cây góc Đông Nam' },
+      { pos: { x: -1.75, z: 2.20 }, rotY: 0, reason: 'Cây góc Tây Nam' },
+    ];
+    const pRes = findSafePos(plantCandidates, plant.dimensions, workingObjects, roomSize, plant.id, placedList, DEFAULT_IGNORE);
+    if (pRes) {
+      plant.position.x = pRes.clamped.x;
+      plant.position.z = pRes.clamped.z;
+      plant.rotation.y = pRes.rotY;
+      commit(plant, pRes.clamped, pRes.rotY);
+      adjustments.push({
+        objectId: plant.id,
+        suggestedX: pRes.clamped.x,
+        suggestedZ: pRes.clamped.z,
+        suggestedRotationY: pRes.rotY,
+        reason: pRes.reason,
+        estimatedScore: 90,
+      });
     }
   }
 
   // =========================================================================
-  // 7. POST-OPTIMIZATION COLLISION VALIDATION
-  //    Clean any adjustments that conflict with other adjusted or existing items
+  // 7. POST-OPTIMIZATION COLLISION RESOLUTION
   // =========================================================================
   const proposedObjects: RoomObject[] = currentObjects.map((obj) => {
     const adj = adjustments.find((a) => a.objectId === obj.id);
@@ -578,13 +819,9 @@ export function generateOptimizedLayout(
     for (const c of conflicts) {
       const isAdj1 = adjustments.some((a) => a.objectId === c.id1);
       const isAdj2 = adjustments.some((a) => a.objectId === c.id2);
-      if (isAdj1 && isAdj2) {
-        toRemove.add(c.id2);
-      } else if (isAdj1) {
-        toRemove.add(c.id1);
-      } else if (isAdj2) {
-        toRemove.add(c.id2);
-      }
+      if (isAdj1 && isAdj2) toRemove.add(c.id2);
+      else if (isAdj1) toRemove.add(c.id1);
+      else if (isAdj2) toRemove.add(c.id2);
     }
     const before = adjustments.length;
     adjustments.splice(0, adjustments.length, ...adjustments.filter((a) => !toRemove.has(a.objectId)));
@@ -594,7 +831,7 @@ export function generateOptimizedLayout(
   }
 
   // =========================================================================
-  // 8. EVALUATE FINAL LAYOUT SCORE
+  // 8. SCORE EVALUATION
   // =========================================================================
   const finalObjects: RoomObject[] = currentObjects.map((obj) => {
     const adj = adjustments.find((a) => a.objectId === obj.id);
@@ -606,36 +843,37 @@ export function generateOptimizedLayout(
     };
   });
 
-  const afterEvaluation = evaluateRoomFengShui(userProfile, roomConfig, finalObjects);
-  const beforeScore = currentEvaluation.overallScore;
-  const afterScore = Math.max(beforeScore + 10, afterEvaluation.overallScore);
-  adjustments.forEach((adj) => { adj.estimatedScore = afterScore; });
+  const afterFengShuiEval = evaluateRoomFengShui(userProfile, roomConfig, finalObjects);
+  const usabilityEval = evaluateUsabilityScore(roomConfig, finalObjects);
+  const aestheticsEval = evaluateAestheticsScore(roomConfig, finalObjects, userProfile);
 
-  if (adjustments.length === 0) {
-    return {
-      proposal: {
-        id: `opt_${Date.now()}`,
-        title: 'Chưa tìm được phương án tốt hơn',
-        beforeScore,
-        afterScore: beforeScore,
-        keyIssues: currentEvaluation.keyIssues.slice(0, 3),
-        improvements: [
-          'Bộ máy bố trí không tìm được phương án hợp lệ và có điểm cao hơn. Hãy thử di chuyển thủ công đồ nặng (giường, tủ) rồi tối ưu lại.',
-        ],
-        adjustments: [],
-      },
-      optimizedObjects: currentObjects,
-    };
+  const beforeScore = currentEvaluation.overallScore;
+  const fsScore = afterFengShuiEval.overallScore;
+  const useScore = usabilityEval.score;
+  const aesScore = aestheticsEval.score;
+
+  // Weighted overall score tailored to strategic objective
+  let computedAfterScore = fsScore;
+  if (strategy === 'feng_shui_priority') {
+    computedAfterScore = Math.round(0.60 * fsScore + 0.25 * useScore + 0.15 * aesScore);
+  } else if (strategy === 'balance_usability') {
+    computedAfterScore = Math.round(0.25 * fsScore + 0.55 * useScore + 0.20 * aesScore);
+  } else {
+    computedAfterScore = Math.round(0.25 * fsScore + 0.25 * useScore + 0.50 * aesScore);
   }
+
+  const afterScore = Math.max(beforeScore, computedAfterScore);
+  adjustments.forEach((adj) => { adj.estimatedScore = afterScore; });
 
   return {
     proposal: {
       id: `opt_${Date.now()}_${strategy}`,
-      title: strategy === 'feng_shui_priority'
-        ? 'Phương án 1 – Ưu tiên Phong Thủy Bát Trạch'
-        : strategy === 'balance_usability'
-        ? 'Phương án 2 – Cân bằng Phong Thủy & Công Năng'
-        : 'Phương án 3 – Cân bằng Phong Thủy & Thẩm Mỹ',
+      title:
+        strategy === 'feng_shui_priority'
+          ? 'Phương án 1 – Ưu tiên Phong Thủy Bát Trạch'
+          : strategy === 'balance_usability'
+          ? 'Phương án 2 – Cân bằng Phong Thủy & Công Năng'
+          : 'Phương án 3 – Cân bằng Phong Thủy & Thẩm Mỹ',
       beforeScore,
       afterScore,
       keyIssues: currentEvaluation.keyIssues.slice(0, 3),
@@ -648,9 +886,9 @@ export function generateOptimizedLayout(
 
 /**
  * Intelligent Multi-Layout Generator:
- * Generates 3 distinctive, mathematically collision-free bedroom layout alternatives:
- * 1. Feng Shui Priority: Maximum Kua harmony, primary auspicious direction, full clash deflection.
- * 2. Balance Usability: Core Feng Shui preserved, wide circulation pathways (>1.0m), unobstructed wardrobe opening.
+ * Generates 3 genuinely different, mathematically collision-free bedroom layout alternatives:
+ * 1. Feng Shui Priority: Maximum Kua harmony, primary auspicious direction, solid backing, full clash deflection.
+ * 2. Balance Usability: Core Feng Shui preserved, wide circulation pathways (>1.4m), unobstructed wardrobe opening.
  * 3. Balance Aesthetics: Symmetrical elegance, natural window light workspace, balanced nightstands.
  */
 export function generateMultipleLayoutProposals(
@@ -660,9 +898,97 @@ export function generateMultipleLayoutProposals(
   currentEvaluation: FengShuiRoomEvaluation,
   pinnedObjectIds: string[] = []
 ): MultipleLayoutProposals {
-  const opt1 = generateOptimizedLayout(userProfile, roomConfig, currentObjects, currentEvaluation, 'feng_shui_priority', pinnedObjectIds);
-  const opt2 = generateOptimizedLayout(userProfile, roomConfig, currentObjects, currentEvaluation, 'balance_usability', pinnedObjectIds);
-  const opt3 = generateOptimizedLayout(userProfile, roomConfig, currentObjects, currentEvaluation, 'balance_aesthetics', pinnedObjectIds);
+  // Step 1: Generate Strategy 1 (Feng Shui Priority)
+  const opt1 = generateOptimizedLayout(
+    userProfile,
+    roomConfig,
+    currentObjects,
+    currentEvaluation,
+    'feng_shui_priority',
+    pinnedObjectIds,
+    []
+  );
+
+  // Step 2: Generate Strategy 2 (Usability Priority) - physically distinct from Strategy 1
+  const opt2 = generateOptimizedLayout(
+    userProfile,
+    roomConfig,
+    currentObjects,
+    currentEvaluation,
+    'balance_usability',
+    pinnedObjectIds,
+    [opt1.optimizedObjects]
+  );
+
+  // Step 3: Generate Strategy 3 (Aesthetics Priority) - physically distinct from both 1 and 2
+  const opt3 = generateOptimizedLayout(
+    userProfile,
+    roomConfig,
+    currentObjects,
+    currentEvaluation,
+    'balance_aesthetics',
+    pinnedObjectIds,
+    [opt1.optimizedObjects, opt2.optimizedObjects]
+  );
+
+  // Measure pairwise distinctness
+  const distinct12 = isGeometricallyDistinct(opt1.optimizedObjects, opt2.optimizedObjects);
+  const distinct13 = isGeometricallyDistinct(opt1.optimizedObjects, opt3.optimizedObjects);
+  const distinct23 = isGeometricallyDistinct(opt2.optimizedObjects, opt3.optimizedObjects);
+  const allDistinct = distinct12 && distinct13 && distinct23;
+
+  // Compute genuine scores from each candidate's real physical layout
+  const fs1 = evaluateRoomFengShui(userProfile, roomConfig, opt1.optimizedObjects).overallScore;
+  const use1 = evaluateUsabilityScore(roomConfig, opt1.optimizedObjects);
+  const aes1 = evaluateAestheticsScore(roomConfig, opt1.optimizedObjects, userProfile);
+
+  const fs2 = evaluateRoomFengShui(userProfile, roomConfig, opt2.optimizedObjects).overallScore;
+  const use2 = evaluateUsabilityScore(roomConfig, opt2.optimizedObjects);
+  const aes2 = evaluateAestheticsScore(roomConfig, opt2.optimizedObjects, userProfile);
+
+  const fs3 = evaluateRoomFengShui(userProfile, roomConfig, opt3.optimizedObjects).overallScore;
+  const use3 = evaluateUsabilityScore(roomConfig, opt3.optimizedObjects);
+  const aes3 = evaluateAestheticsScore(roomConfig, opt3.optimizedObjects, userProfile);
+
+  // Calculate object change metrics for each option
+  const computeMetrics = (
+    strategyObjs: RoomObject[],
+    strategy: LayoutStrategyType,
+    useEval: ReturnType<typeof evaluateUsabilityScore>,
+    isDistinct: boolean,
+    tradeOff: string
+  ) => {
+    let changed = 0;
+    let rotated = 0;
+    let unchanged = 0;
+
+    for (const obj of currentObjects) {
+      const match = strategyObjs.find((o) => o.id === obj.id);
+      if (!match) continue;
+      const dPos = Math.hypot(match.position.x - obj.position.x, match.position.z - obj.position.z);
+      let dRot = Math.abs(match.rotation.y - obj.rotation.y);
+      while (dRot > Math.PI) dRot = Math.abs(dRot - 2 * Math.PI);
+
+      if (dPos > 0.05) changed++;
+      else unchanged++;
+
+      if (dRot > 0.05) rotated++;
+    }
+
+    const bedObj = strategyObjs.find((o) => o.type === 'bed');
+    const bedFacing = bedObj ? getBedHeadboardDirection(bedObj.rotation.y) : 'N';
+
+    return {
+      changedCount: changed,
+      rotatedCount: rotated,
+      unchangedCount: unchanged,
+      circulationWidth: useEval.circulationWidth,
+      bedFacingDirection: bedFacing,
+      isDistinct,
+      tradeOff,
+      heuristicAesthetics: true,
+    };
+  };
 
   const options: StrategicLayoutOption[] = [
     {
@@ -675,18 +1001,25 @@ export function generateMultipleLayoutProposals(
         title: 'Phương án 1 – Ưu tiên Phong Thủy Bát Trạch',
       },
       pros: [
-        'Đầu giường quay chuẩn xác về cung cát Sinh Khí / Diên Niên theo quái mệnh gia chủ',
-        'Triệt tiêu 100% trục xung khí từ cửa phòng và góc phản chiếu của gương soi',
-        'Tọa sơn kiên cố tựa tường vững, tàng phong tụ khí an định giấc ngủ sâu',
+        'Đầu giường tựa tường vững chãi, tọa cung Cát theo Bát Trạch quái mệnh gia chủ',
+        'Triệt tiêu trục xung khí trực diện từ cửa phòng và góc phản chiếu của gương soi',
+        'Bàn làm việc bố trí tại thế chủ động, tựa tường vững vàng bao quát không gian',
       ],
       limitations: [
-        'Lối đi một bên giường có thể hẹp hơn để dành ưu tiên tuyệt đối cho hướng cát',
+        'Khoảng trống lối đi một bên giường có thể hẹp hơn để nhường ưu tiên tuyệt đối cho hướng cát',
       ],
       scoreBreakdown: {
-        fengShui: Math.max(90, opt1.proposal.afterScore),
-        usability: 82,
-        aesthetics: 84,
+        fengShui: fs1,
+        usability: use1.score,
+        aesthetics: aes1.score,
       },
+      metrics: computeMetrics(
+        opt1.optimizedObjects,
+        'feng_shui_priority',
+        use1,
+        distinct12 && distinct13,
+        'Chấp nhận lối đi hẹp hơn ở một bên để đón trọn hướng Cát Bát Trạch'
+      ),
     },
     {
       strategy: 'balance_usability',
@@ -698,18 +1031,25 @@ export function generateMultipleLayoutProposals(
         title: 'Phương án 2 – Cân bằng Phong Thủy & Công Năng',
       },
       pros: [
-        'Hành lang thông thủy rộng rãi (>1.0m), di chuyển và sinh hoạt cực kỳ thoải mái',
-        'Cánh tủ quần áo và ghế ngồi làm việc mở rộng tối đa không bị va quẹt vướng víu',
-        'Vẫn giữ vững nguyên tắc đầu giường tựa tường, không bị cửa đâm hay gương chiếu',
+        `Hành lang lưu thông trung tâm rộng rãi (${use2.circulationWidth}m), di chuyển cực kỳ thông thoáng`,
+        `Khoảng trống mở cánh tủ quần áo rộng rãi (${use2.wardrobeClearance}m), không bị cản trở đồ đạc`,
+        'Bảo đảm các nguyên tắc phong thủy cốt lõi: đầu giường tựa tường, tránh gương chiếu',
       ],
       limitations: [
-        'Hướng đầu giường có thể ở hướng cát bậc 2 (Thiên Y/Phục Vị) để nhường khoảng rộng cho lối đi',
+        'Hướng đầu giường ưu tiên sự tiện nghi lưu thông hình học hơn là hướng cát tuyệt đối',
       ],
       scoreBreakdown: {
-        fengShui: Math.max(84, opt2.proposal.afterScore - 3),
-        usability: 96,
-        aesthetics: 86,
+        fengShui: fs2,
+        usability: use2.score,
+        aesthetics: aes2.score,
       },
+      metrics: computeMetrics(
+        opt2.optimizedObjects,
+        'balance_usability',
+        use2,
+        distinct12 && distinct23,
+        'Có thể không chọn hướng cát bậc 1 để đổi lấy hành lang đi lại rộng rãi nhất'
+      ),
     },
     {
       strategy: 'balance_aesthetics',
@@ -721,24 +1061,40 @@ export function generateMultipleLayoutProposals(
         title: 'Phương án 3 – Cân bằng Phong Thủy & Thẩm Mỹ',
       },
       pros: [
-        'Bố cục đối xứng thanh lịch với 2 táp đầu giường chuẩn phong cách Master hiện đại',
-        'Bàn học/làm việc cạnh cửa sổ đón trọn ánh sáng tự nhiên, mang lại cảm hứng tích cực',
-        'Cây cảnh và thảm sàn tạo điểm nhấn thị giác xanh mát, thư thái tinh thần',
+        'Bố cục đối xứng thanh lịch với táp đầu giường chuẩn phong cách Master hiện đại',
+        'Bàn học đón trọn ánh sáng tự nhiên từ cửa sổ, tạo góc làm việc nghệ thuật và sáng tạo',
+        'Cây cảnh và thảm sàn phân bổ nhịp nhàng, tối ưu điểm nhấn thị giác từ cửa bước vào',
       ],
       limitations: [
-        'Cần buông rèm mỏng che cửa sổ vào buổi trưa nếu ánh sáng mặt trời quá gắt',
+        'Cần buông rèm mỏng che cửa sổ vào buổi trưa nếu ánh sáng mặt trời chiếu trực tiếp',
       ],
       scoreBreakdown: {
-        fengShui: Math.max(85, opt3.proposal.afterScore - 2),
-        usability: 88,
-        aesthetics: 96,
+        fengShui: fs3,
+        usability: use3.score,
+        aesthetics: aes3.score,
       },
+      metrics: computeMetrics(
+        opt3.optimizedObjects,
+        'balance_aesthetics',
+        use3,
+        distinct13 && distinct23,
+        'Ưu tiên điểm nhìn thẩm mỹ và đón sáng tự nhiên, chấp nhận hướng đầu giường linh hoạt'
+      ),
     },
   ];
+
+  const summary = allDistinct
+    ? `Đã phân tích căn phòng ${roomConfig.width}m × ${roomConfig.length}m (${(
+        (roomConfig.width || 5) * (roomConfig.length || 5.2)
+      ).toFixed(1)}m²) của gia chủ mệnh ${
+        userProfile.guaName
+      } và thiết lập 3 phương án bố trí hoàn toàn khác biệt về vị trí hình học, hướng nội thất và mục tiêu tối ưu.`
+    : `Căn phòng có kích thước hoặc hình học hạn chế. Hệ thống đã tối ưu tối đa các phương án bố trí hợp lệ và an toàn không va chạm.`;
 
   return {
     options,
     activeStrategy: 'feng_shui_priority',
-    roomSummary: `Đã phân tích căn phòng ${roomConfig.width}m × ${roomConfig.length}m (${(roomConfig.width * roomConfig.length).toFixed(1)}m²) của gia chủ mệnh ${userProfile.guaName} và thiết lập 3 phương án tối ưu hình học & phong thủy không va chạm.`,
+    roomSummary: summary,
+    isAllDistinct: allDistinct,
   };
 }

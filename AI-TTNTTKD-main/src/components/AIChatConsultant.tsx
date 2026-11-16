@@ -979,7 +979,7 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
                       </span>
                     </div>
                     <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
-                      Không va chạm OBB SAT
+                      {m.multipleProposals.isAllDistinct ? '✓ 3 Layout hình học độc lập' : 'Không va chạm OBB SAT'}
                     </span>
                   </div>
 
@@ -1052,6 +1052,23 @@ export const AIChatConsultant: React.FC<AIChatConsultantProps> = ({
                             <span className="text-xs font-bold text-amber-800">{activeOpt.scoreBreakdown.aesthetics}đ</span>
                           </div>
                         </div>
+
+                        {/* Geometric & Spatial Metrics */}
+                        {activeOpt.metrics && (
+                          <div className="p-2 bg-stone-50/90 rounded-xl border border-stone-200/80 space-y-1 text-[10px]">
+                            <div className="grid grid-cols-2 gap-1 text-stone-600">
+                              <div>🧭 Đầu giường: <strong className="text-stone-900 font-semibold">{activeOpt.metrics.bedFacingDirection}</strong></div>
+                              <div>🚶 Lối đi: <strong className="text-stone-900 font-semibold">{activeOpt.metrics.circulationWidth}m</strong></div>
+                              <div>🔄 Dịch chuyển: <strong className="text-stone-900 font-semibold">{activeOpt.metrics.changedCount} món</strong></div>
+                              <div>🔒 Giữ nguyên: <strong className="text-stone-900 font-semibold">{activeOpt.metrics.unchangedCount} món</strong></div>
+                            </div>
+                            {activeOpt.metrics.tradeOff && (
+                              <div className="text-[9.5px] text-stone-500 pt-0.5 border-t border-stone-200/60">
+                                ⚖ <em>Đánh đổi:</em> {activeOpt.metrics.tradeOff}
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {/* Pros */}
                         <div className="space-y-1">
