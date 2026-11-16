@@ -49,7 +49,7 @@ console.log('SUITE: THREE DISTINCT ROOM LAYOUT ALTERNATIVES (10 MANDATORY TESTS)
 console.log('================================================================================\n');
 
 const masterPreset = ROOM_PRESETS.master;
-const profile = getUserFengShuiProfile(2004, 'female');
+const profile = getUserFengShuiProfile(1990, 'male');
 const initialEval = evaluateRoomFengShui(profile, masterPreset.config, masterPreset.objects);
 const multi = generateMultipleLayoutProposals(profile, masterPreset.config, masterPreset.objects, initialEval);
 
@@ -99,15 +99,32 @@ const bedPosSame13 = bed1.position.x === bed3.position.x && bed1.position.z === 
 assert(!bedPosSame12 && !bedPosSame13, 'Beds are located in distinct positions or walls across proposals');
 
 // -----------------------------------------------------------------------------
-// TEST 2: PA1 prioritizes Feng Shui
+// TEST 2: PA1 prioritizes Feng Shui & Bát Trạch Quái Mệnh Accuracy
 // -----------------------------------------------------------------------------
-console.log('\n--- TEST 2: PA1 Feng Shui Prioritization ---');
+console.log('\n--- TEST 2: PA1 Feng Shui Prioritization & Accurate Bát Trạch Quái Mệnh ---');
 assert(pa1.strategy === 'feng_shui_priority', 'PA1 strategy is feng_shui_priority');
 assert(
-  pa1.scoreBreakdown.fengShui >= pa2.scoreBreakdown.fengShui || pa1.scoreBreakdown.fengShui >= pa3.scoreBreakdown.fengShui,
-  `PA1 achieves superior or top-tier Feng Shui score (${pa1.scoreBreakdown.fengShui} vs PA2: ${pa2.scoreBreakdown.fengShui}, PA3: ${pa3.scoreBreakdown.fengShui})`
+  pa1.scoreBreakdown.fengShui > pa2.scoreBreakdown.fengShui && pa1.scoreBreakdown.fengShui > pa3.scoreBreakdown.fengShui,
+  `PA1 achieves highest Feng Shui score (${pa1.scoreBreakdown.fengShui} vs PA2: ${pa2.scoreBreakdown.fengShui}, PA3: ${pa3.scoreBreakdown.fengShui})`
 );
 assert(pa1.pros.length > 0, 'PA1 includes specific Feng Shui pros');
+
+// Verify 1990 Male Gua is Khảm (East Group - Thủy)
+assert(profile.guaNumber === 1, '1990 Male Gua number is 1');
+assert(profile.guaName === 'Khảm', '1990 Male Gua name is Khảm');
+assert(profile.directionDetails['N'].name === 'Phục Vị' && profile.directionDetails['N'].isGood === true, 'Khảm North is Phục Vị (Cát)');
+assert(profile.directionDetails['S'].name === 'Diên Niên' && profile.directionDetails['S'].isGood === true, 'Khảm South is Diên Niên (Cát)');
+assert(profile.directionDetails['E'].name === 'Thiên Y' && profile.directionDetails['E'].isGood === true, 'Khảm East is Thiên Y (Cát)');
+assert(profile.directionDetails['SE'].name === 'Sinh Khí' && profile.directionDetails['SE'].isGood === true, 'Khảm South-East is Sinh Khí (Cát)');
+assert(profile.directionDetails['NW'].name === 'Lục Sát' && profile.directionDetails['NW'].isGood === false, 'Khảm North-West is Lục Sát (Hung)');
+assert(profile.directionDetails['W'].name === 'Họa Hại' && profile.directionDetails['W'].isGood === false, 'Khảm West is Họa Hại (Hung)');
+
+// Verify that descriptions and pros for Khảm do not falsely attribute Khôn
+const allProsText = [...pa1.pros, ...pa2.pros, ...pa3.pros].join(' ');
+assert(!allProsText.includes('Khôn'), 'Proposals for Khảm gia chủ strictly do NOT cite Khôn');
+assert(pa1.pros.some((p) => p.includes('Phục Vị') && p.includes('Khảm')), 'PA1 accurately cites Phục Vị for Khảm');
+assert(pa2.pros.some((p) => p.includes('Diên Niên') && p.includes('Khảm')), 'PA2 accurately cites Diên Niên for Khảm');
+assert(pa3.pros.some((p) => p.includes('Thiên Y') && p.includes('Khảm')), 'PA3 accurately cites Thiên Y for Khảm');
 
 // -----------------------------------------------------------------------------
 // TEST 3: PA2 prioritizes Usability & Circulation
@@ -115,8 +132,12 @@ assert(pa1.pros.length > 0, 'PA1 includes specific Feng Shui pros');
 console.log('\n--- TEST 3: PA2 Usability & Circulation Prioritization ---');
 assert(pa2.strategy === 'balance_usability', 'PA2 strategy is balance_usability');
 assert(
-  pa2.scoreBreakdown.usability >= pa1.scoreBreakdown.usability,
+  pa2.scoreBreakdown.usability > pa1.scoreBreakdown.usability,
   `PA2 achieves higher Usability score than PA1 (${pa2.scoreBreakdown.usability} vs PA1: ${pa1.scoreBreakdown.usability})`
+);
+assert(
+  pa1.scoreBreakdown.usability > pa3.scoreBreakdown.usability,
+  `PA1 achieves higher Usability score than PA3 (${pa1.scoreBreakdown.usability} vs PA3: ${pa3.scoreBreakdown.usability})`
 );
 assert(
   (pa2.metrics?.circulationWidth || 0) >= 1.0,
@@ -129,8 +150,12 @@ assert(
 console.log('\n--- TEST 4: PA3 Aesthetics Prioritization ---');
 assert(pa3.strategy === 'balance_aesthetics', 'PA3 strategy is balance_aesthetics');
 assert(
-  pa3.scoreBreakdown.aesthetics >= pa2.scoreBreakdown.aesthetics,
+  pa3.scoreBreakdown.aesthetics > pa2.scoreBreakdown.aesthetics,
   `PA3 achieves higher Aesthetics score than PA2 (${pa3.scoreBreakdown.aesthetics} vs PA2: ${pa2.scoreBreakdown.aesthetics})`
+);
+assert(
+  pa2.scoreBreakdown.aesthetics > pa1.scoreBreakdown.aesthetics,
+  `PA2 achieves higher Aesthetics score than PA1 (${pa2.scoreBreakdown.aesthetics} vs PA1: ${pa1.scoreBreakdown.aesthetics})`
 );
 assert(pa3.metrics?.heuristicAesthetics === true, 'PA3 honestly flags aesthetics as architectural heuristic');
 
@@ -211,9 +236,25 @@ assert(tinyProposals.options.length === 3, 'Always returns 3 strategy structures
 // TEST 10: Master Preset Invariance (89/51) Baseline Protected
 // -----------------------------------------------------------------------------
 console.log('\n--- TEST 10: Master Preset 89/51 Invariance Protected ---');
-const freshMasterEval = evaluateRoomFengShui(profile, ROOM_PRESETS.master.config, ROOM_PRESETS.master.objects);
+const baselineProfile1985 = getUserFengShuiProfile(1985, 'male');
+const freshMasterEval = evaluateRoomFengShui(baselineProfile1985, ROOM_PRESETS.master.config, ROOM_PRESETS.master.objects);
 assert(freshMasterEval.overallScore === 51, `Master preset unmutated score is strictly 51 (Got: ${freshMasterEval.overallScore})`);
 assert(ROOM_PRESETS.master.objects.length === 12, `Master preset object count intact at 12 (Got: ${ROOM_PRESETS.master.objects.length})`);
+
+// -----------------------------------------------------------------------------
+// TEST 11: Dynamic Multi-Gua Verification (Khôn Gia Chủ 2004 Female)
+// -----------------------------------------------------------------------------
+console.log('\n--- TEST 11: Multi-Gua Dynamic Adaptation (Khôn 2004 Female) ---');
+const khonProfile = getUserFengShuiProfile(2004, 'female');
+assert(khonProfile.guaName === 'Khôn', '2004 Female Gua is Khôn');
+assert(khonProfile.directionDetails['NW'].name === 'Diên Niên' && khonProfile.directionDetails['NW'].isGood === true, 'Khôn NW is Diên Niên');
+assert(khonProfile.directionDetails['W'].name === 'Thiên Y' && khonProfile.directionDetails['W'].isGood === true, 'Khôn W is Thiên Y');
+assert(khonProfile.directionDetails['N'].name === 'Tuyệt Mệnh' && khonProfile.directionDetails['N'].isGood === false, 'Khôn N is Tuyệt Mệnh (Hung)');
+
+const khonProposals = generateMultipleLayoutProposals(khonProfile, masterPreset.config, masterPreset.objects, evaluateRoomFengShui(khonProfile, masterPreset.config, masterPreset.objects));
+const khonProsText = khonProposals.options.flatMap((o) => o.pros).join(' ');
+assert(khonProsText.includes('Khôn'), 'Proposals dynamically update to cite Khôn for Khôn profile');
+assert(!khonProsText.includes('quái mệnh Khảm'), 'Khôn proposals strictly do not reference Khảm');
 
 // Summary
 console.log('\n================================================================================');

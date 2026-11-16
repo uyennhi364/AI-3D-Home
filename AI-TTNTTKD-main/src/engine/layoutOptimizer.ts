@@ -171,6 +171,7 @@ export function evaluateUsabilityScore(
   circulationWidth: number;
   wardrobeClearance: number;
   chairClearance: number;
+  minBedSideClearance: number;
   details: string[];
 } {
   const details: string[] = [];
@@ -178,6 +179,9 @@ export function evaluateUsabilityScore(
   const wardrobe = objects.find((o) => o.type === 'wardrobe');
   const desk = objects.find((o) => o.type === 'desk');
   const bed = objects.find((o) => o.type === 'bed');
+
+  const halfW = (roomConfig.width || 5.0) / 2;
+  const halfL = (roomConfig.length || 5.2) / 2;
 
   // 1. Wardrobe front clearance
   let wardrobeClearance = 1.1;
@@ -190,21 +194,42 @@ export function evaluateUsabilityScore(
     }
   }
 
-  // 2. Main circulation corridor width
+  // 2. Main circulation corridor width (central gap between large solids)
   let corridorWidth = 1.15;
   if (bed && wardrobe) {
     const rawGap = Math.abs(bed.position.z - wardrobe.position.z) - (bed.dimensions.length + wardrobe.dimensions.length) / 2;
     corridorWidth = Math.max(0.8, Math.min(2.2, Math.abs(rawGap)));
   }
 
-  // 3. Chair pullout clearance
+  // 3. Bed dual-sided walkway accessibility (Neufert Ergonomic Bed Access standard)
+  let minBedSide = 0.85;
+  if (bed) {
+    const isNorthOrSouth = Math.abs(Math.sin(bed.rotation.y)) < 0.5;
+    if (isNorthOrSouth) {
+      const leftClearance = (bed.position.x - bed.dimensions.width / 2) - (-halfW);
+      const rightClearance = halfW - (bed.position.x + bed.dimensions.width / 2);
+      minBedSide = Math.max(0.4, Math.min(leftClearance, rightClearance));
+    } else {
+      const topClearance = (bed.position.z - bed.dimensions.width / 2) - (-halfL);
+      const bottomClearance = halfL - (bed.position.z + bed.dimensions.width / 2);
+      minBedSide = Math.max(0.4, Math.min(topClearance, bottomClearance));
+    }
+  }
+
+  // 4. Chair pullout clearance
   const chairClearance = desk ? 0.85 : 0.8;
 
-  // Quantitative scoring
-  const wardScore = wardrobeClearance >= 1.5 ? 98 : wardrobeClearance >= 1.0 ? 88 : 70;
-  const circScore = corridorWidth >= 1.4 ? 98 : corridorWidth >= 1.0 ? 86 : 68;
+  // Real continuous ergonomic scoring:
+  const wardScore = wardrobeClearance >= 1.8 ? 98 : wardrobeClearance >= 1.2 ? 88 + (wardrobeClearance - 1.2) * 16.6 : 60 + wardrobeClearance * 23.3;
+  const circScore = corridorWidth >= 2.0 ? 98 : corridorWidth >= 1.4 ? 86 + (corridorWidth - 1.4) * 20 : 65 + (corridorWidth - 0.8) * 35;
+  const bedAccessScore = minBedSide >= 1.15 ? 96 : minBedSide >= 0.90 ? 86 + ((minBedSide - 0.90) / 0.25) * 10 : 68;
 
-  const finalScore = Math.round(baseCirc * 0.25 + wardScore * 0.35 + circScore * 0.40);
+  const finalScore = Math.round(
+    baseCirc * 0.15 +
+    wardScore * 0.30 +
+    circScore * 0.30 +
+    bedAccessScore * 0.25
+  );
 
   if (corridorWidth >= 1.4) {
     details.push(`Hành lang lưu thông trung tâm rộng rãi (${corridorWidth.toFixed(2)}m)`);
@@ -212,12 +237,18 @@ export function evaluateUsabilityScore(
   if (wardrobeClearance >= 1.2) {
     details.push(`Khoảng trống mở cánh tủ quần áo thông thoáng (${wardrobeClearance.toFixed(2)}m)`);
   }
+  if (minBedSide >= 1.1) {
+    details.push(`Lối đi hai bên giường cực kỳ rộng rãi (${minBedSide.toFixed(2)}m), thuận tiện di chuyển`);
+  } else if (minBedSide >= 0.85) {
+    details.push(`Lối đi cạnh giường đạt chuẩn (${minBedSide.toFixed(2)}m)`);
+  }
 
   return {
     score: Math.min(98, Math.max(45, finalScore)),
     circulationWidth: Number(corridorWidth.toFixed(2)),
     wardrobeClearance: Number(wardrobeClearance.toFixed(2)),
     chairClearance: Number(chairClearance.toFixed(2)),
+    minBedSideClearance: Number(minBedSide.toFixed(2)),
     details,
   };
 }
@@ -397,25 +428,36 @@ export function generateOptimizedLayout(
     const bedW = bed.dimensions.width;
     const bedL = bed.dimensions.length;
 
+    const getHeadboardReason = (rotY: number, wallName: string): string => {
+      const headDir = getBedHeadboardDirection(rotY);
+      const sector = userProfile?.directionDetails?.[headDir];
+      const guaName = userProfile?.guaName ? ` quái mệnh ${userProfile.guaName}` : '';
+      if (sector) {
+        const catHung = sector.isGood ? 'cát lợi' : 'cần lưu ý';
+        return `Đầu giường tựa ${wallName} vững chãi, hướng ${sector.name} (${catHung}${guaName}), thế Tọa Sơn kiên cố`;
+      }
+      return `Đầu giường tựa ${wallName} kiên cố, thế Tọa Sơn vững chãi`;
+    };
+
     interface BedCandidate extends Candidate { facingDirection: string; }
     const bedCandidates: BedCandidate[] = [
-      // Wall W (West Wall, facing East): Sits in West Auspicious sector (Thiên Y for Khôn)
+      // Wall W (West Wall, headboard E)
       {
         pos: { x: -halfW + bedL / 2 + 0.05, z: 0.40 },
         rotY: Math.PI / 2, facingDirection: 'E',
-        reason: 'Đầu giường tựa vách tường Tây vững chãi, tọa phương vị Cát (Thiên Y), tránh luồng xung cửa',
+        reason: getHeadboardReason(Math.PI / 2, 'vách tường Tây') + ', tránh luồng xung cửa',
       },
-      // Wall S (South Wall, facing North): Leaves widest central walkway
+      // Wall S (South Wall, headboard S)
       {
         pos: { x: -0.50, z: halfL - bedL / 2 - 0.05 },
         rotY: Math.PI, facingDirection: 'N',
-        reason: 'Đầu giường tựa vách tường Nam kiên cố, mở rộng tối đa hành lang và lối lưu thông trung tâm',
+        reason: getHeadboardReason(Math.PI, 'vách tường Nam') + ', mở rộng tối đa hành lang lưu thông',
       },
-      // Wall N (North Wall, facing South): Classic Tọa Sơn backing with dual nightstand symmetry
+      // Wall N (North Wall, headboard N)
       {
         pos: { x: -0.75, z: -halfL + bedL / 2 + 0.05 },
         rotY: 0, facingDirection: 'S',
-        reason: 'Đầu giường tựa sát tường Bắc kiên cố (thế Tọa Sơn), cân đối đối xứng với 2 táp đầu giường',
+        reason: getHeadboardReason(0, 'sát tường Bắc') + ', cân đối đối xứng với 2 táp đầu giường',
       },
     ];
 
@@ -428,7 +470,7 @@ export function generateOptimizedLayout(
       const isGoodDir = (userProfile.directionDetails as any)?.[cand.facingDirection]?.isGood;
 
       if (strategy === 'feng_shui_priority') {
-        // North Wall candidate (rotY === 0) sits in Auspicious Diên Niên sector, solid North wall backing (Tọa Sơn)
+        // North Wall candidate (rotY === 0) has solid North wall backing (Tọa Sơn) and auspicious sector
         if (cand.rotY === 0) score += 80;
         if (cand.rotY === Math.PI / 2) score += 40;
         if (isGoodDir) score += 40;
@@ -990,6 +1032,18 @@ export function generateMultipleLayoutProposals(
     };
   };
 
+  const getStrategyBedSectorText = (objs: RoomObject[]) => {
+    const b = objs.find((o) => o.type === 'bed');
+    if (!b) return 'vị trí vững chắc';
+    const hDir = getBedHeadboardDirection(b.rotation.y);
+    const sec = userProfile?.directionDetails?.[hDir];
+    const gua = userProfile?.guaName ? ` quái mệnh ${userProfile.guaName}` : '';
+    if (sec) {
+      return `hướng ${sec.name} (${sec.isGood ? 'cung Cát' : 'cung Hung'}${gua})`;
+    }
+    return `hướng ${hDir}`;
+  };
+
   const options: StrategicLayoutOption[] = [
     {
       strategy: 'feng_shui_priority',
@@ -1001,7 +1055,7 @@ export function generateMultipleLayoutProposals(
         title: 'Phương án 1 – Ưu tiên Phong Thủy Bát Trạch',
       },
       pros: [
-        'Đầu giường tựa tường vững chãi, tọa cung Cát theo Bát Trạch quái mệnh gia chủ',
+        `Đầu giường tựa tường kiên cố, tọa ${getStrategyBedSectorText(opt1.optimizedObjects)}`,
         'Triệt tiêu trục xung khí trực diện từ cửa phòng và góc phản chiếu của gương soi',
         'Bàn làm việc bố trí tại thế chủ động, tựa tường vững vàng bao quát không gian',
       ],
@@ -1033,7 +1087,7 @@ export function generateMultipleLayoutProposals(
       pros: [
         `Hành lang lưu thông trung tâm rộng rãi (${use2.circulationWidth}m), di chuyển cực kỳ thông thoáng`,
         `Khoảng trống mở cánh tủ quần áo rộng rãi (${use2.wardrobeClearance}m), không bị cản trở đồ đạc`,
-        'Bảo đảm các nguyên tắc phong thủy cốt lõi: đầu giường tựa tường, tránh gương chiếu',
+        `Đầu giường tựa vách tường kiên cố, tọa ${getStrategyBedSectorText(opt2.optimizedObjects)}`,
       ],
       limitations: [
         'Hướng đầu giường ưu tiên sự tiện nghi lưu thông hình học hơn là hướng cát tuyệt đối',
@@ -1061,9 +1115,9 @@ export function generateMultipleLayoutProposals(
         title: 'Phương án 3 – Cân bằng Phong Thủy & Thẩm Mỹ',
       },
       pros: [
-        'Bố cục đối xứng thanh lịch với táp đầu giường chuẩn phong cách Master hiện đại',
+        `Đầu giường tựa vách tường vững chãi, tọa ${getStrategyBedSectorText(opt3.optimizedObjects)}`,
         'Bàn học đón trọn ánh sáng tự nhiên từ cửa sổ, tạo góc làm việc nghệ thuật và sáng tạo',
-        'Cây cảnh và thảm sàn phân bổ nhịp nhàng, tối ưu điểm nhấn thị giác từ cửa bước vào',
+        'Bố cục đối xứng thanh lịch, cây cảnh và thảm phân bổ hài hòa điểm nhấn thị giác',
       ],
       limitations: [
         'Cần buông rèm mỏng che cửa sổ vào buổi trưa nếu ánh sáng mặt trời chiếu trực tiếp',
