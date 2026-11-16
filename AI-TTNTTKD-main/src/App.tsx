@@ -661,15 +661,28 @@ export default function App() {
     return false;
   };
 
-  // Handler: Preview Proposal (clean toggle, no spammy toasts)
+  // Handler: Preview Proposal (clean toggle for single; tab-switch for multi-adjustments)
   const handlePreviewProposal = (single: ProposedAdjustment | null, adjustments?: ProposedAdjustment[]) => {
     if (adjustments && adjustments.length > 0) {
-      if (isPreviewingProposal && previewAdjustments.length > 0) {
+      // Distinguish "toggle same proposal off" vs "switch to different proposal" (tab switching PA1→PA2→PA3)
+      const firstAdj = adjustments[0];
+      const curFirst = previewAdjustments[0];
+      const isSameProposal =
+        isPreviewingProposal &&
+        curFirst &&
+        curFirst.objectId === firstAdj?.objectId &&
+        previewAdjustments.length === adjustments.length &&
+        Math.abs((curFirst.suggestedX ?? 0) - (firstAdj?.suggestedX ?? 0)) < 0.001 &&
+        Math.abs((curFirst.suggestedZ ?? 0) - (firstAdj?.suggestedZ ?? 0)) < 0.001;
+
+      if (isSameProposal) {
+        // Toggle off: same proposal card clicked again
         setIsPreviewingProposal(false);
         setPreviewAdjustments([]);
         return;
       }
-      setPreviewAdjustments(adjustments);
+      // Switch to new candidate (tab switching PA1/PA2/PA3) OR activate new preview
+      setPreviewAdjustments([...adjustments]); // spread to ensure new array reference
       setProposedAdjustment(null);
       setIsPreviewingProposal(true);
     } else if (single) {

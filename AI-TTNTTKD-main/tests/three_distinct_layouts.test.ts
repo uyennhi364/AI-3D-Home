@@ -256,6 +256,55 @@ const khonProsText = khonProposals.options.flatMap((o) => o.pros).join(' ');
 assert(khonProsText.includes('Khôn'), 'Proposals dynamically update to cite Khôn for Khôn profile');
 assert(!khonProsText.includes('quái mệnh Khảm'), 'Khôn proposals strictly do not reference Khảm');
 
+// -----------------------------------------------------------------------------
+// TEST 12: Tab-Switch 3D Sync & Object Reference Independence
+// -----------------------------------------------------------------------------
+console.log('\n--- TEST 12: Tab-Switch 3D Sync & Object Reference Independence ---');
+
+const t12Pa1 = multi.options[0];
+const t12Pa2 = multi.options[1];
+const t12Pa3 = multi.options[2];
+
+// 12a: Each PA must include adjustments array
+assert(Array.isArray(t12Pa1.proposal.adjustments) && t12Pa1.proposal.adjustments.length > 0, 'PA1 has non-empty adjustments[]');
+assert(Array.isArray(t12Pa2.proposal.adjustments) && t12Pa2.proposal.adjustments.length > 0, 'PA2 has non-empty adjustments[]');
+assert(Array.isArray(t12Pa3.proposal.adjustments) && t12Pa3.proposal.adjustments.length > 0, 'PA3 has non-empty adjustments[]');
+
+// 12b: Bed adjustment must exist in each PA and differ between PAs by >0.5m
+const t12Bed1 = t12Pa1.proposal.adjustments.find((a) => a.objectId?.includes('bed'));
+const t12Bed2 = t12Pa2.proposal.adjustments.find((a) => a.objectId?.includes('bed'));
+const t12Bed3 = t12Pa3.proposal.adjustments.find((a) => a.objectId?.includes('bed'));
+assert(!!t12Bed1, 'PA1 adjustments contain a bed entry');
+assert(!!t12Bed2, 'PA2 adjustments contain a bed entry');
+assert(!!t12Bed3, 'PA3 adjustments contain a bed entry');
+
+const t12Dist12 = Math.hypot((t12Bed1!.suggestedX ?? 0) - (t12Bed2!.suggestedX ?? 0), (t12Bed1!.suggestedZ ?? 0) - (t12Bed2!.suggestedZ ?? 0));
+const t12Dist23 = Math.hypot((t12Bed2!.suggestedX ?? 0) - (t12Bed3!.suggestedX ?? 0), (t12Bed2!.suggestedZ ?? 0) - (t12Bed3!.suggestedZ ?? 0));
+const t12Dist13 = Math.hypot((t12Bed1!.suggestedX ?? 0) - (t12Bed3!.suggestedX ?? 0), (t12Bed1!.suggestedZ ?? 0) - (t12Bed3!.suggestedZ ?? 0));
+assert(t12Dist12 > 0.5 || t12Dist13 > 0.5 || t12Dist23 > 0.5, `At least one PA pair has bed distance >0.5m (d12=${t12Dist12.toFixed(2)}, d23=${t12Dist23.toFixed(2)}, d13=${t12Dist13.toFixed(2)})`);
+
+// 12c: Adjustment arrays are independent — no shared object references (tab-switch safety)
+const t12OrigScore = t12Pa1.proposal.adjustments[0].estimatedScore ?? 0;
+(t12Pa1.proposal.adjustments[0] as unknown as Record<string, unknown>)['estimatedScore'] = 999999;
+assert(
+  (t12Pa2.proposal.adjustments[0]?.estimatedScore ?? 0) !== 999999,
+  'PA1 and PA2 adjustment objects are independent (no shared reference)'
+);
+assert(
+  (t12Pa3.proposal.adjustments[0]?.estimatedScore ?? 0) !== 999999,
+  'PA1 and PA3 adjustment objects are independent (no shared reference)'
+);
+(t12Pa1.proposal.adjustments[0] as unknown as Record<string, unknown>)['estimatedScore'] = t12OrigScore; // restore
+
+// 12d: Switching order PA1→PA2→PA3 uses different first-object positions (simulates tab-switch)
+const t12FirstObjPA1 = t12Pa1.proposal.adjustments[0];
+const t12FirstObjPA2 = t12Pa2.proposal.adjustments[0];
+const t12IsSameBugDetected =
+  t12FirstObjPA1.objectId === t12FirstObjPA2.objectId &&
+  Math.abs((t12FirstObjPA1.suggestedX ?? 0) - (t12FirstObjPA2.suggestedX ?? 0)) < 0.001 &&
+  Math.abs((t12FirstObjPA1.suggestedZ ?? 0) - (t12FirstObjPA2.suggestedZ ?? 0)) < 0.001;
+assert(!t12IsSameBugDetected, 'PA1→PA2 tab-switch: first adjustment differs (no toggle-bug regression)');
+
 // Summary
 console.log('\n================================================================================');
 console.log(`TEST SUMMARY: ${passed} PASSED | ${failed} FAILED | TOTAL: ${passed + failed}`);
@@ -264,6 +313,6 @@ console.log('===================================================================
 if (failed > 0) {
   process.exit(1);
 } else {
-  console.log('🎉 ALL 10 MANDATORY THREE DISTINCT LAYOUT TESTS PASSED!\n');
+  console.log('🎉 ALL MANDATORY THREE DISTINCT LAYOUT TESTS PASSED!\n');
 }
 

@@ -538,12 +538,20 @@ export function generateOptimizedLayout(
       });
       improvements.push('Kê đầu giường tựa vách kiên cố, triệt tiêu trục khí xung từ cửa');
 
-      // Rug
+      // Rug (bed rug) — sync position + add adjustment so Three.js preview updates correctly
       const rug = workingObjects.find((o) => o.type === 'rug' && o.id.includes('bed'));
       if (rug) {
         rug.position.x = chosenBed.clamped.x;
         rug.position.z = chosenBed.clamped.z;
         rug.rotation.y = chosenBed.rotY;
+        adjustments.push({
+          objectId: rug.id,
+          suggestedX: chosenBed.clamped.x,
+          suggestedZ: chosenBed.clamped.z,
+          suggestedRotationY: chosenBed.rotY,
+          reason: 'Thảm trải sàn đồng bộ theo vị trí giường',
+          estimatedScore: 90,
+        });
       }
 
       // Nightstands
@@ -743,12 +751,20 @@ export function generateOptimizedLayout(
           estimatedScore: 90,
         });
 
-        // Sync desk rug if present
+        // Sync desk rug if present — add adjustment for Three.js scene sync
         const deskRug = workingObjects.find((o) => o.type === 'rug' && (o.id.includes('desk') || o.id.includes('chair')));
         if (deskRug) {
           deskRug.position.x = chairClamped.x;
           deskRug.position.z = chairClamped.z;
           deskRug.rotation.y = deskResult.rotY;
+          adjustments.push({
+            objectId: deskRug.id,
+            suggestedX: chairClamped.x,
+            suggestedZ: chairClamped.z,
+            suggestedRotationY: deskResult.rotY,
+            reason: 'Thảm khu làm việc đồng bộ theo vị trí ghế',
+            estimatedScore: 85,
+          });
         }
       }
     }
