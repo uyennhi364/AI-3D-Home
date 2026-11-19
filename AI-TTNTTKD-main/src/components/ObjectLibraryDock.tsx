@@ -359,13 +359,54 @@ interface ObjectLibraryDockProps {
   }) => void;
 }
 
+function removeVietnameseTones(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
+}
+
 export const ObjectLibraryDock: React.FC<ObjectLibraryDockProps> = ({ onAddObject }) => {
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const filteredItems = LIBRARY_ITEMS.filter((item) => {
-    if (activeCategory === 'all') return true;
-    return item.category === activeCategory;
+    // 1. Category filter
+    const matchesCategory = activeCategory === 'all' || item.category === activeCategory;
+
+    // 2. Search query filter
+    const trimmedQuery = searchQuery.trim();
+    if (!trimmedQuery) {
+      return matchesCategory;
+    }
+
+    const q = removeVietnameseTones(trimmedQuery);
+    const rawQ = trimmedQuery.toLowerCase();
+
+    // Check both normalized without tones and raw lowercase with tones
+    const nameNorm = removeVietnameseTones(item.name);
+    const subtextNorm = removeVietnameseTones(item.subtext);
+    const catNorm = removeVietnameseTones(item.category);
+    const typeNorm = removeVietnameseTones(item.type);
+
+    const matchesSearch =
+      nameNorm.includes(q) ||
+      subtextNorm.includes(q) ||
+      catNorm.includes(q) ||
+      typeNorm.includes(q) ||
+      item.name.toLowerCase().includes(rawQ) ||
+      item.subtext.toLowerCase().includes(rawQ);
+
+    // If activeCategory is 'all', matchesSearch is sufficient.
+    // If user selected a specific category tab, match within that category.
+    if (activeCategory === 'all') {
+      return matchesSearch;
+    }
+    return matchesCategory && matchesSearch;
   });
 
   const handleScrollLeft = () => {
@@ -409,11 +450,13 @@ export const ObjectLibraryDock: React.FC<ObjectLibraryDockProps> = ({ onAddObjec
 
         {/* Search & Filter Right Tools */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <div className="relative">
+          <div className="relative flex items-center">
             <input
               type="text"
               placeholder="Tìm kiếm..."
-              className="w-24 sm:w-28 h-6 bg-stone-50 border border-stone-200 rounded-full pl-6 pr-2 text-[11px] text-stone-700 placeholder-stone-400 focus:outline-hidden focus:border-stone-400"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-28 sm:w-36 h-6 bg-stone-50 border border-stone-200 rounded-full pl-6 pr-6 text-[11px] text-stone-700 placeholder-stone-400 focus:outline-hidden focus:border-stone-400 transition-all"
             />
             <svg
               className="w-3 h-3 text-stone-400 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none"
@@ -425,6 +468,15 @@ export const ObjectLibraryDock: React.FC<ObjectLibraryDockProps> = ({ onAddObjec
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 text-[10px] w-3.5 h-3.5 flex items-center justify-center rounded-full hover:bg-stone-200 cursor-pointer"
+                title="Xóa tìm kiếm"
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -442,28 +494,44 @@ export const ObjectLibraryDock: React.FC<ObjectLibraryDockProps> = ({ onAddObjec
 
         <div
           ref={scrollContainerRef}
-          className="flex-1 flex items-center gap-2 overflow-x-auto py-0.5 px-0.5 scrollbar-none"
+          className="flex-1 flex items-center gap-2 overflow-x-auto py-0.5 px-0.5 scrollbar-none min-h-[72px]"
         >
-          {filteredItems.map((item) => (
-            <div
-              key={item.id}
-              onClick={() => onAddObject(item)}
-              className="w-[92px] shrink-0 p-1 rounded-xl bg-[#F9FAFB] border border-stone-200/70 hover:border-[#00705a] hover:bg-white hover:shadow-xs active:scale-95 transition-all cursor-pointer group flex flex-col items-center text-center"
-            >
-              {/* 3D Isometric Preview Area */}
-              <div className="w-full h-10 rounded-lg flex items-center justify-center overflow-hidden transition-transform group-hover:scale-105">
-                {item.renderPreview()}
-              </div>
-
-              {/* Title & Dimension */}
-              <p className="text-[10px] font-bold text-stone-800 truncate w-full group-hover:text-[#005C4A] transition-colors leading-tight mt-0.5">
-                {item.name}
-              </p>
-              <p className="text-[9px] text-stone-400 font-mono leading-tight">
-                {item.subtext}
-              </p>
+          {filteredItems.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center py-2 text-stone-500 text-xs gap-2">
+              <span>🔍</span>
+              <span>Không tìm thấy đồ vật nào phù hợp với từ khóa "<strong>{searchQuery}</strong>"</span>
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setActiveCategory('all');
+                }}
+                className="ml-2 px-2 py-0.5 text-[10px] bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-md font-medium cursor-pointer"
+              >
+                Hiện tất cả
+              </button>
             </div>
-          ))}
+          ) : (
+            filteredItems.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => onAddObject(item)}
+                className="w-[92px] shrink-0 p-1 rounded-xl bg-[#F9FAFB] border border-stone-200/70 hover:border-[#00705a] hover:bg-white hover:shadow-xs active:scale-95 transition-all cursor-pointer group flex flex-col items-center text-center"
+              >
+                {/* 3D Isometric Preview Area */}
+                <div className="w-full h-10 rounded-lg flex items-center justify-center overflow-hidden transition-transform group-hover:scale-105">
+                  {item.renderPreview()}
+                </div>
+
+                {/* Title & Dimension */}
+                <p className="text-[10px] font-bold text-stone-800 truncate w-full group-hover:text-[#005C4A] transition-colors leading-tight mt-0.5">
+                  {item.name}
+                </p>
+                <p className="text-[9px] text-stone-400 font-mono leading-tight">
+                  {item.subtext}
+                </p>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Scroll Next Chevron */}

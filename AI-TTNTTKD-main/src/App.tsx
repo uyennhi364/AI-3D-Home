@@ -1115,6 +1115,11 @@ export default function App() {
               onFocusObjects={handleFocusObjects}
               isPreviewingProposal={isPreviewingProposal}
               onClose={() => setIsRightPanelOpen(false)}
+              onUpdateObjectPosition={handleUpdateObjectPosition}
+              onRotateObject={handleRotateObject}
+              onDeleteObject={handleDeleteObject}
+              onDuplicateObject={handleDuplicateObject}
+              onAskAiForBetterPlacement={(name) => setChatTriggerPrompt(`Hãy tìm vị trí và hướng kê tốt nhất theo phong thủy cho ${name}`)}
             />
           </div>
         )}

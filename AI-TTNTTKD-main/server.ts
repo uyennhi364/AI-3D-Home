@@ -15,6 +15,7 @@ import { extractAllActionItems, detectContextReference, detectObjectTypeFromText
 import { resolveContextTargets } from './src/engine/contextResolver';
 import { evaluateIntentSafety } from './src/services/intentGuard';
 import { getUserFengShuiProfile } from './src/engine/batTrach';
+import { getFengShuiTheoryAnswer } from './src/engine/fengShuiKnowledge.js';
 import {
   evaluateGeminiFunctionCalls,
   createDestructiveProposal,
@@ -496,6 +497,18 @@ function handleLocalAIChat(userText: string, userProfile: any, roomConfig: any, 
   // Evaluate intent safety and execution mode
   const guard = evaluateIntentSafety(userText, objects.length > 0);
 
+  // 00-Theory. Comprehensive Bát Trạch & Feng Shui Knowledge Base
+  // Directly resolves questions like "Bát Trạch là gì?", "Đông Tứ Mệnh là gì?", "Sinh Khí là gì?", "Hướng nào hợp gia chủ?"
+  const theoryCheck = getFengShuiTheoryAnswer(userText, userProfile, roomConfig, ruleEngineResult);
+  if (theoryCheck.isTheoryQuery && theoryCheck.answer) {
+    return {
+      reply: theoryCheck.answer,
+      aiActions: null,
+      proposalDetected: false,
+      clarificationDetected: false,
+    };
+  }
+
   // 00a. Contradictory placement commands (impossible request guard)
   const isContradictoryPrompt =
     (guard.blockedActionReason && guard.blockedActionReason.includes('mâu thuẫn')) ||
@@ -851,26 +864,59 @@ function handleLocalAIChat(userText: string, userProfile: any, roomConfig: any, 
       };
     }
 
-    // Trích xuất góc xoay chính xác từ câu
+    // Trích xuất góc xoay chính xác từ câu hoặc tính góc xoay theo hướng Bát Trạch (Sinh Khí, Thiên Y, Diên Niên, Phục Vị...)
     let deg = 90;
-    const degMatch = lower.match(/(\d+)\s*(?:độ|degree|deg)/);
-    if (degMatch) deg = Math.min(360, Math.max(1, parseInt(degMatch[1], 10)));
-    else if (lower.includes('180')) deg = 180;
-    else if (lower.includes('270')) deg = 270;
-    else if (lower.includes('45')) deg = 45;
+    let targetSectorLabel = '';
+
+    const isSinhKhi = lower.includes('sinh khí') || lower.includes('sinh khi');
+    const isThienY = lower.includes('thiên y') || lower.includes('thien y');
+    const isDienNien = lower.includes('diên niên') || lower.includes('dien nien');
+    const isPhucVi = lower.includes('phục vị') || lower.includes('phuc vi');
+
+    if (isSinhKhi || isThienY || isDienNien || isPhucVi) {
+      const targetType = isSinhKhi ? 'SINH_KHI' : isThienY ? 'THIEN_Y' : isDienNien ? 'DIEN_NIEN' : 'PHUC_VI';
+      targetSectorLabel = isSinhKhi ? 'Sinh Khí' : isThienY ? 'Thiên Y' : isDienNien ? 'Diên Niên' : 'Phục Vị';
+
+      let matchedDir: string | undefined;
+      if (userProfile?.directionDetails) {
+        matchedDir = Object.keys(userProfile.directionDetails).find(
+          (d) => userProfile.directionDetails[d]?.type === targetType
+        );
+      }
+
+      if (matchedDir) {
+        const COMPASS_DEG: Record<string, number> = {
+          N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315
+        };
+        const targetDeg = COMPASS_DEG[matchedDir] ?? 0;
+        const currentDeg = Math.round(((targetObj.rotation?.y || 0) * 180) / Math.PI + 360) % 360;
+        deg = (targetDeg - currentDeg + 360) % 360;
+        if (deg === 0) deg = 360;
+      }
+    } else {
+      const degMatch = lower.match(/(\d+)\s*(?:độ|degree|deg)/);
+      if (degMatch) deg = Math.min(360, Math.max(1, parseInt(degMatch[1], 10)));
+      else if (lower.includes('180')) deg = 180;
+      else if (lower.includes('270')) deg = 270;
+      else if (lower.includes('45')) deg = 45;
+    }
 
     const angle = (deg * Math.PI) / 180;
     const newRotDeg = Math.round(((targetObj.rotation?.y || 0) + angle) * 180 / Math.PI) % 360;
 
+    const replyMsg = targetSectorLabel
+      ? `Đã xoay **${targetObj.name}** về hướng cung **${targetSectorLabel}** cát lành theo Quái mệnh của gia chủ. Góc xoay hiện tại: ${newRotDeg}°.`
+      : `Đã xoay **${targetObj.name}** ${deg}°. Góc xoay hiện tại: ${newRotDeg}°. Hướng đón khí trường mới giúp tối ưu trường khí trong phòng.`;
+
     return {
-      reply: `Đã xoay **${targetObj.name}** ${deg}°. Góc xoay hiện tại: ${newRotDeg}°. Hướng đón khí trường mới giúp tối ưu trường khí trong phòng.`,
+      reply: replyMsg,
       aiActions: {
         actions: [
           {
             type: 'rotate_object',
             objectId: targetObj.id,
             rotationDelta: angle,
-            description: `Xoay ${targetObj.name} ${deg}°`,
+            description: targetSectorLabel ? `Xoay ${targetObj.name} về hướng ${targetSectorLabel}` : `Xoay ${targetObj.name} ${deg}°`,
           },
         ],
       },

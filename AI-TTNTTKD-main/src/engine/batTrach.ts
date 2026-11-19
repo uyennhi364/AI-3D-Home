@@ -204,6 +204,45 @@ const GUA_METADATA: Record<number, { name: string; element: GuaElement; group: G
   9: { name: 'Ly', element: 'Hỏa', group: 'Đông Tứ Mệnh' },
 };
 
+export interface BirthYearValidationResult {
+  isValid: boolean;
+  error?: string;
+  parsedYear?: number;
+}
+
+/**
+ * Validates birth year according to system specification: 1930 to 2035.
+ */
+export function validateBirthYear(yearInput: any): BirthYearValidationResult {
+  if (yearInput === undefined || yearInput === null || yearInput === '') {
+    return {
+      isValid: false,
+      error: 'Vui lòng nhập năm sinh.',
+    };
+  }
+
+  const num = typeof yearInput === 'number' ? yearInput : parseInt(String(yearInput).trim(), 10);
+  if (isNaN(num)) {
+    return {
+      isValid: false,
+      error: 'Năm sinh không hợp lệ. Vui lòng nhập số năm (ví dụ: 1985).',
+    };
+  }
+
+  if (num < 1930 || num > 2035) {
+    return {
+      isValid: false,
+      error: 'Năm sinh ngoài phạm vi hỗ trợ (1930–2035). Vui lòng nhập lại trong khoảng 1930–2035.',
+      parsedYear: num,
+    };
+  }
+
+  return {
+    isValid: true,
+    parsedYear: num,
+  };
+}
+
 /**
  * Calculates Gua (Quái số) from Birth Year and Gender according to Bát Trạch.
  */

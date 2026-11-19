@@ -22,9 +22,9 @@ const CANCEL_PREVIEW_REGEX = /(?:tắt|bỏ|đóng|dừng|hủy|huy)\s*(?:xem\s*
 // Undo action phrases
 const UNDO_ACTION_REGEX = /(?:^|\s)(?:undo|hoàn\s*tác|hoàn\s*lại|khôi\s*phục|quay\s*lại\s*như\s*cũ|trở\s*lại\s*như\s*cũ|như\s*lúc\s*trước|bỏ\s*thao\s*tác|huỷ\s*thao\s*tác|hủy\s*thao\s*tác|hủy\s*lệnh)(?:\s|$|[.,;!?])/i;
 
-// Advisory / Question indicators that ask why, how, whether it is good/bad/allowed
+// Advisory / Question indicators that ask why, how, whether it is good/bad/allowed, or theoretical definitions
 const QUESTION_INDICATOR_REGEX =
-  /(?:có\s*(?:sao|được|nên|hợp|phạm|ảnh\s*hưởng|tốt|xấu|vấn\s*đề\s*gì)\s*(?:không|ko|chăng)|tại\s*sao|vì\s*sao|làm\s*sao|như\s*thế\s*nào|thế\s*nào|ra\s*sao|xin\s*hỏi|cho\s*tôi\s*hỏi|giải\s*thích|ảnh\s*hưởng\s*gì|lý\s*do\s*gì|căn\s*cứ\s*nào|hướng\s*dẫn|tư\s*vấn\s*(?:giúp|cho|về)|xem\s*giúp|hóa\s*giải\s*(?:thế\s*nào|như\s*thế\s*nào|sao)|cách\s*(?:khắc\s*phục|hóa\s*giải|xử\s*lý)|gợi\s*ý\s*cách)/i;
+  /(?:có\s*(?:sao|được|nên|hợp|phạm|ảnh\s*hưởng|tốt|xấu|vấn\s*đề\s*gì)\s*(?:không|ko|chăng)|tại\s*sao|vì\s*sao|làm\s*sao|như\s*thế\s*nào|thế\s*nào|ra\s*sao|xin\s*hỏi|cho\s*tôi\s*hỏi|giải\s*thích|ảnh\s*hưởng\s*gì|lý\s*do\s*gì|căn\s*cứ\s*nào|hướng\s*dẫn|tư\s*vấn\s*(?:giúp|cho|về)|xem\s*giúp|hóa\s*giải\s*(?:thế\s*nào|như\s*thế\s*nào|sao)|cách\s*(?:khắc\s*phục|hóa\s*giải|xử\s*lý)|gợi\s*ý\s*cách|là\s*gì|thế\s*nào\s*là|hướng\s*nào\s*(?:phù\s*hợp|tốt|xấu|hợp)|ý\s*nghĩa\s*(?:của|là)\s*gì)/i;
 
 // Questions specifically about optimization
 const OPTIMIZE_QUESTION_REGEX =

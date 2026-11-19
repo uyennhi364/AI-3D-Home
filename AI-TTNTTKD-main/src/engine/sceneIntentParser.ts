@@ -6,6 +6,7 @@
 // =============================================================================
 
 import { FengShuiRoomEvaluation, UserFengShuiProfile } from '../types/fengshui';
+import { getFengShuiTheoryAnswer } from './fengShuiKnowledge.js';
 import {
   AIIntentResult,
   AddCommand,
@@ -250,6 +251,21 @@ export function parseIntent(
 ): AIIntentResult {
   const p = prompt.toLowerCase();
   const objects = sceneState.objects;
+
+  // -------------------------------------------------------------------------
+  // INTENT: FENG SHUI & BÁT TRẠCH THEORY KNOWLEDGE BASE
+  // Questions like "Bát Trạch là gì?", "Đông Tứ Mệnh là gì?", "Sinh Khí là gì?"
+  // MUST directly return structured academic theory and NEVER mutate 3D scene!
+  // -------------------------------------------------------------------------
+  const theoryCheck = getFengShuiTheoryAnswer(prompt, userProfile, sceneState.room, evaluation);
+  if (theoryCheck.isTheoryQuery && theoryCheck.answer) {
+    return {
+      replyText: theoryCheck.answer,
+      commands: [],
+      requiresPreview: false,
+      requiresClarification: false,
+    };
+  }
 
   // -------------------------------------------------------------------------
   // INTENT: LIST / SHOW OBJECTS & ROOM INFO

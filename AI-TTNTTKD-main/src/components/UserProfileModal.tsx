@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CompassDirection,
   Gender,
   RoomConfig,
   UserFengShuiProfile,
 } from '../types/fengshui';
-import { DIRECTION_NAMES_VI } from '../engine/batTrach';
+import { DIRECTION_NAMES_VI, validateBirthYear } from '../engine/batTrach';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -26,9 +26,75 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   roomConfig,
   onChangeRoomConfig,
 }) => {
+  const [inputYear, setInputYear] = useState<string>(String(userProfile.birthYear));
+  const [yearError, setYearError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setInputYear(String(userProfile.birthYear));
+    setYearError(null);
+  }, [userProfile.birthYear, isOpen]);
+
   if (!isOpen) return null;
 
   const directions: CompassDirection[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
+  const handleYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputYear(val);
+
+    if (val.trim() === '') {
+      setYearError('Vui lòng nhập năm sinh.');
+      return;
+    }
+
+    const validation = validateBirthYear(val);
+    if (!validation.isValid) {
+      setYearError(validation.error || 'Năm sinh ngoài phạm vi cho phép (1930–2035).');
+      // Do NOT update userProfile with invalid year!
+      return;
+    }
+
+    setYearError(null);
+    if (validation.parsedYear) {
+      onChangeBirthYear(validation.parsedYear);
+    }
+  };
+
+  const handleYearBlur = () => {
+    if (inputYear.trim() === '') {
+      setYearError('Năm sinh không được để trống. Vui lòng nhập năm sinh từ 1930 đến 2035.');
+      return;
+    }
+
+    const validation = validateBirthYear(inputYear);
+    if (!validation.isValid) {
+      setYearError(validation.error || 'Năm sinh ngoài phạm vi cho phép (1930–2035). Vui lòng nhập lại.');
+    } else {
+      setYearError(null);
+      if (validation.parsedYear) {
+        onChangeBirthYear(validation.parsedYear);
+      }
+    }
+  };
+
+  const handleSelectPresetYear = (year: number) => {
+    setInputYear(String(year));
+    setYearError(null);
+    onChangeBirthYear(year);
+  };
+
+  const handleSaveAndClose = () => {
+    const validation = validateBirthYear(inputYear);
+    if (!validation.isValid) {
+      setYearError(validation.error || 'Năm sinh ngoài phạm vi cho phép (1930–2035). Vui lòng nhập lại trước khi lưu.');
+      return;
+    }
+    setYearError(null);
+    if (validation.parsedYear) {
+      onChangeBirthYear(validation.parsedYear);
+    }
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none">
@@ -60,21 +126,27 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <div className="space-y-3 p-3.5 bg-stone-50 rounded-xl border border-stone-200/80">
             <div>
               <label className="block text-[11px] font-bold text-stone-700 mb-1">
-                Năm sinh gia chủ (Dương lịch)
+                Năm sinh gia chủ (Dương lịch: 1930–2035)
               </label>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
                   min="1930"
                   max="2035"
-                  value={userProfile.birthYear}
-                  onChange={(e) => onChangeBirthYear(parseInt(e.target.value, 10) || 2000)}
-                  className="w-full px-3 py-1.5 border border-stone-300 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  value={inputYear}
+                  onChange={handleYearChange}
+                  onBlur={handleYearBlur}
+                  className={`w-full px-3 py-1.5 border rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 bg-white transition-colors ${
+                    yearError
+                      ? 'border-red-500 text-red-700 focus:ring-red-400 focus:border-red-500'
+                      : 'border-stone-300 text-stone-800 focus:ring-emerald-500'
+                  }`}
+                  placeholder="1985"
                 />
                 <button
-                  onClick={() => onChangeBirthYear(2004)}
+                  onClick={() => handleSelectPresetYear(2004)}
                   className={`px-2.5 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
-                    userProfile.birthYear === 2004
+                    inputYear === '2004' && !yearError
                       ? 'bg-stone-900 text-white border-stone-900'
                       : 'bg-white text-stone-600 border-stone-300 hover:bg-stone-100'
                   }`}
@@ -82,9 +154,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   2004
                 </button>
                 <button
-                  onClick={() => onChangeBirthYear(1996)}
+                  onClick={() => handleSelectPresetYear(1996)}
                   className={`px-2.5 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
-                    userProfile.birthYear === 1996
+                    inputYear === '1996' && !yearError
                       ? 'bg-stone-900 text-white border-stone-900'
                       : 'bg-white text-stone-600 border-stone-300 hover:bg-stone-100'
                   }`}
@@ -92,6 +164,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   1996
                 </button>
               </div>
+              {yearError && (
+                <p className="text-[11px] font-semibold text-red-600 mt-1.5 flex items-center gap-1 animate-in fade-in">
+                  <span>⚠️</span>
+                  <span>{yearError}</span>
+                </p>
+              )}
             </div>
 
             <div>
@@ -221,8 +299,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         {/* Footer */}
         <div className="p-4 border-t border-stone-200 bg-stone-50 flex justify-end">
           <button
-            onClick={onClose}
-            className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
+            onClick={handleSaveAndClose}
+            className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
           >
             Lưu & Đóng
           </button>

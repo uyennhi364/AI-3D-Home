@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Gender, UserFengShuiProfile } from '../types/fengshui';
+import { validateBirthYear } from '../engine/batTrach';
 
 interface LeftProfilePanelProps {
   userProfile: UserFengShuiProfile;
@@ -19,6 +20,51 @@ export const LeftProfilePanel: React.FC<LeftProfilePanelProps> = ({
   onOpenDetailedReport,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [inputYear, setInputYear] = useState<string>(String(userProfile.birthYear));
+  const [yearError, setYearError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setInputYear(String(userProfile.birthYear));
+    setYearError(null);
+  }, [userProfile.birthYear]);
+
+  const handleYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputYear(val);
+
+    if (val.trim() === '') {
+      setYearError('Vui lòng nhập năm sinh.');
+      return;
+    }
+
+    const validation = validateBirthYear(val);
+    if (!validation.isValid) {
+      setYearError(validation.error || 'Năm sinh ngoài phạm vi 1930–2035.');
+      return;
+    }
+
+    setYearError(null);
+    if (validation.parsedYear) {
+      onChangeBirthYear(validation.parsedYear);
+    }
+  };
+
+  const handleYearBlur = () => {
+    if (inputYear.trim() === '') {
+      setYearError('Năm sinh không được để trống.');
+      return;
+    }
+
+    const validation = validateBirthYear(inputYear);
+    if (!validation.isValid) {
+      setYearError(validation.error || 'Năm sinh ngoài phạm vi (1930–2035).');
+    } else {
+      setYearError(null);
+      if (validation.parsedYear) {
+        onChangeBirthYear(validation.parsedYear);
+      }
+    }
+  };
 
   return (
     <div className="w-64 bg-white/95 backdrop-blur-md rounded-2xl border border-stone-200/90 shadow-xl p-3.5 flex flex-col gap-3 select-none text-stone-800 transition-all">
@@ -44,16 +90,27 @@ export const LeftProfilePanel: React.FC<LeftProfilePanelProps> = ({
           {/* 2. Năm sinh (Dương lịch) */}
           <div>
             <label className="block text-[11px] text-stone-500 mb-1">
-              Năm sinh (Dương lịch)
+              Năm sinh (Dương lịch: 1930–2035)
             </label>
             <input
               type="number"
               min={1930}
               max={2035}
-              value={userProfile.birthYear}
-              onChange={(e) => onChangeBirthYear(parseInt(e.target.value, 10) || 2004)}
-              className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-800 focus:outline-none focus:border-stone-400"
+              value={inputYear}
+              onChange={handleYearChange}
+              onBlur={handleYearBlur}
+              className={`w-full px-3 py-1.5 bg-stone-50 border rounded-xl text-xs font-semibold text-stone-800 focus:outline-none transition-colors ${
+                yearError
+                  ? 'border-red-500 focus:border-red-500 text-red-700'
+                  : 'border-stone-200 focus:border-stone-400'
+              }`}
             />
+            {yearError && (
+              <p className="text-[10px] font-semibold text-red-600 mt-1 flex items-center gap-1 animate-in fade-in">
+                <span>⚠️</span>
+                <span>{yearError}</span>
+              </p>
+            )}
           </div>
 
           {/* 3. Giới tính (Segmented Button Nam / Nữ) */}

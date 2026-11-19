@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CompassDirection,
   Gender,
   RoomConfig,
   UserFengShuiProfile,
 } from '../types/fengshui';
-import { DIRECTION_NAMES_VI } from '../engine/batTrach';
+import { DIRECTION_NAMES_VI, validateBirthYear } from '../engine/batTrach';
 
 interface UserProfilePanelProps {
   userProfile: UserFengShuiProfile;
@@ -26,6 +26,52 @@ export const UserProfilePanel: React.FC<UserProfilePanelProps> = ({
   onApplyPreset,
   activePreset,
 }) => {
+  const [inputYear, setInputYear] = useState<string>(String(userProfile.birthYear));
+  const [yearError, setYearError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setInputYear(String(userProfile.birthYear));
+    setYearError(null);
+  }, [userProfile.birthYear]);
+
+  const handleYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputYear(val);
+
+    if (val.trim() === '') {
+      setYearError('Vui lòng nhập năm sinh.');
+      return;
+    }
+
+    const validation = validateBirthYear(val);
+    if (!validation.isValid) {
+      setYearError(validation.error || 'Năm sinh ngoài phạm vi 1930–2035.');
+      return;
+    }
+
+    setYearError(null);
+    if (validation.parsedYear) {
+      onChangeBirthYear(validation.parsedYear);
+    }
+  };
+
+  const handleYearBlur = () => {
+    if (inputYear.trim() === '') {
+      setYearError('Năm sinh không được để trống (1930–2035).');
+      return;
+    }
+
+    const validation = validateBirthYear(inputYear);
+    if (!validation.isValid) {
+      setYearError(validation.error || 'Năm sinh ngoài phạm vi cho phép (1930–2035).');
+    } else {
+      setYearError(null);
+      if (validation.parsedYear) {
+        onChangeBirthYear(validation.parsedYear);
+      }
+    }
+  };
+
   const directions: CompassDirection[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
   return (
@@ -45,22 +91,31 @@ export const UserProfilePanel: React.FC<UserProfilePanelProps> = ({
       <div className="py-3 border-b border-stone-200 space-y-3">
         <div>
           <label className="block text-xs font-semibold text-stone-700 mb-1">
-            Năm sinh gia chủ (Dương lịch)
+            Năm sinh gia chủ (Dương lịch: 1930–2035)
           </label>
           <div className="flex items-center gap-2">
             <input
               type="number"
               min="1930"
               max="2035"
-              value={userProfile.birthYear}
-              onChange={(e) => onChangeBirthYear(parseInt(e.target.value, 10) || 2000)}
-              className="w-full px-3 py-1.5 border border-stone-300 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              value={inputYear}
+              onChange={handleYearChange}
+              onBlur={handleYearBlur}
+              className={`w-full px-3 py-1.5 border rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 ${
+                yearError
+                  ? 'border-red-500 text-red-700 focus:ring-red-400'
+                  : 'border-stone-300 text-stone-900 focus:ring-emerald-500'
+              }`}
             />
             <div className="flex gap-1 shrink-0">
               <button
-                onClick={() => onChangeBirthYear(2004)}
+                onClick={() => {
+                  setInputYear('2004');
+                  setYearError(null);
+                  onChangeBirthYear(2004);
+                }}
                 className={`px-2 py-1 text-xs rounded border transition-colors ${
-                  userProfile.birthYear === 2004
+                  inputYear === '2004' && !yearError
                     ? 'bg-stone-900 text-white border-stone-900'
                     : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
                 }`}
@@ -68,9 +123,13 @@ export const UserProfilePanel: React.FC<UserProfilePanelProps> = ({
                 2004
               </button>
               <button
-                onClick={() => onChangeBirthYear(1996)}
+                onClick={() => {
+                  setInputYear('1996');
+                  setYearError(null);
+                  onChangeBirthYear(1996);
+                }}
                 className={`px-2 py-1 text-xs rounded border transition-colors ${
-                  userProfile.birthYear === 1996
+                  inputYear === '1996' && !yearError
                     ? 'bg-stone-900 text-white border-stone-900'
                     : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
                 }`}
@@ -79,6 +138,12 @@ export const UserProfilePanel: React.FC<UserProfilePanelProps> = ({
               </button>
             </div>
           </div>
+          {yearError && (
+            <p className="text-[11px] font-semibold text-red-600 mt-1 flex items-center gap-1 animate-in fade-in">
+              <span>⚠️</span>
+              <span>{yearError}</span>
+            </p>
+          )}
         </div>
 
         <div>
