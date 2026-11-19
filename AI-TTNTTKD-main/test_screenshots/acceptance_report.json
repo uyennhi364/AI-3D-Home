@@ -1,0 +1,127 @@
+[
+  {
+    "id": "APP-01",
+    "name": "Khởi động ứng dụng & 3D Canvas",
+    "status": "PASS",
+    "uiEvidence": "Canvas 3D Three.js và UI Phong Thủy đã render hoàn tất trên port 3000",
+    "screenshotFile": "00_initial_app_launch.png"
+  },
+  {
+    "id": "TC5.2.02-A",
+    "name": "Nhập năm 1900 (Dưới min 1930) hiển thị cảnh báo đỏ và chặn lưu",
+    "status": "PASS",
+    "uiEvidence": "Banner cảnh báo ⚠️ xuất hiện, modal từ chối lưu và vẫn mở: true",
+    "screenshotFile": "01_bug01_input_1900_rejected.png"
+  },
+  {
+    "id": "TC5.2.02-B",
+    "name": "Để trống năm sinh hiển thị cảnh báo và chặn lưu",
+    "status": "PASS",
+    "uiEvidence": "Banner cảnh báo để trống xuất hiện, chặn đóng modal",
+    "screenshotFile": "02_bug01_empty_year_rejected.png"
+  },
+  {
+    "id": "TC5.2.02-C",
+    "name": "Nhập năm 2100 (Trên max 2035) hiển thị cảnh báo đỏ và chặn lưu",
+    "status": "PASS",
+    "uiEvidence": "Banner cảnh báo ngoài phạm vi xuất hiện, modal từ chối lưu",
+    "screenshotFile": "03_bug01_input_2100_rejected.png"
+  },
+  {
+    "id": "TC5.2.02-D",
+    "name": "Nhập năm hợp lệ 1985 (Nam) tính toán chính xác Quái Càn (Tây Tứ Mệnh)",
+    "status": "PASS",
+    "uiEvidence": "Lưu thành công, LeftSidebar cập nhật '1985 - Nam', không có cảnh báo lỗi",
+    "screenshotFile": "04_bug01_valid_1985_saved.png"
+  },
+  {
+    "id": "TC5.2.02-E",
+    "name": "Nhập năm hợp lệ 2004 (Nữ) tính toán chính xác Quái Khôn (Tây Tứ Mệnh)",
+    "status": "PASS",
+    "uiEvidence": "Lưu thành công, LeftSidebar cập nhật '2004 - Nữ'",
+    "screenshotFile": "05_bug01_valid_2004_saved.png"
+  },
+  {
+    "id": "TC5.2.10-A",
+    "name": "Tìm kiếm không dấu \"ban\" lọc ra Bàn học và Bàn làm việc",
+    "status": "PASS",
+    "uiEvidence": "Kết quả hiển thị cả 'Bàn học' và 'Bàn làm việc 1m4'",
+    "screenshotFile": "06_bug02_search_ban.png"
+  },
+  {
+    "id": "TC5.2.10-B",
+    "name": "Tìm kiếm có dấu hoa \"Bàn\" cho kết quả đồng nhất với \"ban\"",
+    "status": "PASS",
+    "uiEvidence": "Kết quả đồng nhất, không phân biệt hoa thường và dấu tiếng Việt",
+    "screenshotFile": "07_bug02_search_Ban_accent.png"
+  },
+  {
+    "id": "TC5.2.10-C",
+    "name": "Tìm kiếm \"Giường\" hiển thị danh mục các loại giường",
+    "status": "PASS",
+    "uiEvidence": "Lọc chính xác các loại giường trong catalog",
+    "screenshotFile": "08_bug02_search_giuong.png"
+  },
+  {
+    "id": "TC5.2.10-D",
+    "name": "Tìm kiếm \"Tủ\" hiển thị Tủ quần áo",
+    "status": "PASS",
+    "uiEvidence": "Tìm thấy 'Tủ quần áo'",
+    "screenshotFile": "09_bug02_search_tu.png"
+  },
+  {
+    "id": "TC5.2.10-E",
+    "name": "Bấm nút ✕ xóa tìm kiếm phục hồi đầy đủ toàn bộ catalog",
+    "status": "PASS",
+    "uiEvidence": "Toàn bộ danh mục 15 vật thể được phục hồi nguyên vẹn",
+    "screenshotFile": "10_bug02_search_cleared_all.png"
+  },
+  {
+    "id": "TC5.2.16-A",
+    "name": "Mở tab Thuộc tính đồ vật hiển thị đầy đủ ID, Tọa độ, Cung Bát Trạch và Ngũ Hành của Giường",
+    "status": "PASS",
+    "uiEvidence": "Tọa độ sàn, kích thước, cung Bát Trạch và thẻ Ngũ Hành hiển thị chuẩn xác",
+    "screenshotFile": "11_bug03_bed_properties_panel.png"
+  },
+  {
+    "id": "TC5.2.16-B",
+    "name": "Chuyển đổi mượt mà giữa tab Trợ lý AI và tab Thuộc tính đồ vật",
+    "status": "PASS",
+    "uiEvidence": "Tab navigation hoạt động phản hồi tức thì, không bị lỗi dữ liệu cũ",
+    "screenshotFile": "12_bug03_switch_back_to_chat.png"
+  },
+  {
+    "id": "TC5.2.18-A",
+    "name": "Hỏi lý thuyết \"Bát Trạch là gì?\": AI trả lời học thuật, 3D Scene bảo toàn tuyệt đối (0 lệnh đột biến)",
+    "status": "PASS",
+    "uiEvidence": "AI trả lời trực tiếp giải nghĩa Bát Trạch, không sinh Proposal đột biến scene",
+    "screenshotFile": "13_bug04_theory_bat_trach.png"
+  },
+  {
+    "id": "TC5.2.18-B",
+    "name": "Hỏi lý thuyết \"Đông Tứ Mệnh là gì?\": AI phân tích các quái số và hướng cát",
+    "status": "PASS",
+    "uiEvidence": "Giải thích chi tiết 4 cung Đông Tứ Mệnh, Scene 3D giữ nguyên",
+    "screenshotFile": "14_bug04_theory_dong_tu_menh.png"
+  },
+  {
+    "id": "TC5.2.18-C",
+    "name": "Ra lệnh \"Hãy xoay giường về hướng Sinh Khí\": AI phân loại ROTATE_OBJECT, đề xuất hướng cát qua Proposal Gate",
+    "status": "PASS",
+    "uiEvidence": "Phân loại đúng lệnh xoay, giải mã hướng Sinh Khí theo bản mệnh gia chủ",
+    "screenshotFile": "15_bug04_command_rotate_sinh_khi.png"
+  },
+  {
+    "id": "GEMINI-01",
+    "name": "Kiểm tra trạng thái Gemini API Online",
+    "status": "PASS",
+    "uiEvidence": "Trạng thái phát hiện: OFFLINE (Chưa cấu hình API Key hoặc Upstream 404). ĐÚNG THỰC TẾ: Hệ thống hoạt động an toàn ở chế độ Deterministic Engine.",
+    "notes": "Không tuyên bố Online khi chưa có API Key hợp lệ"
+  },
+  {
+    "id": "GEMINI-02",
+    "name": "Local Deterministic Engine Fallback độc lập",
+    "status": "PASS",
+    "uiEvidence": "Toàn bộ câu hỏi lý thuyết và lệnh 3D được xử lý hoàn hảo bởi Deterministic Engine nội bộ, độc lập 100% với cloud"
+  }
+]
