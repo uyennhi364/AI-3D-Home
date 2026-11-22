@@ -1048,6 +1048,19 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
     // Add or update objects
     objects.forEach((obj) => {
       let mesh = objectMeshesRef.current.get(obj.id);
+
+      // Check if existing mesh model is stale (identity/dimensions/name changed)
+      if (mesh && (
+        mesh.userData.modelId !== obj.modelId ||
+        mesh.userData.subType !== obj.subType ||
+        mesh.userData.name !== obj.name
+      )) {
+        deepDisposeObject(mesh);
+        scene.remove(mesh);
+        objectMeshesRef.current.delete(obj.id);
+        mesh = undefined;
+      }
+
       if (!mesh) {
         mesh = createProceduralFurniture(obj);
         scene.add(mesh);

@@ -8,6 +8,8 @@ export interface LibraryItem {
   subtext: string;
   dimensions: { width: number; length: number; height: number };
   category: 'bed' | 'desk' | 'chair' | 'storage' | 'lighting' | 'door' | 'rug' | 'decor' | 'plant' | 'wc';
+  subType?: string;
+  modelId?: string;
   renderPreview: () => React.ReactNode;
 }
 
@@ -96,6 +98,270 @@ const LampSVG = () => (
     <path d="M38 38 L50 44 L50 54 L38 48 Z" fill="#78350F" />
     <path d="M50 44 L62 38 L62 48 L50 54 Z" fill="#451A03" />
     <circle cx="50" cy="26" r="9" fill="#FEF08A" stroke="#FDE047" strokeWidth="1" />
+  </svg>
+);
+
+const ChairOfficeSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="58" rx="20" ry="5" fill="rgba(0,0,0,0.06)" />
+    <path d="M38 42 L34 57" stroke="#451A03" strokeWidth="2.2" strokeLinecap="round" />
+    <path d="M46 45 L46 61" stroke="#451A03" strokeWidth="2.2" strokeLinecap="round" />
+    <path d="M54 45 L54 61" stroke="#451A03" strokeWidth="2.2" strokeLinecap="round" />
+    <path d="M62 42 L66 57" stroke="#451A03" strokeWidth="2.2" strokeLinecap="round" />
+    <path d="M34 38 L50 45 L66 38 L50 31 Z" fill="#F8FAFC" stroke="#E2E8F0" strokeWidth="0.8" />
+    <path d="M36 36 Q50 16 64 36 L64 24 Q50 10 36 24 Z" fill="#E2E8F0" stroke="#CBD5E1" strokeWidth="0.8" />
+    <path d="M38 34 Q50 18 62 34" stroke="#94A3B8" strokeWidth="0.8" fill="none" />
+  </svg>
+);
+
+const ChairArmSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="58" rx="22" ry="5" fill="rgba(0,0,0,0.06)" />
+    <path d="M34 46 L32 58" stroke="#78350F" strokeWidth="2.5" strokeLinecap="round" />
+    <path d="M66 46 L68 58" stroke="#78350F" strokeWidth="2.5" strokeLinecap="round" />
+    <path d="M32 40 L50 48 L68 40 L50 32 Z" fill="#0284C7" />
+    <path d="M32 40 L50 48 L50 20 L32 14 Z" fill="#0369A1" />
+    <path d="M50 48 L68 40 L68 14 L50 20 Z" fill="#0284C7" />
+    <path d="M30 38 L36 41 L36 28 L30 25 Z" fill="#075985" />
+    <path d="M64 41 L70 38 L70 25 L64 28 Z" fill="#0369A1" />
+  </svg>
+);
+
+// --- Dining chair: slim 4-leg with vertical slat backrest, no armrests ---
+const ChairDiningSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="60" rx="18" ry="4" fill="rgba(0,0,0,0.06)" />
+    {/* 4 slim legs */}
+    <path d="M38 44 L36 60" stroke="#451A03" strokeWidth="2" strokeLinecap="round" />
+    <path d="M44 46 L44 62" stroke="#451A03" strokeWidth="2" strokeLinecap="round" />
+    <path d="M56 46 L56 62" stroke="#451A03" strokeWidth="2" strokeLinecap="round" />
+    <path d="M62 44 L64 60" stroke="#451A03" strokeWidth="2" strokeLinecap="round" />
+    {/* Seat */}
+    <path d="M36 40 L50 46 L64 40 L50 34 Z" fill="#B45309" />
+    <path d="M36 40 L50 46 L50 49 L36 43 Z" fill="#78350F" />
+    <path d="M50 46 L64 40 L64 43 L50 49 Z" fill="#92400E" />
+    {/* Vertical slat backrest */}
+    <rect x="44" y="20" width="4" height="20" rx="1" fill="#A16207" />
+    <rect x="51" y="22" width="4" height="18" rx="1" fill="#A16207" />
+    {/* Top rail */}
+    <path d="M40 20 L60 14 L60 18 L40 24 Z" fill="#B45309" />
+  </svg>
+);
+
+// --- Stool/Ottoman: cylindrical, NO backrest, button-tufted top ---
+const ChairStoolSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="60" rx="20" ry="5" fill="rgba(0,0,0,0.06)" />
+    {/* Cylinder body */}
+    <ellipse cx="50" cy="36" rx="18" ry="8" fill="#D97706" />
+    <path d="M32 36 L32 52 Q32 58 50 60 Q68 58 68 52 L68 36 Q68 44 50 44 Q32 44 32 36 Z" fill="#B45309" />
+    {/* Button-tufted detail */}
+    <circle cx="50" cy="36" r="3" fill="#92400E" />
+    <ellipse cx="50" cy="36" rx="10" ry="4.5" fill="none" stroke="#92400E" strokeWidth="1" strokeDasharray="3 2" />
+    {/* Brass base ring */}
+    <ellipse cx="50" cy="52" rx="16" ry="4" fill="#D4B26F" />
+    <ellipse cx="50" cy="52" rx="13" ry="3" fill="#B45309" />
+  </svg>
+);
+
+// --- Single sofa chair: boxy club armchair, block arms, low feet ---
+const ChairSingleSofaSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="60" rx="26" ry="5" fill="rgba(0,0,0,0.06)" />
+    {/* 4 stubby feet */}
+    <rect x="30" y="52" width="6" height="6" rx="1" fill="#451A03" />
+    <rect x="64" y="52" width="6" height="6" rx="1" fill="#451A03" />
+    {/* Main seat box */}
+    <path d="M28 36 L50 44 L72 36 L50 28 Z" fill="#C2855A" />
+    <path d="M28 36 L50 44 L50 52 L28 44 Z" fill="#A16207" />
+    <path d="M50 44 L72 36 L72 44 L50 52 Z" fill="#B45309" />
+    {/* Back cushion */}
+    <path d="M28 20 L50 28 L50 36 L28 28 Z" fill="#D97706" />
+    <path d="M50 28 L72 20 L72 28 L50 36 Z" fill="#C2855A" />
+    <path d="M28 20 L50 14 L72 20 L50 28 Z" fill="#F59E0B" />
+    {/* Left arm block */}
+    <path d="M22 20 L28 18 L28 44 L22 46 Z" fill="#78350F" />
+    {/* Right arm block */}
+    <path d="M72 18 L78 20 L78 46 L72 44 Z" fill="#92400E" />
+  </svg>
+);
+
+// --- Swivel office chair: 5-star base, gas lift, mesh backrest ---
+const ChairSwivelSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="62" rx="22" ry="5" fill="rgba(0,0,0,0.06)" />
+    {/* 5-star base spokes */}
+    <line x1="50" y1="56" x2="32" y2="62" stroke="#334155" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="50" y1="56" x2="42" y2="64" stroke="#334155" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="50" y1="56" x2="58" y2="64" stroke="#334155" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="50" y1="56" x2="68" y2="62" stroke="#334155" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="50" y1="56" x2="50" y2="65" stroke="#334155" strokeWidth="2.5" strokeLinecap="round" />
+    {/* Gas lift cylinder */}
+    <rect x="47" y="44" width="6" height="12" rx="2" fill="#475569" />
+    {/* Seat */}
+    <path d="M36 38 L50 44 L64 38 L50 32 Z" fill="#E2E8F0" stroke="#CBD5E1" strokeWidth="0.8" />
+    {/* Mesh backrest */}
+    <path d="M36 24 Q50 12 64 24 L64 38 L50 44 L36 38 Z" fill="#94A3B8" />
+    <path d="M38 26 Q50 15 62 26 L62 36 L50 42 L38 36 Z" fill="#CBD5E1" stroke="#94A3B8" strokeWidth="0.5" strokeDasharray="3 2" />
+    {/* Armrests */}
+    <path d="M32 34 L36 32 L36 38 L32 40 Z" fill="#475569" />
+    <path d="M64 32 L68 34 L68 40 L64 38 Z" fill="#475569" />
+    {/* Headrest */}
+    <path d="M42 10 L50 8 L58 10 L58 16 L50 18 L42 16 Z" fill="#CBD5E1" stroke="#94A3B8" strokeWidth="0.8" />
+  </svg>
+);
+
+// --- Dining table: long rectangle, corner legs, marble/walnut top ---
+const TableDiningSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="60" rx="36" ry="6" fill="rgba(0,0,0,0.06)" />
+    {/* 4 corner legs */}
+    <line x1="22" y1="44" x2="20" y2="60" stroke="#451A03" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="78" y1="44" x2="80" y2="60" stroke="#451A03" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="34" y1="50" x2="32" y2="62" stroke="#451A03" strokeWidth="2" strokeLinecap="round" />
+    <line x1="66" y1="50" x2="68" y2="62" stroke="#451A03" strokeWidth="2" strokeLinecap="round" />
+    {/* Table top - marble tinted */}
+    <path d="M14 30 L50 44 L86 30 L50 16 Z" fill="#F5F0F0" stroke="#E2E8F0" strokeWidth="0.8" />
+    <path d="M14 30 L50 44 L50 48 L14 34 Z" fill="#D1C4C4" />
+    <path d="M50 44 L86 30 L86 34 L50 48 Z" fill="#E8E0E0" />
+    {/* Marble veins */}
+    <path d="M30 32 Q48 36 64 28" stroke="#C9B8B8" strokeWidth="0.8" fill="none" opacity="0.6" />
+    <path d="M36 38 Q52 42 70 34" stroke="#C9B8B8" strokeWidth="0.6" fill="none" opacity="0.4" />
+  </svg>
+);
+
+// --- Coffee table: low height, lower shelf, sled legs ---
+const TableCoffeeSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="62" rx="30" ry="5" fill="rgba(0,0,0,0.06)" />
+    {/* Sled frame base */}
+    <path d="M24 56 L76 44" stroke="#334155" strokeWidth="2.5" strokeLinecap="round" />
+    <path d="M24 60 L76 48" stroke="#334155" strokeWidth="2.5" strokeLinecap="round" />
+    {/* Lower shelf */}
+    <path d="M28 50 L50 56 L72 50 L50 44 Z" fill="#78350F" opacity="0.6" />
+    {/* Top surface - low to ground */}
+    <path d="M20 36 L50 46 L80 36 L50 26 Z" fill="#8C6239" />
+    <path d="M20 36 L50 46 L50 50 L20 40 Z" fill="#603813" />
+    <path d="M50 46 L80 36 L80 40 L50 50 Z" fill="#7B4922" />
+  </svg>
+);
+
+// --- Round table: true circle top, tripod legs ---
+const TableRoundSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="60" rx="22" ry="5" fill="rgba(0,0,0,0.06)" />
+    {/* 3 tripod legs splayed */}
+    <line x1="50" y1="52" x2="34" y2="62" stroke="#78350F" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="50" y1="52" x2="62" y2="64" stroke="#78350F" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="50" y1="52" x2="50" y2="64" stroke="#78350F" strokeWidth="2.5" strokeLinecap="round" />
+    {/* Round top - ellipse to simulate circle in iso */}
+    <ellipse cx="50" cy="36" rx="22" ry="10" fill="#8C6239" />
+    <ellipse cx="50" cy="34" rx="20" ry="9" fill="#A07248" />
+    {/* Rim */}
+    <ellipse cx="50" cy="36" rx="22" ry="10" fill="none" stroke="#603813" strokeWidth="1" />
+    {/* Decor items */}
+    <circle cx="46" cy="32" r="3" fill="#D97706" opacity="0.6" />
+    <circle cx="54" cy="34" r="2" fill="#15803D" opacity="0.7" />
+  </svg>
+);
+
+// --- Vanity desk: mirror frame on back, cream lacquer ---
+const DeskVanitySVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="60" rx="28" ry="5" fill="rgba(0,0,0,0.06)" />
+    {/* 4 gold-tipped legs */}
+    <line x1="28" y1="46" x2="26" y2="60" stroke="#D4B26F" strokeWidth="2" strokeLinecap="round" />
+    <line x1="72" y1="46" x2="74" y2="60" stroke="#D4B26F" strokeWidth="2" strokeLinecap="round" />
+    <line x1="36" y1="48" x2="34" y2="60" stroke="#D4B26F" strokeWidth="1.8" strokeLinecap="round" />
+    <line x1="64" y1="48" x2="66" y2="60" stroke="#D4B26F" strokeWidth="1.8" strokeLinecap="round" />
+    {/* Desk top - cream */}
+    <path d="M22 36 L50 46 L78 36 L50 26 Z" fill="#FEF9EE" stroke="#E2D9C5" strokeWidth="0.8" />
+    <path d="M22 36 L50 46 L50 50 L22 40 Z" fill="#EDE0C8" />
+    <path d="M50 46 L78 36 L78 40 L50 50 Z" fill="#F5EDD6" />
+    {/* Arched dressing mirror on back */}
+    <path d="M42 10 Q50 4 58 10 L58 32 L42 32 Z" fill="#BAE6FD" stroke="#D4B26F" strokeWidth="1.5" />
+    <path d="M44 12 Q50 7 56 12 L56 30 L44 30 Z" fill="rgba(186,230,253,0.6)" />
+    {/* Jewelry drawer knobs */}
+    <circle cx="46" cy="40" r="1.5" fill="#D4B26F" />
+    <circle cx="54" cy="40" r="1.5" fill="#D4B26F" />
+  </svg>
+);
+
+// --- Side/corner table: square marble top, 4-corner steel legs, open shelf ---
+const TableCornerSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="62" rx="22" ry="5" fill="rgba(0,0,0,0.06)" />
+    {/* 4 black steel tube legs */}
+    <line x1="34" y1="40" x2="32" y2="60" stroke="#1E293B" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="66" y1="40" x2="68" y2="60" stroke="#1E293B" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="40" y1="44" x2="38" y2="62" stroke="#1E293B" strokeWidth="2" strokeLinecap="round" />
+    <line x1="60" y1="44" x2="62" y2="62" stroke="#1E293B" strokeWidth="2" strokeLinecap="round" />
+    {/* Open lower shelf */}
+    <path d="M36 52 L50 58 L64 52 L50 46 Z" fill="#E2E8F0" stroke="#CBD5E1" strokeWidth="0.5" />
+    {/* Square marble top */}
+    <path d="M32 30 L50 38 L68 30 L50 22 Z" fill="#F8F4F0" stroke="#E2D9CF" strokeWidth="0.8" />
+    <path d="M32 30 L50 38 L50 42 L32 34 Z" fill="#E5DDD5" />
+    <path d="M50 38 L68 30 L68 34 L50 42 Z" fill="#EDE5DD" />
+    {/* Marble vein */}
+    <path d="M36 28 Q50 32 62 26" stroke="#D4C4B8" strokeWidth="0.7" fill="none" opacity="0.5" />
+  </svg>
+);
+
+// --- Nightstand: 2-drawer compact bedside table with lamp ---
+const NightstandSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="62" rx="20" ry="4" fill="rgba(0,0,0,0.06)" />
+    <path d="M32 26 L50 34 L68 26 L50 18 Z" fill="#A16207" />
+    <path d="M32 26 L50 34 L50 58 L32 50 Z" fill="#78350F" />
+    <path d="M50 34 L68 26 L68 50 L50 58 Z" fill="#92400E" />
+    <line x1="50" y1="46" x2="68" y2="38" stroke="#78350F" strokeWidth="1" />
+    <circle cx="59" cy="40" r="1.5" fill="#D4B26F" />
+    <circle cx="59" cy="52" r="1.5" fill="#D4B26F" />
+    <line x1="42" y1="26" x2="42" y2="18" stroke="#D4B26F" strokeWidth="1.5" />
+    <path d="M38 18 L46 18 L44 12 L40 12 Z" fill="#FEF08A" stroke="#FDE047" strokeWidth="0.8" />
+  </svg>
+);
+
+// --- Standing mirror: full-length dressing mirror with frame ---
+const MirrorStandingSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="64" rx="20" ry="4" fill="rgba(0,0,0,0.06)" />
+    <line x1="50" y1="24" x2="60" y2="60" stroke="#78350F" strokeWidth="2" strokeLinecap="round" />
+    <path d="M36 12 L56 8 L56 56 L36 60 Z" fill="#A16207" stroke="#78350F" strokeWidth="1" />
+    <path d="M38 14 L54 10 L54 54 L38 58 Z" fill="#BAE6FD" stroke="#7DD3FC" strokeWidth="0.8" />
+    <line x1="42" y1="18" x2="50" y2="48" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+  </svg>
+);
+
+// --- Marble credenza console table ---
+const ConsoleTableSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="62" rx="34" ry="5" fill="rgba(0,0,0,0.06)" />
+    <line x1="24" y1="46" x2="24" y2="60" stroke="#D4B26F" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="76" y1="46" x2="76" y2="60" stroke="#D4B26F" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="42" y1="52" x2="42" y2="62" stroke="#D4B26F" strokeWidth="2" strokeLinecap="round" />
+    <line x1="58" y1="52" x2="58" y2="62" stroke="#D4B26F" strokeWidth="2" strokeLinecap="round" />
+    <path d="M18 32 L50 44 L82 32 L50 20 Z" fill="#F8FAFC" stroke="#E2E8F0" strokeWidth="0.8" />
+    <path d="M18 32 L50 44 L50 52 L18 40 Z" fill="#E2E8F0" />
+    <path d="M50 44 L82 32 L82 40 L50 52 Z" fill="#F1F5F9" />
+    <line x1="50" y1="44" x2="50" y2="52" stroke="#CBD5E1" strokeWidth="1" />
+    <line x1="66" y1="38" x2="66" y2="46" stroke="#CBD5E1" strokeWidth="1" />
+    <line x1="34" y1="38" x2="34" y2="46" stroke="#CBD5E1" strokeWidth="1" />
+  </svg>
+);
+
+// --- Living room sofa ---
+const SofaSVG = () => (
+  <svg className="w-16 h-11" viewBox="0 0 100 70" fill="none">
+    <ellipse cx="50" cy="62" rx="36" ry="6" fill="rgba(0,0,0,0.06)" />
+    <path d="M18 40 L50 52 L82 40 L50 28 Z" fill="#475569" />
+    <path d="M18 40 L50 52 L50 58 L18 46 Z" fill="#334155" />
+    <path d="M50 52 L82 40 L82 46 L50 58 Z" fill="#1E293B" />
+    <path d="M18 24 L50 36 L50 44 L18 32 Z" fill="#64748B" />
+    <path d="M50 36 L82 24 L82 32 L50 44 Z" fill="#475569" />
+    <path d="M18 24 L50 16 L82 24 L50 36 Z" fill="#94A3B8" />
+    <path d="M22 36 L48 46 L48 49 L22 39 Z" fill="#CBD5E1" />
+    <path d="M52 46 L78 36 L78 39 L52 49 Z" fill="#94A3B8" />
   </svg>
 );
 
@@ -230,6 +496,8 @@ export const LIBRARY_ITEMS: LibraryItem[] = [
   {
     id: 'lib_desk_study',
     type: 'desk',
+    subType: 'lib_desk_study',
+    modelId: 'lib_desk_study',
     name: 'Bàn học',
     subtext: '120 × 60 cm',
     dimensions: { width: 1.2, length: 0.6, height: 0.75 },
@@ -239,11 +507,145 @@ export const LIBRARY_ITEMS: LibraryItem[] = [
   {
     id: 'lib_desk_work',
     type: 'desk',
+    subType: 'lib_desk_work',
+    modelId: 'lib_desk_work',
     name: 'Bàn làm việc 1m4',
     subtext: '140 × 70 cm',
     dimensions: { width: 1.4, length: 0.7, height: 0.75 },
     category: 'desk',
     renderPreview: () => <DeskWorkSVG />,
+  },
+  {
+    id: 'lib_desk_vanity',
+    type: 'desk',
+    subType: 'lib_desk_vanity',
+    modelId: 'lib_desk_vanity',
+    name: 'Bàn trang điểm',
+    subtext: '100 × 50 cm',
+    dimensions: { width: 1.0, length: 0.5, height: 1.3 },
+    category: 'desk',
+    renderPreview: () => <DeskVanitySVG />,
+  },
+  {
+    id: 'lib_table_dining',
+    type: 'desk',
+    subType: 'lib_table_dining',
+    modelId: 'lib_table_dining',
+    name: 'Bàn ăn 6 chỗ',
+    subtext: '160 × 80 cm',
+    dimensions: { width: 1.6, length: 0.8, height: 0.75 },
+    category: 'desk',
+    renderPreview: () => <TableDiningSVG />,
+  },
+  {
+    id: 'lib_table_coffee',
+    type: 'desk',
+    subType: 'lib_table_coffee',
+    modelId: 'lib_table_coffee',
+    name: 'Bàn trà sofa',
+    subtext: '110 × 55 cm',
+    dimensions: { width: 1.1, length: 0.55, height: 0.42 },
+    category: 'desk',
+    renderPreview: () => <TableCoffeeSVG />,
+  },
+  {
+    id: 'lib_table_round',
+    type: 'desk',
+    subType: 'lib_table_round',
+    modelId: 'lib_table_round',
+    name: 'Bàn tròn cafe',
+    subtext: 'Ø 80 cm',
+    dimensions: { width: 0.8, length: 0.8, height: 0.72 },
+    category: 'desk',
+    renderPreview: () => <TableRoundSVG />,
+  },
+  {
+    id: 'lib_table_corner',
+    type: 'desk',
+    subType: 'lib_table_corner',
+    modelId: 'lib_table_corner',
+    name: 'Bàn góc sofa',
+    subtext: '50 × 50 cm',
+    dimensions: { width: 0.5, length: 0.5, height: 0.55 },
+    category: 'desk',
+    renderPreview: () => <TableCornerSVG />,
+  },
+  {
+    id: 'lib_chair_office',
+    type: 'chair',
+    subType: 'lib_chair_office',
+    modelId: 'lib_chair_office',
+    name: 'Ghế làm việc Ergonomic',
+    subtext: '60 × 60 cm',
+    dimensions: { width: 0.6, length: 0.6, height: 0.85 },
+    category: 'chair',
+    renderPreview: () => <ChairOfficeSVG />,
+  },
+  {
+    id: 'lib_chair_arm',
+    type: 'chair',
+    subType: 'lib_chair_arm',
+    modelId: 'lib_chair_arm',
+    name: 'Ghế tựa thư giãn',
+    subtext: '75 × 75 cm',
+    dimensions: { width: 0.75, length: 0.75, height: 0.8 },
+    category: 'chair',
+    renderPreview: () => <ChairArmSVG />,
+  },
+  {
+    id: 'lib_chair_swivel',
+    type: 'chair',
+    subType: 'lib_chair_swivel',
+    modelId: 'lib_chair_swivel',
+    name: 'Ghế xoay văn phòng',
+    subtext: '60 × 60 cm',
+    dimensions: { width: 0.6, length: 0.6, height: 0.95 },
+    category: 'chair',
+    renderPreview: () => <ChairSwivelSVG />,
+  },
+  {
+    id: 'lib_chair_dining',
+    type: 'chair',
+    subType: 'lib_chair_dining',
+    modelId: 'lib_chair_dining',
+    name: 'Ghế ăn hiện đại',
+    subtext: '48 × 50 cm',
+    dimensions: { width: 0.48, length: 0.5, height: 0.85 },
+    category: 'chair',
+    renderPreview: () => <ChairDiningSVG />,
+  },
+  {
+    id: 'lib_chair_stool',
+    type: 'chair',
+    subType: 'lib_chair_stool',
+    modelId: 'lib_chair_stool',
+    name: 'Ghế đôn tròn',
+    subtext: 'Ø 40 cm',
+    dimensions: { width: 0.4, length: 0.4, height: 0.45 },
+    category: 'chair',
+    renderPreview: () => <ChairStoolSVG />,
+  },
+  {
+    id: 'lib_chair_single_sofa',
+    type: 'chair',
+    subType: 'lib_chair_single_sofa',
+    modelId: 'lib_chair_single_sofa',
+    name: 'Ghế sofa đơn',
+    subtext: '85 × 85 cm',
+    dimensions: { width: 0.85, length: 0.85, height: 0.75 },
+    category: 'chair',
+    renderPreview: () => <ChairSingleSofaSVG />,
+  },
+  {
+    id: 'lib_sofa',
+    type: 'sofa',
+    subType: 'lib_sofa',
+    modelId: 'lib_sofa',
+    name: 'Sofa góc phòng khách',
+    subtext: '160 × 80 cm',
+    dimensions: { width: 1.6, length: 0.8, height: 0.75 },
+    category: 'chair',
+    renderPreview: () => <SofaSVG />,
   },
   {
     id: 'lib_wardrobe',
@@ -253,6 +655,39 @@ export const LIBRARY_ITEMS: LibraryItem[] = [
     dimensions: { width: 1.8, length: 0.6, height: 2.2 },
     category: 'storage',
     renderPreview: () => <WardrobeSVG />,
+  },
+  {
+    id: 'lib_nightstand',
+    type: 'nightstand',
+    subType: 'lib_nightstand',
+    modelId: 'lib_nightstand',
+    name: 'Tủ đầu giường đèn ngủ',
+    subtext: '45 × 40 cm',
+    dimensions: { width: 0.45, length: 0.4, height: 0.5 },
+    category: 'storage',
+    renderPreview: () => <NightstandSVG />,
+  },
+  {
+    id: 'lib_console',
+    type: 'kitchen',
+    subType: 'lib_console',
+    modelId: 'lib_console',
+    name: 'Tủ console đá cẩm thạch',
+    subtext: '120 × 45 cm',
+    dimensions: { width: 1.2, length: 0.45, height: 0.85 },
+    category: 'storage',
+    renderPreview: () => <ConsoleTableSVG />,
+  },
+  {
+    id: 'lib_mirror_standing',
+    type: 'mirror',
+    subType: 'lib_mirror_standing',
+    modelId: 'lib_mirror_standing',
+    name: 'Gương đứng toàn thân',
+    subtext: '60 × 15 cm',
+    dimensions: { width: 0.6, length: 0.15, height: 1.6 },
+    category: 'decor',
+    renderPreview: () => <MirrorStandingSVG />,
   },
   {
     id: 'lib_table_lamp',
@@ -352,11 +787,7 @@ const CATEGORIES = [
 ];
 
 interface ObjectLibraryDockProps {
-  onAddObject: (item: {
-    type: RoomObjectType;
-    name: string;
-    dimensions: { width: number; length: number; height: number };
-  }) => void;
+  onAddObject: (item: LibraryItem) => void;
 }
 
 function removeVietnameseTones(str: string): string {
@@ -499,7 +930,13 @@ export const ObjectLibraryDock: React.FC<ObjectLibraryDockProps> = ({ onAddObjec
           {filteredItems.length === 0 ? (
             <div className="flex-1 flex items-center justify-center py-2 text-stone-500 text-xs gap-2">
               <span>🔍</span>
-              <span>Không tìm thấy đồ vật nào phù hợp với từ khóa "<strong>{searchQuery}</strong>"</span>
+              <span>
+                {searchQuery.trim() ? (
+                  <>Không tìm thấy đồ vật nào phù hợp với từ khóa "<strong>{searchQuery}</strong>"</>
+                ) : (
+                  <>Không có đồ vật nào trong danh mục này</>
+                )}
+              </span>
               <button
                 onClick={() => {
                   setSearchQuery('');
@@ -514,7 +951,10 @@ export const ObjectLibraryDock: React.FC<ObjectLibraryDockProps> = ({ onAddObjec
             filteredItems.map((item) => (
               <div
                 key={item.id}
-                onClick={() => onAddObject(item)}
+                onClick={() => {
+                  console.log(`[OBJECT_SELECTED] catalogId=${item.id} modelId=${item.modelId || item.id} name="${item.name}" category=${item.category}`);
+                  onAddObject(item);
+                }}
                 className="w-[92px] shrink-0 p-1 rounded-xl bg-[#F9FAFB] border border-stone-200/70 hover:border-[#00705a] hover:bg-white hover:shadow-xs active:scale-95 transition-all cursor-pointer group flex flex-col items-center text-center"
               >
                 {/* 3D Isometric Preview Area */}

@@ -26,6 +26,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -0.05, y: 0, z: 0.55 },
         rotation: { x: 0, y: Math.PI, z: 0 },
         dimensions: { width: 1.6, length: 2.0, height: 0.85 },
+        catalogId: 'lib_bed_queen',
+        source: 'default',
       },
       // 2. Large Bedroom Woven Area Rug under bed
       {
@@ -35,6 +37,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -0.05, y: 0, z: 0.55 },
         rotation: { x: 0, y: 0, z: 0 },
         dimensions: { width: 2.2, length: 2.5, height: 0.02 },
+        catalogId: 'lib_rug_nordic',
+        source: 'default',
       },
       // 3. Bedside Table on right with warm glowing sphere lamp
       {
@@ -44,6 +48,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: 1.05, y: 0, z: 1.15 },
         rotation: { x: 0, y: Math.PI, z: 0 },
         dimensions: { width: 0.45, length: 0.4, height: 0.5 },
+        catalogId: 'lib_nightstand',
+        source: 'default',
       },
       // 4. Modern Built-in Wardrobe with open illuminated shelving along North wall
       {
@@ -53,6 +59,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -0.2, y: 0, z: -2.15 },
         rotation: { x: 0, y: 0, z: 0 },
         dimensions: { width: 2.5, length: 0.6, height: 2.45 },
+        catalogId: 'lib_wardrobe',
+        source: 'default',
       },
       // 5. Minimal Walnut Study / Work Desk under window
       {
@@ -62,6 +70,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -1.75, y: 0, z: -0.85 },
         rotation: { x: 0, y: Math.PI / 2, z: 0 },
         dimensions: { width: 1.4, length: 0.65, height: 0.75 },
+        catalogId: 'lib_desk_work',
+        source: 'default',
       },
       // 6. Modern Curved Cream Upholstered Chair
       {
@@ -71,6 +81,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -1.2, y: 0, z: -0.85 },
         rotation: { x: 0, y: -Math.PI / 2, z: 0 },
         dimensions: { width: 0.55, length: 0.55, height: 0.85 },
+        catalogId: 'lib_chair_office',
+        source: 'default',
       },
       // 7. Circular Jute Accent Rug placed under the desk chair
       {
@@ -80,6 +92,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -1.2, y: 0, z: -0.85 },
         rotation: { x: 0, y: 0, z: 0 },
         dimensions: { width: 1.25, length: 1.25, height: 0.02 },
+        catalogId: 'lib_rug_nordic',
+        source: 'default',
       },
       // 8. Large Potted Plant in Window/Balcony corner
       {
@@ -89,6 +103,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -1.75, y: 0, z: 1.45 },
         rotation: { x: 0, y: 0, z: 0 },
         dimensions: { width: 0.7, length: 0.7, height: 1.35 },
+        catalogId: 'lib_plant_monstera',
+        source: 'decorative',
       },
       // 9. Secondary Potted Plant next to Wardrobe (North-West corner)
       {
@@ -98,6 +114,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -1.95, y: 0, z: -2.15 },
         rotation: { x: 0, y: 0, z: 0 },
         dimensions: { width: 0.55, length: 0.55, height: 1.1 },
+        catalogId: 'lib_plant_monstera',
+        source: 'decorative',
       },
       // 10. Long White Calacatta Marble Credenza Console along East wall
       {
@@ -107,6 +125,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: 1.85, y: 0, z: 0.55 },
         rotation: { x: 0, y: -Math.PI / 2, z: 0 },
         dimensions: { width: 1.2, length: 0.45, height: 0.85 },
+        catalogId: 'lib_console',
+        source: 'default',
       },
       // 11. Standing Mirror leaning along East wall
       {
@@ -116,6 +136,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: 1.85, y: 0, z: -0.75 },
         rotation: { x: 0, y: -Math.PI / 2, z: 0 },
         dimensions: { width: 0.6, length: 0.15, height: 1.6 },
+        catalogId: 'lib_mirror_standing',
+        source: 'decorative',
       },
       // 12. Master En-Suite Bathroom Suite with Frosted Glass Walls & Smart Toilet
       {
@@ -125,6 +147,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: 1.75, y: 0, z: -1.75 },
         rotation: { x: 0, y: Math.PI / 2, z: 0 },
         dimensions: { width: 1.35, length: 1.55, height: 2.1 },
+        catalogId: 'lib_wc_suite',
+        source: 'architectural',
       },
     ],
   },
@@ -146,6 +170,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: 0.8, y: 0, z: -0.9 },
         rotation: { x: 0, y: 0, z: 0 },
         dimensions: { width: 1.2, length: 2.0, height: 0.75 },
+        catalogId: 'lib_bed_single',
+        source: 'default',
       },
       {
         id: 'desk_small',
@@ -154,6 +180,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -0.8, y: 0, z: 0.8 },
         rotation: { x: 0, y: 0, z: 0 },
         dimensions: { width: 1.2, length: 0.6, height: 0.75 },
+        catalogId: 'lib_desk_study',
+        source: 'default',
       },
       {
         id: 'chair_small',
@@ -162,6 +190,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -0.8, y: 0, z: 1.3 },
         rotation: { x: 0, y: 0, z: 0 },
         dimensions: { width: 0.5, length: 0.5, height: 0.85 },
+        catalogId: 'lib_chair_office',
+        source: 'default',
       },
       {
         id: 'wardrobe_small',
@@ -170,6 +200,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -1.2, y: 0, z: -0.9 },
         rotation: { x: 0, y: Math.PI / 2, z: 0 },
         dimensions: { width: 1.2, length: 0.6, height: 2.1 },
+        catalogId: 'lib_wardrobe',
+        source: 'default',
       },
       {
         id: 'mirror_small',
@@ -178,6 +210,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: 1.3, y: 0, z: 1.2 },
         rotation: { x: 0, y: -Math.PI / 3, z: 0 },
         dimensions: { width: 0.5, length: 0.1, height: 1.5 },
+        catalogId: 'lib_mirror_standing',
+        source: 'decorative',
       },
       {
         id: 'door_small',
@@ -186,6 +220,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -0.8, y: 0, z: 2.0 },
         rotation: { x: 0, y: Math.PI, z: 0 },
         dimensions: { width: 0.85, length: 0.1, height: 2.0 },
+        catalogId: 'lib_door_swing',
+        source: 'architectural',
       },
       {
         id: 'window_small',
@@ -194,6 +230,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: 1.7, y: 0.8, z: 0.2 },
         rotation: { x: 0, y: -Math.PI / 2, z: 0 },
         dimensions: { width: 1.2, length: 0.1, height: 1.2 },
+        catalogId: 'lib_window_single',
+        source: 'architectural',
       },
     ],
   },
@@ -215,6 +253,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: 1.0, y: 0, z: -1.5 },
         rotation: { x: 0, y: 0, z: 0 },
         dimensions: { width: 1.6, length: 2.0, height: 0.8 },
+        catalogId: 'lib_bed_queen',
+        source: 'default',
       },
       {
         id: 'sofa_studio',
@@ -223,6 +263,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -1.0, y: 0, z: 0.5 },
         rotation: { x: 0, y: Math.PI / 2, z: 0 },
         dimensions: { width: 1.6, length: 0.8, height: 0.75 },
+        catalogId: 'lib_sofa',
+        source: 'default',
       },
       {
         id: 'desk_studio',
@@ -231,6 +273,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: 1.0, y: 0, z: 0.8 },
         rotation: { x: 0, y: -Math.PI / 2, z: 0 },
         dimensions: { width: 1.4, length: 0.7, height: 0.75 },
+        catalogId: 'lib_desk_work',
+        source: 'default',
       },
       {
         id: 'kitchen_studio',
@@ -239,6 +283,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -1.2, y: 0, z: -1.8 },
         rotation: { x: 0, y: Math.PI / 2, z: 0 },
         dimensions: { width: 1.8, length: 0.6, height: 0.85 },
+        catalogId: 'lib_console',
+        source: 'default',
       },
       {
         id: 'wardrobe_studio',
@@ -247,6 +293,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: -1.2, y: 0, z: -0.6 },
         rotation: { x: 0, y: Math.PI / 2, z: 0 },
         dimensions: { width: 1.4, length: 0.6, height: 2.2 },
+        catalogId: 'lib_wardrobe',
+        source: 'default',
       },
       {
         id: 'door_studio',
@@ -255,6 +303,8 @@ export const ROOM_PRESETS: Record<'master' | 'small' | 'studio', RoomPreset> = {
         position: { x: 0, y: 0, z: 2.6 },
         rotation: { x: 0, y: Math.PI, z: 0 },
         dimensions: { width: 0.9, length: 0.1, height: 2.0 },
+        catalogId: 'lib_door_swing',
+        source: 'architectural',
       },
     ],
   },

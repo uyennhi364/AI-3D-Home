@@ -383,20 +383,40 @@ export default function App() {
 
   // Handler: Add object from library
   const handleAddObjectFromLibrary = (item: {
+    id?: string;
     type: any;
     name: string;
     dimensions: { width: number; length: number; height: number };
+    subType?: string;
+    modelId?: string;
   }) => {
     pushSnapshot(objects);
     const newId = `${item.type}_${Date.now()}`;
+
+    // Find a non-overlapping position so new objects don't stack on top of each other
+    const candidate = findSmartPlacement(
+      item.type,
+      item.dimensions,
+      objects,
+      roomConfig,
+      { x: 0, z: 0 }
+    );
+    const initPos = candidate.resolved
+      ? { x: Math.round(candidate.safePos.x * 100) / 100, y: 0, z: Math.round(candidate.safePos.z * 100) / 100 }
+      : { x: 0, y: 0, z: 0 };
+
     const newObj: RoomObject = {
       id: newId,
       type: item.type,
       name: item.name,
       dimensions: item.dimensions,
-      position: { x: 0, y: 0, z: 0 },
-      rotation: { x: 0, y: 0, z: 0 },
+      position: initPos,
+      rotation: { x: 0, y: candidate.resolved ? candidate.rotationY : 0, z: 0 },
+      subType: item.subType || item.id,
+      modelId: item.modelId || item.id,
     };
+
+    console.log(`[SCENE_OBJECT_CREATED] objectId=${newObj.id} name="${newObj.name}" type=${newObj.type} modelId=${newObj.modelId} subType=${newObj.subType} dimensions=${JSON.stringify(newObj.dimensions)} position=${JSON.stringify(newObj.position)}`);
 
     setObjects((prev) => [...prev, newObj]);
     setSelectedObjectId(newId);
@@ -417,6 +437,8 @@ export default function App() {
       dimensions: item.dimensions,
       position: { x: normX, y: 0, z: normZ },
       rotation: { x: 0, y: 0, z: 0 },
+      subType: item.subType || item.id,
+      modelId: item.modelId || item.id,
     };
 
     setObjects((prev) => [...prev, newObj]);

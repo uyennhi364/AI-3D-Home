@@ -137,6 +137,14 @@ console.log('\n--- BUG 02: FURNITURE SEARCH & ACCENT-INSENSITIVE FILTERING ---')
   const resTu = filterItems('Tủ');
   assert(resTu.some((i) => i.name.includes('Tủ quần áo')), 'Search "Tủ" finds "Tủ quần áo"');
 
+  // Test keyword "Ghế" & unaccented "ghe"
+  const resGhe = filterItems('Ghế');
+  assert(resGhe.length >= 2, `Search "Ghế" returns ${resGhe.length} items (Ghế làm việc, Ghế tựa)`);
+  const resGheNoAccent = filterItems('ghe');
+  assert(resGheNoAccent.length === resGhe.length, 'Unaccented "ghe" returns identical count as "Ghế"');
+  const resGheCategory = filterItems('', 'chair');
+  assert(resGheCategory.length >= 2, `Category "chair" returns ${resGheCategory.length} items`);
+
   // Test non-existent keyword
   const resNone = filterItems('xyz123khongtontai');
   assert(resNone.length === 0, 'Non-existent keyword returns 0 items without error');

@@ -76,6 +76,9 @@ export interface RoomObject {
   color?: string;
   material?: string; // P8: Optional material key (e.g. 'wood', 'metal', 'ceramic')
   subType?: string; // e.g. 'double_1m6', 'double_1m8', 'single'
+  modelId?: string; // e.g. 'lib_chair_swivel', 'lib_table_round', etc.
+  catalogId?: string; // e.g. 'lib_bed_queen', 'lib_nightstand', etc.
+  source?: 'catalog' | 'default' | 'decorative' | 'architectural' | 'generated';
 }
 
 export interface FengShuiItemEvaluation {

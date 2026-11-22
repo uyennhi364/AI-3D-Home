@@ -210,10 +210,10 @@ export function getProceduralPlasterTexture(): THREE.CanvasTexture {
 // 2. SHARED LUXURY PBR MATERIALS
 // ============================================================================
 
-const woodTexture = getProceduralWoodTexture();
-const fabricTexture = getProceduralFabricTexture();
-const marbleTexture = getProceduralMarbleTexture();
-const plasterTexture = getProceduralPlasterTexture();
+const woodTexture = typeof document !== 'undefined' ? getProceduralWoodTexture() : null;
+const fabricTexture = typeof document !== 'undefined' ? getProceduralFabricTexture() : null;
+const marbleTexture = typeof document !== 'undefined' ? getProceduralMarbleTexture() : null;
+const plasterTexture = typeof document !== 'undefined' ? getProceduralPlasterTexture() : null;
 
 export const walnutWoodMat = new THREE.MeshStandardMaterial({
   map: woodTexture,
@@ -331,29 +331,32 @@ export const chromeMat = new THREE.MeshStandardMaterial({
 });
 
 // Shared Contact Shadow Plane
-const contactShadowCanvas = document.createElement('canvas');
-contactShadowCanvas.width = 128;
-contactShadowCanvas.height = 128;
-const csCtx = contactShadowCanvas.getContext('2d')!;
-const csGrad = csCtx.createRadialGradient(64, 64, 10, 64, 64, 62);
-csGrad.addColorStop(0, 'rgba(0, 0, 0, 0.48)');
-csGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.22)');
-csGrad.addColorStop(0.85, 'rgba(0, 0, 0, 0.06)');
-csGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-csCtx.fillStyle = csGrad;
-csCtx.fillRect(0, 0, 128, 128);
-export const sharedContactShadowTex = new THREE.CanvasTexture(contactShadowCanvas);
+let contactShadowTexCache: THREE.CanvasTexture | null = null;
+export function getContactShadowTex(): THREE.CanvasTexture | null {
+  if (typeof document === 'undefined') return null;
+  if (contactShadowTexCache) return contactShadowTexCache;
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const csCtx = canvas.getContext('2d');
+  if (!csCtx) return null;
+  const csGrad = csCtx.createRadialGradient(64, 64, 10, 64, 64, 62);
+  csGrad.addColorStop(0, 'rgba(0, 0, 0, 0.48)');
+  csGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.22)');
+  csGrad.addColorStop(0.85, 'rgba(0, 0, 0, 0.06)');
+  csGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  csCtx.fillStyle = csGrad;
+  csCtx.fillRect(0, 0, 128, 128);
+  contactShadowTexCache = new THREE.CanvasTexture(canvas);
+  return contactShadowTexCache;
+}
 
 export function createContactShadowMesh(w: number, l: number, opacity: number = 0.82): THREE.Mesh {
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(w, l),
-    new THREE.MeshBasicMaterial({
-      map: sharedContactShadowTex,
-      transparent: true,
-      opacity,
-      depthWrite: false,
-    })
-  );
+  const tex = getContactShadowTex();
+  const mat = tex
+    ? new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity, depthWrite: false })
+    : new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: opacity * 0.3, depthWrite: false });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, l), mat);
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.y = 0.004;
   return mesh;
@@ -786,6 +789,877 @@ export function createChairModel(): THREE.Group {
   group.add(backMesh);
 
   return group;
+}
+
+// ============================================================================
+// CHAIR VARIANTS — Each with distinct geometry
+// ============================================================================
+
+/**
+ * Swivel office chair: 5-star wheeled base, gas lift cylinder,
+ * lumbar mesh backrest, headrest, L-shaped armrests.
+ */
+export function createSwivelChairModel(w: number, l: number, h: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'SwivelChairGroup';
+  group.add(createContactShadowMesh(w * 1.3, l * 1.3, 0.75));
+
+  const seatY = h * 0.42;
+
+  // 5-star base spokes (flat cylinder + 5 arms)
+  const hubGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.04, 20);
+  const hub = new THREE.Mesh(hubGeo, metalBlackMat);
+  hub.position.y = 0.02;
+  hub.castShadow = true;
+  group.add(hub);
+
+  for (let i = 0; i < 5; i++) {
+    const ang = (i * 2 * Math.PI) / 5;
+    const armLen = w * 0.52;
+    const arm = new THREE.Mesh(
+      new THREE.BoxGeometry(armLen, 0.025, 0.04),
+      metalBlackMat
+    );
+    arm.position.set(Math.cos(ang) * armLen * 0.5, 0.025, Math.sin(ang) * armLen * 0.5);
+    arm.rotation.y = -ang;
+    arm.castShadow = true;
+    group.add(arm);
+
+    // Caster wheel at tip of each spoke
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.02, 12), metalBlackMat);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(Math.cos(ang) * armLen * 0.96, 0.02, Math.sin(ang) * armLen * 0.96);
+    group.add(wheel);
+  }
+
+  // Gas lift pneumatic cylinder
+  const liftGeo = new THREE.CylinderGeometry(0.028, 0.038, seatY - 0.04, 16);
+  const lift = new THREE.Mesh(liftGeo, chromeMat);
+  lift.position.y = 0.04 + (seatY - 0.04) / 2;
+  lift.castShadow = true;
+  group.add(lift);
+
+  // Seat pad
+  const seatGeo = new THREE.BoxGeometry(w * 0.82, 0.07, l * 0.82);
+  const seat = new THREE.Mesh(seatGeo, creamFabricMat);
+  seat.position.y = seatY + 0.035;
+  seat.castShadow = true;
+  group.add(seat);
+
+  // Lumbar mesh backrest
+  const backH = h * 0.5;
+  const backMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(w * 0.75, backH, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.5, metalness: 0.1, side: THREE.DoubleSide })
+  );
+  backMesh.position.set(0, seatY + 0.035 + backH / 2 + 0.02, -l * 0.4);
+  backMesh.rotation.x = 0.1;
+  backMesh.castShadow = true;
+  group.add(backMesh);
+
+  // Lumbar support bump
+  const lumbar = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.1, 0.06), creamFabricMat);
+  lumbar.position.set(0, seatY + 0.1, -l * 0.4 - 0.02);
+  group.add(lumbar);
+
+  // Headrest
+  const headrest = new THREE.Mesh(new THREE.BoxGeometry(w * 0.42, 0.14, 0.05), creamFabricMat);
+  headrest.position.set(0, seatY + backH + 0.1, -l * 0.4);
+  group.add(headrest);
+
+  // L-shaped armrests
+  [-1, 1].forEach((side) => {
+    const armX = side * (w * 0.46);
+    // Vertical post
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, seatY * 0.4, 10), metalBlackMat);
+    post.position.set(armX, seatY + 0.04 + (seatY * 0.4) / 2, 0);
+    group.add(post);
+    // Horizontal pad
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.025, l * 0.3), creamFabricMat);
+    pad.position.set(armX, seatY + 0.04 + seatY * 0.4, 0);
+    group.add(pad);
+  });
+
+  return group;
+}
+
+/**
+ * Ergonomic office chair: 4 splayed walnut legs with brass ferrules,
+ * curved wrap-around boucle backrest, padded seat.
+ */
+export function createErgonomicChairModel(w: number, l: number, h: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'ErgonomicChairGroup';
+  group.add(createContactShadowMesh(w * 1.1, l * 1.1, 0.72));
+
+  const seatH = h * 0.5;
+
+  // 4 tapered splayed legs
+  const angles = [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4];
+  angles.forEach((ang) => {
+    const lx = Math.cos(ang) * (w * 0.32);
+    const lz = Math.sin(ang) * (l * 0.32);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.01, seatH, 12), walnutWoodMat);
+    leg.position.set(lx, seatH / 2, lz);
+    leg.rotation.z = Math.cos(ang) * 0.08;
+    leg.rotation.x = Math.sin(ang) * 0.08;
+    leg.castShadow = true;
+    group.add(leg);
+
+    const ferrule = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.016, 0.03, 12), metalGoldMat);
+    ferrule.position.set(lx, 0.015, lz);
+    group.add(ferrule);
+  });
+
+  // Padded seat
+  const seatGeo = new THREE.CylinderGeometry(w * 0.4, w * 0.38, 0.09, 24);
+  const seatMesh = new THREE.Mesh(seatGeo, creamFabricMat);
+  seatMesh.position.y = seatH + 0.045;
+  seatMesh.castShadow = true;
+  group.add(seatMesh);
+
+  // Curved wrap-around upholstered backrest (arc of cylinder)
+  const backR = w * 0.42;
+  const backH = h * 0.42;
+  const backGeo = new THREE.CylinderGeometry(backR, backR, backH, 24, 1, true, -Math.PI * 0.65, Math.PI * 1.3);
+  const backMesh = new THREE.Mesh(backGeo, creamFabricMat);
+  backMesh.position.set(0, seatH + 0.09 + backH / 2, -w * 0.06);
+  backMesh.castShadow = true;
+  group.add(backMesh);
+
+  return group;
+}
+
+/**
+ * Lounge armchair: low deep seat, solid dark walnut sled frame,
+ * reclined back, wide upholstered armrests, head cushion.
+ */
+export function createLoungeChairModel(w: number, l: number, h: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'LoungeChairGroup';
+  group.add(createContactShadowMesh(w * 1.1, l * 1.15, 0.7));
+
+  // Sled frame sides (dark walnut curved U-shape)
+  [-1, 1].forEach((side) => {
+    const sx = side * (w * 0.44);
+    // Runner (bottom bar)
+    const runner = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.04, l + 0.08), darkWalnutWoodMat);
+    runner.position.set(sx, 0.02, 0);
+    runner.castShadow = true;
+    group.add(runner);
+    // Front vertical leg
+    const fLeg = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.32, 0.045), darkWalnutWoodMat);
+    fLeg.position.set(sx, 0.16, l * 0.44);
+    group.add(fLeg);
+    // Rear vertical leg (taller for reclined back)
+    const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.52, 0.045), darkWalnutWoodMat);
+    rLeg.position.set(sx, 0.26, -l * 0.44);
+    group.add(rLeg);
+  });
+
+  // Seat cushion (low, 0.38m)
+  const seatY = 0.38;
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(w - 0.1, 0.12, l * 0.6), caramelFabricMat);
+  seat.position.set(0, seatY, l * 0.14);
+  seat.castShadow = true;
+  group.add(seat);
+
+  // Reclined back cushion
+  const backH = h * 0.52;
+  const back = new THREE.Mesh(new THREE.BoxGeometry(w - 0.1, backH, 0.12), caramelFabricMat);
+  back.position.set(0, seatY + backH / 2 + 0.06, -l * 0.3);
+  back.rotation.x = -0.22;
+  back.castShadow = true;
+  group.add(back);
+
+  // Wide armrests
+  [-1, 1].forEach((side) => {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, l * 0.68), caramelFabricMat);
+    arm.position.set(side * (w * 0.45 - 0.04), seatY + 0.03, 0.04);
+    arm.castShadow = true;
+    group.add(arm);
+  });
+
+  // Head cushion
+  const headCushion = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.12, 0.2), oliveFabricMat);
+  headCushion.position.set(0, seatY + backH * 0.72, -l * 0.42);
+  headCushion.rotation.x = -0.22;
+  group.add(headCushion);
+
+  return group;
+}
+
+/**
+ * Dining chair: slim compact profile (no armrests), 4 vertical
+ * tapered legs, vertical slat backrest, brass cross stretcher.
+ */
+export function createDiningChairModel(w: number, l: number, h: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'DiningChairGroup';
+  group.add(createContactShadowMesh(w * 1.1, l * 1.1, 0.68));
+
+  const seatH = h * 0.47;
+
+  // 4 tapered straight legs
+  [
+    [-w * 0.36, -l * 0.36],
+    [w * 0.36, -l * 0.36],
+    [-w * 0.36, l * 0.36],
+    [w * 0.36, l * 0.36],
+  ].forEach(([lx, lz]) => {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.012, seatH, 10), walnutWoodMat);
+    leg.position.set(lx, seatH / 2, lz);
+    leg.castShadow = true;
+    group.add(leg);
+  });
+
+  // Cross stretcher near floor
+  const stretcherH = seatH * 0.28;
+  const sFront = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, w * 0.72, 8), metalGoldMat);
+  sFront.rotation.z = Math.PI / 2;
+  sFront.position.set(0, stretcherH, l * 0.36);
+  group.add(sFront);
+  const sBack = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, w * 0.72, 8), metalGoldMat);
+  sBack.rotation.z = Math.PI / 2;
+  sBack.position.set(0, stretcherH, -l * 0.36);
+  group.add(sBack);
+
+  // Seat cushion (slim, no armrests)
+  const seatMesh = new THREE.Mesh(new THREE.BoxGeometry(w * 0.82, 0.07, l * 0.82), creamFabricMat);
+  seatMesh.position.y = seatH + 0.035;
+  seatMesh.castShadow = true;
+  group.add(seatMesh);
+
+  // Top rail of backrest
+  const topRail = new THREE.Mesh(new THREE.BoxGeometry(w * 0.72, 0.045, 0.04), walnutWoodMat);
+  topRail.position.set(0, h - 0.03, -l * 0.36);
+  group.add(topRail);
+
+  // 3 vertical slats
+  [-1, 0, 1].forEach((si) => {
+    const slat = new THREE.Mesh(
+      new THREE.BoxGeometry(0.028, h - seatH - 0.08, 0.025),
+      walnutWoodMat
+    );
+    slat.position.set(si * w * 0.2, seatH + (h - seatH) / 2, -l * 0.36);
+    slat.castShadow = true;
+    group.add(slat);
+  });
+
+  return group;
+}
+
+/**
+ * Stool / Ottoman: cylindrical plush cushion, button-tufted top,
+ * brass base ring, NO backrest.
+ */
+export function createStoolModel(w: number, l: number, h: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'StoolGroup';
+  group.add(createContactShadowMesh(w * 1.15, l * 1.15, 0.65));
+
+  const r = Math.min(w, l) / 2;
+
+  // Plush cylindrical body (caramel velvet)
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.94, h * 0.85, 32), caramelFabricMat);
+  body.position.y = h * 0.425;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  group.add(body);
+
+  // Tufted top disc
+  const topDisc = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.045, 32), caramelFabricMat);
+  topDisc.position.y = h * 0.85 + 0.0225;
+  topDisc.castShadow = true;
+  group.add(topDisc);
+
+  // Central button tuft
+  const button = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.02, 16), metalGoldMat);
+  button.position.y = h * 0.85 + 0.055;
+  group.add(button);
+
+  // Tufting pattern on top (4 stitch radiants)
+  for (let i = 0; i < 4; i++) {
+    const ang = (i * Math.PI) / 2;
+    const tuftLine = new THREE.Mesh(
+      new THREE.BoxGeometry(r * 1.1, 0.008, 0.012),
+      new THREE.MeshStandardMaterial({ color: 0x8b5e3c, roughness: 0.9 })
+    );
+    tuftLine.rotation.y = ang;
+    tuftLine.position.y = h * 0.85 + 0.048;
+    group.add(tuftLine);
+  }
+
+  // Brass base ring
+  const baseRing = new THREE.Mesh(
+    new THREE.TorusGeometry(r * 0.8, 0.02, 10, 32),
+    metalGoldMat
+  );
+  baseRing.rotation.x = Math.PI / 2;
+  baseRing.position.y = 0.025;
+  baseRing.castShadow = true;
+  group.add(baseRing);
+
+  return group;
+}
+
+/**
+ * Single sofa chair: Scandinavian club armchair with deep boxy cushions,
+ * wrap-around block arms, low stubby walnut feet.
+ */
+export function createSingleSofaChairModel(w: number, l: number, h: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'SingleSofaGroup';
+  group.add(createContactShadowMesh(w * 1.1, l * 1.1, 0.72));
+
+  const feetH = 0.1;
+  const seatFloor = feetH;
+  const seatH = h * 0.44;
+  const armW = 0.12;
+  const backH = h * 0.52;
+
+  // 4 Low stubby walnut feet
+  [
+    [-w * 0.42 + armW, -l * 0.44],
+    [w * 0.42 - armW, -l * 0.44],
+    [-w * 0.42 + armW, l * 0.44],
+    [w * 0.42 - armW, l * 0.44],
+  ].forEach(([fx, fz]) => {
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.03, feetH, 12), walnutWoodMat);
+    foot.position.set(fx, feetH / 2, fz);
+    foot.castShadow = true;
+    group.add(foot);
+  });
+
+  // Main seat box cushion (cream boucle)
+  const seatCushion = new THREE.Mesh(
+    new THREE.BoxGeometry(w - armW * 2 - 0.04, seatH, l * 0.55),
+    creamFabricMat
+  );
+  seatCushion.position.set(0, seatFloor + seatH / 2, l * 0.12);
+  seatCushion.castShadow = true;
+  group.add(seatCushion);
+
+  // Back box cushion
+  const backCushion = new THREE.Mesh(
+    new THREE.BoxGeometry(w - armW * 2 - 0.04, backH, 0.14),
+    creamFabricMat
+  );
+  backCushion.position.set(0, seatFloor + backH / 2, -l * 0.42);
+  backCushion.castShadow = true;
+  group.add(backCushion);
+
+  // Left & Right block armrests
+  [-1, 1].forEach((side) => {
+    const armX = side * (w / 2 - armW / 2);
+    const armMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(armW, seatH + 0.08, l * 0.88),
+      creamFabricMat
+    );
+    armMesh.position.set(armX, seatFloor + (seatH + 0.08) / 2, 0);
+    armMesh.castShadow = true;
+    group.add(armMesh);
+  });
+
+  // Olive accent throw cushion on seat
+  const throwCushion = new THREE.Mesh(new THREE.BoxGeometry(w * 0.3, 0.1, 0.22), oliveFabricMat);
+  throwCushion.position.set(w * 0.18, seatFloor + seatH + 0.05, -l * 0.1);
+  throwCushion.rotation.y = 0.3;
+  throwCushion.castShadow = true;
+  group.add(throwCushion);
+
+  return group;
+}
+
+// ============================================================================
+// TABLE VARIANTS — Each with distinct geometry
+// ============================================================================
+
+/**
+ * Executive work desk: beveled walnut top, right 3-drawer pedestal,
+ * left steel loop legs, modesty rear panel, laptop & lamp.
+ * (Wraps original createDeskModel for backward compatibility with presets)
+ */
+export function createExecutiveDeskModel(w: number, l: number, h: number): THREE.Group {
+  return createDeskModel(w, l, h);
+}
+
+/**
+ * Study desk: natural oak top, 4 corner legs, shallow center drawer,
+ * hutch organizer with mini books on top.
+ */
+export function createStudyDeskModel(w: number, l: number, h: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'StudyDeskGroup';
+  group.add(createContactShadowMesh(w * 1.12, l * 1.12, 0.78));
+
+  const topThick = 0.035;
+
+  // Oak desktop
+  const oakMat = new THREE.MeshStandardMaterial({ color: 0xd4a96a, roughness: 0.5, metalness: 0.0 });
+  const topMesh = new THREE.Mesh(new THREE.BoxGeometry(w, topThick, l), oakMat);
+  topMesh.position.y = h - topThick / 2;
+  topMesh.castShadow = true;
+  group.add(topMesh);
+
+  // 4 corner tapered legs
+  const legH = h - topThick;
+  [
+    [-w / 2 + 0.05, -l / 2 + 0.05],
+    [w / 2 - 0.05, -l / 2 + 0.05],
+    [-w / 2 + 0.05, l / 2 - 0.05],
+    [w / 2 - 0.05, l / 2 - 0.05],
+  ].forEach(([lx, lz]) => {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.014, legH, 12), oakMat);
+    leg.position.set(lx, legH / 2, lz);
+    leg.castShadow = true;
+    group.add(leg);
+  });
+
+  // Shallow center drawer (1 drawer with brass knob)
+  const drawerW = w * 0.4;
+  const drawer = new THREE.Mesh(new THREE.BoxGeometry(drawerW, 0.07, l * 0.72), oakMat);
+  drawer.position.set(0, h - topThick - 0.04, 0);
+  group.add(drawer);
+
+  const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.025, 10), metalGoldMat);
+  knob.rotation.z = Math.PI / 2;
+  knob.position.set(0, h - topThick - 0.04, l / 2 + 0.012);
+  group.add(knob);
+
+  // Hutch organizer on back-top
+  const hutchH = 0.26;
+  const hutchMat = oakMat;
+  const hutchBack = new THREE.Mesh(new THREE.BoxGeometry(w * 0.72, hutchH, 0.025), hutchMat);
+  hutchBack.position.set(0, h + hutchH / 2, -l / 2 + 0.012);
+  hutchBack.castShadow = true;
+  group.add(hutchBack);
+
+  const hutchLeft = new THREE.Mesh(new THREE.BoxGeometry(0.025, hutchH, l * 0.4), hutchMat);
+  hutchLeft.position.set(-w * 0.36, h + hutchH / 2, -l / 2 + l * 0.2);
+  group.add(hutchLeft);
+  const hutchRight = new THREE.Mesh(new THREE.BoxGeometry(0.025, hutchH, l * 0.4), hutchMat);
+  hutchRight.position.set(w * 0.36, h + hutchH / 2, -l / 2 + l * 0.2);
+  group.add(hutchRight);
+
+  // Shelf inside hutch
+  const shelf = new THREE.Mesh(new THREE.BoxGeometry(w * 0.72, 0.02, l * 0.4), hutchMat);
+  shelf.position.set(0, h + hutchH * 0.55, -l / 2 + l * 0.2);
+  group.add(shelf);
+
+  // Mini books on shelf
+  const bookColors = [0x1e3a5f, 0x7f1d1d, 0x14532d, 0x44403c];
+  for (let i = 0; i < 4; i++) {
+    const bookH = 0.1 + Math.random() * 0.06;
+    const bookMat = new THREE.MeshStandardMaterial({ color: bookColors[i], roughness: 0.6 });
+    const book = new THREE.Mesh(new THREE.BoxGeometry(0.04, bookH, 0.14), bookMat);
+    book.position.set(-w * 0.26 + i * 0.12, h + hutchH * 0.55 + 0.01 + bookH / 2, -l / 2 + l * 0.2);
+    book.castShadow = true;
+    group.add(book);
+  }
+
+  return group;
+}
+
+/**
+ * Dining table: marble/walnut top (1.6×0.85m), perimeter apron,
+ * 4 corner legs with brass caps, fully open knee space.
+ */
+export function createDiningTableModel(w: number, l: number, h: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'DiningTableGroup';
+  group.add(createContactShadowMesh(w * 1.1, l * 1.1, 0.8));
+
+  const topThick = 0.04;
+
+  // Marble top (use calacatta marble material)
+  const topMesh = new THREE.Mesh(new THREE.BoxGeometry(w, topThick, l), calacattaMarbleMat);
+  topMesh.position.y = h - topThick / 2;
+  topMesh.castShadow = true;
+  topMesh.receiveShadow = true;
+  group.add(topMesh);
+
+  // Perimeter apron (walnut, slightly inset from edges)
+  const apronThick = 0.06;
+  const apronH = 0.1;
+  const apronY = h - topThick - apronH / 2;
+  // Front/back aprons
+  [l / 2 - apronThick / 2, -l / 2 + apronThick / 2].forEach((az) => {
+    const apron = new THREE.Mesh(new THREE.BoxGeometry(w - 0.1, apronH, apronThick), walnutWoodMat);
+    apron.position.set(0, apronY, az);
+    group.add(apron);
+  });
+  // Side aprons
+  [w / 2 - apronThick / 2, -w / 2 + apronThick / 2].forEach((ax) => {
+    const apron = new THREE.Mesh(new THREE.BoxGeometry(apronThick, apronH, l - 0.1), walnutWoodMat);
+    apron.position.set(ax, apronY, 0);
+    group.add(apron);
+  });
+
+  // 4 Corner legs with brass caps — open knee space on all sides
+  const legH = h - topThick;
+  [
+    [-w / 2 + 0.07, -l / 2 + 0.07],
+    [w / 2 - 0.07, -l / 2 + 0.07],
+    [-w / 2 + 0.07, l / 2 - 0.07],
+    [w / 2 - 0.07, l / 2 - 0.07],
+  ].forEach(([lx, lz]) => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.07, legH, 0.07), walnutWoodMat);
+    leg.position.set(lx, legH / 2, lz);
+    leg.castShadow = true;
+    group.add(leg);
+
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.034, 0.03, 12), metalGoldMat);
+    cap.position.set(lx, 0.015, lz);
+    group.add(cap);
+  });
+
+  return group;
+}
+
+/**
+ * Coffee/sofa table: low height (≤0.45m), lower magazine shelf,
+ * rounded rectangular top, black sled legs.
+ */
+export function createCoffeeTableModel(w: number, l: number, h: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'CoffeeTableGroup';
+  const topH = Math.min(h, 0.45);
+  group.add(createContactShadowMesh(w * 1.12, l * 1.12, 0.65));
+
+  // Top surface (rounded rect profile via beveled box)
+  const topMesh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, l), walnutWoodMat);
+  topMesh.position.y = topH - 0.02;
+  topMesh.castShadow = true;
+  topMesh.receiveShadow = true;
+  group.add(topMesh);
+
+  // Lower magazine shelf at ~0.12m height
+  const shelfY = 0.12;
+  const shelf = new THREE.Mesh(new THREE.BoxGeometry(w * 0.82, 0.025, l * 0.76), walnutWoodMat);
+  shelf.position.y = shelfY;
+  shelf.castShadow = true;
+  group.add(shelf);
+
+  // Black sled frame — 2 U-shaped sled runners
+  [-1, 1].forEach((side) => {
+    const sx = side * (w * 0.38);
+    // Bottom horizontal runner
+    const runner = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.025, l * 0.9), metalBlackMat);
+    runner.position.set(sx, 0.012, 0);
+    group.add(runner);
+    // Front vertical bar
+    const front = new THREE.Mesh(new THREE.BoxGeometry(0.03, topH, 0.03), metalBlackMat);
+    front.position.set(sx, topH / 2, l * 0.44);
+    group.add(front);
+    // Rear vertical bar
+    const rear = new THREE.Mesh(new THREE.BoxGeometry(0.03, topH, 0.03), metalBlackMat);
+    rear.position.set(sx, topH / 2, -l * 0.44);
+    group.add(rear);
+  });
+
+  // Decor: small book + candle on top
+  const book = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.26), creamCabinetMat);
+  book.position.set(-w * 0.18, topH + 0.01, 0.04);
+  group.add(book);
+
+  const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.1, 10), creamCabinetMat);
+  candle.position.set(w * 0.22, topH + 0.05, -l * 0.18);
+  group.add(candle);
+
+  return group;
+}
+
+/**
+ * Round table: true circular CylinderGeometry top,
+ * 3 splayed tripod legs, decor items on surface.
+ */
+export function createRoundTableModel(w: number, l: number, h: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'RoundTableGroup';
+  const radius = Math.max(w, l) / 2;
+  group.add(createContactShadowMesh(radius * 2.2, radius * 2.2, 0.72));
+
+  // True circular disc top (CylinderGeometry — NOT a box)
+  const topMesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius - 0.02, 0.04, 36), walnutWoodMat);
+  topMesh.position.y = h - 0.02;
+  topMesh.castShadow = true;
+  topMesh.receiveShadow = true;
+  group.add(topMesh);
+
+  // Rim chamfer ring
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(radius - 0.01, 0.015, 8, 36),
+    darkWalnutWoodMat
+  );
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = h - 0.02;
+  group.add(rim);
+
+  // 3 tapered tripod legs, splayed outward
+  for (let i = 0; i < 3; i++) {
+    const ang = (i * 2 * Math.PI) / 3;
+    const lx = Math.cos(ang) * radius * 0.62;
+    const lz = Math.sin(ang) * radius * 0.62;
+    const legH = h - 0.04;
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.013, legH, 12), walnutWoodMat);
+    leg.position.set(lx, legH / 2, lz);
+    leg.rotation.z = Math.cos(ang) * 0.1;
+    leg.rotation.x = Math.sin(ang) * 0.1;
+    leg.castShadow = true;
+    group.add(leg);
+
+    // Brass foot tip
+    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.012, 0.025, 10), metalGoldMat);
+    tip.position.set(lx, 0.012, lz);
+    group.add(tip);
+  }
+
+  // Decor: flat book & tiny succulent on top
+  const book = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.018, 0.22), creamCabinetMat);
+  book.position.set(-radius * 0.3, h + 0.009, radius * 0.1);
+  group.add(book);
+
+  const tinyPot = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.028, 0.038, 12), potMat);
+  tinyPot.position.set(radius * 0.28, h + 0.019, -radius * 0.2);
+  group.add(tinyPot);
+
+  const tinyGreen = new THREE.Mesh(new THREE.DodecahedronGeometry(0.032), plantLeafMat);
+  tinyGreen.position.set(radius * 0.28, h + 0.048, -radius * 0.2);
+  group.add(tinyGreen);
+
+  return group;
+}
+
+/**
+ * Vanity desk: cream lacquer top with gold trim, dual jewelry drawers,
+ * mounted vertical arched dressing mirror with reflective glass.
+ */
+export function createVanityDeskModel(w: number, l: number, h: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'VanityDeskGroup';
+  group.add(createContactShadowMesh(w * 1.1, l * 1.1, 0.75));
+
+  const topThick = 0.035;
+  const creamLacquerMat = new THREE.MeshStandardMaterial({ color: 0xfef6e9, roughness: 0.18, metalness: 0.06 });
+
+  // Desktop in cream lacquer
+  const topMesh = new THREE.Mesh(new THREE.BoxGeometry(w, topThick, l), creamLacquerMat);
+  topMesh.position.y = h - topThick / 2;
+  topMesh.castShadow = true;
+  group.add(topMesh);
+
+  // Gold trim rim around top
+  const rimGeo = new THREE.BoxGeometry(w + 0.01, 0.015, 0.012);
+  const frontRim = new THREE.Mesh(rimGeo, metalGoldMat);
+  frontRim.position.set(0, h - 0.01, l / 2);
+  group.add(frontRim);
+
+  // 4 gold-tipped legs
+  const legH = h - topThick;
+  [
+    [-w / 2 + 0.06, -l / 2 + 0.06],
+    [w / 2 - 0.06, -l / 2 + 0.06],
+    [-w / 2 + 0.06, l / 2 - 0.06],
+    [w / 2 - 0.06, l / 2 - 0.06],
+  ].forEach(([lx, lz]) => {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.012, legH, 12), creamLacquerMat);
+    leg.position.set(lx, legH / 2, lz);
+    leg.castShadow = true;
+    group.add(leg);
+
+    const goldCap = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.016, 0.03, 10), metalGoldMat);
+    goldCap.position.set(lx, 0.015, lz);
+    group.add(goldCap);
+  });
+
+  // Dual jewelry drawers (front face, stacked)
+  [0, 1].forEach((row) => {
+    const dW = w * 0.42;
+    const dH = 0.065;
+    const dY = h - topThick - 0.04 - row * 0.075;
+    const drawer = new THREE.Mesh(new THREE.BoxGeometry(dW, dH, l * 0.86), creamLacquerMat);
+    drawer.position.set(0, dY, 0);
+    group.add(drawer);
+
+    // Gold drawer knob
+    const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.022, 10), metalGoldMat);
+    knob.rotation.z = Math.PI / 2;
+    knob.position.set(0, dY, l / 2 + 0.011);
+    group.add(knob);
+  });
+
+  // Mounted arched dressing mirror
+  const mirrorH = h * 0.88;
+  const mirrorW = w * 0.52;
+  const mirrorThick = 0.025;
+  const mirrorZ = -l / 2 + mirrorThick / 2;
+  const mirrorY = h + mirrorH * 0.5 - 0.08;
+
+  // Mirror gold arch frame
+  const archFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(mirrorW + 0.04, mirrorH + 0.04, mirrorThick),
+    metalGoldMat
+  );
+  archFrame.position.set(0, mirrorY, mirrorZ);
+  archFrame.castShadow = true;
+  group.add(archFrame);
+
+  // Reflective mirror glass (slightly inset)
+  const mirrorGlass = new THREE.Mesh(
+    new THREE.BoxGeometry(mirrorW, mirrorH, 0.01),
+    mirrorGlassMat
+  );
+  mirrorGlass.position.set(0, mirrorY, mirrorZ + mirrorThick / 2);
+  group.add(mirrorGlass);
+
+  // Arch top cap (semi-circle effect using extra box)
+  const archCap = new THREE.Mesh(new THREE.CylinderGeometry(mirrorW / 2 + 0.02, mirrorW / 2 + 0.02, mirrorThick, 24, 1, true, 0, Math.PI), metalGoldMat);
+  archCap.rotation.z = Math.PI / 2;
+  archCap.position.set(0, mirrorY + mirrorH / 2, mirrorZ);
+  group.add(archCap);
+
+  // Small perfume bottles on desk
+  [[-w * 0.3, l * 0.15], [w * 0.28, l * 0.1]].forEach(([bx, bz]) => {
+    const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.02, 0.1, 12), mirrorGlassMat);
+    bottle.position.set(bx, h + 0.05, bz);
+    group.add(bottle);
+  });
+
+  return group;
+}
+
+/**
+ * Side/corner table: square marble top (0.45×0.45m), lower open shelf,
+ * minimalist 4-corner black steel tube frame.
+ */
+export function createSideCornerTableModel(w: number, l: number, h: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'SideTableGroup';
+  group.add(createContactShadowMesh(w * 1.2, l * 1.2, 0.68));
+
+  const topThick = 0.03;
+
+  // Marble square top
+  const topMesh = new THREE.Mesh(new THREE.BoxGeometry(w, topThick, l), calacattaMarbleMat);
+  topMesh.position.y = h - topThick / 2;
+  topMesh.castShadow = true;
+  group.add(topMesh);
+
+  // 4 black steel tube corner legs
+  const legH = h - topThick;
+  const legR = 0.016;
+  [
+    [-w / 2 + 0.025, -l / 2 + 0.025],
+    [w / 2 - 0.025, -l / 2 + 0.025],
+    [-w / 2 + 0.025, l / 2 - 0.025],
+    [w / 2 - 0.025, l / 2 - 0.025],
+  ].forEach(([lx, lz]) => {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(legR, legR, legH, 10), metalBlackMat);
+    leg.position.set(lx, legH / 2, lz);
+    leg.castShadow = true;
+    group.add(leg);
+  });
+
+  // Horizontal cross bars (structural) at mid-height
+  const barH = legH * 0.5;
+  [-1, 1].forEach((side) => {
+    const hBar = new THREE.Mesh(new THREE.BoxGeometry(w - 0.05, legR * 2, legR * 2), metalBlackMat);
+    hBar.position.set(0, barH, side * (l / 2 - 0.025));
+    group.add(hBar);
+    const vBar = new THREE.Mesh(new THREE.BoxGeometry(legR * 2, legR * 2, l - 0.05), metalBlackMat);
+    vBar.position.set(side * (w / 2 - 0.025), barH, 0);
+    group.add(vBar);
+  });
+
+  // Open lower shelf (marble or glass)
+  const shelfY = legH * 0.32;
+  const shelfMesh = new THREE.Mesh(new THREE.BoxGeometry(w - 0.04, 0.02, l - 0.04), calacattaMarbleMat);
+  shelfMesh.position.y = shelfY;
+  shelfMesh.castShadow = true;
+  group.add(shelfMesh);
+
+  // Decor: small book on top
+  const book = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.015, 0.18), creamCabinetMat);
+  book.position.set(0, h + 0.0075, 0);
+  group.add(book);
+
+  return group;
+}
+
+// ============================================================================
+// MODEL RESOLVERS — Route by modelId / subType / name heuristics
+// ============================================================================
+
+/**
+ * Resolves the correct chair builder based on obj.modelId, obj.subType, or obj.name.
+ */
+function resolveChairModel(obj: RoomObject): THREE.Group {
+  const id = (obj.modelId || obj.subType || '').toLowerCase();
+  const name = obj.name.toLowerCase();
+  const w = obj.dimensions.width;
+  const l = obj.dimensions.length;
+  const h = obj.dimensions.height;
+
+  if (id.includes('swivel') || name.includes('xoay')) {
+    return createSwivelChairModel(w, l, h);
+  }
+  if (id.includes('single_sofa') || name.includes('sofa đơn') || name.includes('sofa don')) {
+    return createSingleSofaChairModel(w, l, h);
+  }
+  if (id.includes('stool') || name.includes('đôn') || name.includes('don') || name.includes('ottoman')) {
+    return createStoolModel(w, l, h);
+  }
+  if (id.includes('dining') || name.includes('ghế ăn') || name.includes('ghe an')) {
+    return createDiningChairModel(w, l, h);
+  }
+  if (id.includes('lounge') || id.includes('arm') || name.includes('thư giãn') || name.includes('thu gian') || name.includes('tựa') || name.includes('tua')) {
+    return createLoungeChairModel(w, l, h);
+  }
+  if (id.includes('office') || id.includes('ergonomic') || name.includes('làm việc') || name.includes('lam viec') || name.includes('ergonomic')) {
+    return createErgonomicChairModel(w, l, h);
+  }
+  // Default: original ergonomic chair
+  return createChairModel();
+}
+
+/**
+ * Resolves the correct desk/table builder based on obj.modelId, obj.subType, or obj.name.
+ */
+function resolveDeskOrTableModel(obj: RoomObject): THREE.Group {
+  const id = (obj.modelId || obj.subType || '').toLowerCase();
+  const name = obj.name.toLowerCase();
+  const w = obj.dimensions.width;
+  const l = obj.dimensions.length;
+  const h = obj.dimensions.height;
+
+  // Tables
+  if (id.includes('table_round') || id.includes('round') || name.includes('tròn') || name.includes('tron')) {
+    return createRoundTableModel(w, l, h);
+  }
+  if (id.includes('table_coffee') || id.includes('coffee') || name.includes('trà') || name.includes('tra') || name.includes('sofa table') || (h < 0.5 && obj.type === 'table')) {
+    return createCoffeeTableModel(w, l, h);
+  }
+  if (id.includes('table_dining') || name.includes('bàn ăn') || name.includes('ban an') || name.includes('ăn tối') || name.includes('an toi')) {
+    return createDiningTableModel(w, l, h);
+  }
+  if (id.includes('table_corner') || id.includes('corner') || name.includes('bàn góc') || name.includes('ban goc') || name.includes('kê sofa') || name.includes('ke sofa')) {
+    return createSideCornerTableModel(w, l, h);
+  }
+
+  // Desks
+  if (id.includes('desk_vanity') || id.includes('vanity') || name.includes('trang điểm') || name.includes('trang diem')) {
+    return createVanityDeskModel(w, l, h);
+  }
+  if (id.includes('desk_study') || name.includes('bàn học') || name.includes('ban hoc') || name.includes('study')) {
+    return createStudyDeskModel(w, l, h);
+  }
+  if (id.includes('desk_work') || id.includes('executive') || name.includes('làm việc') || name.includes('lam viec') || name.includes('walnut')) {
+    return createExecutiveDeskModel(w, l, h);
+  }
+
+  // Default fallback: original createDeskModel (preserves Master Preset desk_window)
+  return createDeskModel(w, l, h);
 }
 
 /**
@@ -1428,19 +2302,19 @@ export function createProceduralFurniture(obj: RoomObject): THREE.Group {
       model = createFloorLampModel();
       break;
     case 'desk':
-      model = createDeskModel(obj.dimensions.width, obj.dimensions.length, obj.dimensions.height);
+      model = resolveDeskOrTableModel(obj);
       break;
     case 'sofa':
       model = createSofaModel(obj.dimensions.width, obj.dimensions.length);
       break;
     case 'table':
-      model = createTableModel(obj.dimensions.width, obj.dimensions.length, obj.dimensions.height);
+      model = resolveDeskOrTableModel(obj);
       break;
     case 'wardrobe':
       model = createWardrobeModel(obj.dimensions.width, obj.dimensions.length, obj.dimensions.height);
       break;
     case 'chair':
-      model = createChairModel();
+      model = resolveChairModel(obj);
       break;
     case 'mirror':
       model = createMirrorModel(obj.dimensions.width, obj.dimensions.height);
@@ -1480,9 +2354,15 @@ export function createProceduralFurniture(obj: RoomObject): THREE.Group {
       model.add(defaultMesh);
   }
 
-  model.position.set(obj.position.x, obj.position.y, obj.position.z);
-  model.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z);
-  model.userData = { id: obj.id, type: obj.type, name: obj.name };
+  if (obj.position) {
+    model.position.set(obj.position.x ?? 0, obj.position.y ?? 0, obj.position.z ?? 0);
+  }
+  if (obj.rotation) {
+    model.rotation.set(obj.rotation.x ?? 0, obj.rotation.y ?? 0, obj.rotation.z ?? 0);
+  }
+  model.userData = { id: obj.id, type: obj.type, name: obj.name, modelId: obj.modelId, subType: obj.subType };
+
+  console.log(`[3D_MODEL_RENDERED] objectId=${obj.id} name="${obj.name}" type=${obj.type} modelId=${obj.modelId || 'none'} subType=${obj.subType || 'none'} groupName=${model.name} childCount=${model.children.length}`);
 
   return model;
 }
