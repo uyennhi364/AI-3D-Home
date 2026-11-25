@@ -108,3 +108,36 @@ export function directionFromBearing(bearingDeg: number): CompassDirection {
   return 'NW';
 }
 
+/**
+ * Computes the continuous polar angle (radians) of a 2D floor pointer relative
+ * to an object's center, aligned with Three.js right-handed +Y rotation.
+ * Returns null if the pointer is too close to the rotation center.
+ */
+export function computeFloorPlanePointerAngle(
+  pointerX: number,
+  pointerZ: number,
+  centerX: number,
+  centerZ: number
+): number | null {
+  const dx = pointerX - centerX;
+  const dz = pointerZ - centerZ;
+  if (dx * dx + dz * dz < 1e-8) {
+    return null;
+  }
+  return Math.atan2(-dz, dx);
+}
+
+/**
+ * Computes the shortest-arc signed angular delta in [-PI, PI] between two angles,
+ * preventing discontinuities or direction reversals when crossing +/- 180 degrees.
+ */
+export function computeContinuousRotationDelta(
+  currentAngle: number,
+  previousAngle: number
+): number {
+  return Math.atan2(
+    Math.sin(currentAngle - previousAngle),
+    Math.cos(currentAngle - previousAngle)
+  );
+}
+

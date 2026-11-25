@@ -23,6 +23,10 @@ import {
 import { DIRECTION_NAMES_VI } from '../engine/batTrach';
 import { getFengShuiCompassTexture } from '../engine/compassTexture';
 import {
+  computeFloorPlanePointerAngle,
+  computeContinuousRotationDelta,
+} from '../engine/core/compass';
+import {
   createOBBFromObject,
   checkOBBCollision,
   isOBBInsideRoom,
@@ -106,6 +110,16 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
   const wallsRef = useRef<{ north?: THREE.Group; south?: THREE.Group; west?: THREE.Group; east?: THREE.Group }>({});
   const objectsRef = useRef<RoomObject[]>(objects);
   objectsRef.current = objects;
+  const transformModeRef = useRef<'translate' | 'rotate'>(transformMode);
+  transformModeRef.current = transformMode;
+  const roomConfigRef = useRef<RoomConfig>(roomConfig);
+  roomConfigRef.current = roomConfig;
+  const onUpdateObjectPositionRef = useRef(onUpdateObjectPosition);
+  onUpdateObjectPositionRef.current = onUpdateObjectPosition;
+  const onSetObjectRotationRef = useRef(onSetObjectRotation);
+  onSetObjectRotationRef.current = onSetObjectRotation;
+  const onBeginInteractionRef = useRef(onBeginInteraction);
+  onBeginInteractionRef.current = onBeginInteraction;
   const lightsRef = useRef<{
     sunLight: THREE.DirectionalLight;
     skyFillLight: THREE.HemisphereLight;
@@ -121,13 +135,17 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
   const [wallTransparency, setWallTransparency] = useState<number>(0.2); // 0.2 = semi-transparent/cutaway
   const [hasGhostConflicts, setHasGhostConflicts] = useState<boolean>(false);
 
-  // Dragging state for manual pointer drag
+  // Dragging state for manual pointer drag & continuous 360+ rotation
   const isDraggingRef = useRef(false);
   const dragPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
   const raycasterRef = useRef(new THREE.Raycaster());
   const mouseRef = useRef(new THREE.Vector2());
   const dragOffsetRef = useRef(new THREE.Vector3());
   const draggedObjIdRef = useRef<string | null>(null);
+  const isRotatingRef = useRef(false);
+  const rotatedObjIdRef = useRef<string | null>(null);
+  const previousPointerAngleRef = useRef<number | null>(null);
+  const totalRotationRef = useRef<number>(0);
 
   // Selected object data for floating 3D HUD
   const selectedObject = objects.find((o) => o.id === selectedObjectId);
@@ -301,7 +319,7 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
 
     // Disable OrbitControls during gizmo transform
     tControls.addEventListener('dragging-changed', (event: any) => {
-      if (event.value) onBeginInteraction?.();
+      if (event.value) onBeginInteractionRef.current?.();
       if (controlsRef.current) {
         controlsRef.current.enabled = !event.value;
       }
@@ -313,34 +331,41 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
           const currentObj = objectsRef.current.find((o) => o.id === id);
           if (currentObj) {
             targetMesh.position.set(currentObj.position.x, 0, currentObj.position.z);
-            targetMesh.rotation.y = currentObj.rotation.y;
+            targetMesh.rotation.set(0, currentObj.rotation.y, 0);
           }
         }
       }
     });
 
+    const tempEuler = new THREE.Euler(0, 0, 0, 'YXZ');
     tControls.addEventListener('change', () => {
       if (tControls.object && tControls.dragging) {
         const targetMesh = tControls.object as THREE.Group;
         const id = targetMesh.userData?.id;
         if (id) {
-          if (transformMode === 'translate') {
-            const halfW = roomConfig.width / 2 - 0.25;
-            const halfL = roomConfig.length / 2 - 0.25;
+          const activeMode = transformModeRef.current;
+          const activeRoom = roomConfigRef.current;
+          if (activeMode === 'translate') {
+            const halfW = activeRoom.width / 2 - 0.25;
+            const halfL = activeRoom.length / 2 - 0.25;
             const clampedX = Math.round(Math.max(-halfW, Math.min(halfW, targetMesh.position.x)) * 100) / 100;
             const clampedZ = Math.round(Math.max(-halfL, Math.min(halfL, targetMesh.position.z)) * 100) / 100;
             targetMesh.position.x = clampedX;
             targetMesh.position.y = 0;
             targetMesh.position.z = clampedZ;
-            const applied = onUpdateObjectPosition(id, clampedX, clampedZ);
+            const applied = onUpdateObjectPositionRef.current(id, clampedX, clampedZ);
             if (applied) {
               targetMesh.position.x = applied.x;
               targetMesh.position.z = applied.z;
             }
-          } else if (transformMode === 'rotate') {
-            if (onSetObjectRotation) {
-              const appliedRot = onSetObjectRotation(id, targetMesh.rotation.y);
-              if (typeof appliedRot === 'number') targetMesh.rotation.y = appliedRot;
+          } else if (activeMode === 'rotate') {
+            tempEuler.setFromQuaternion(targetMesh.quaternion, 'YXZ');
+            const yaw = tempEuler.y;
+            if (onSetObjectRotationRef.current) {
+              const appliedRot = onSetObjectRotationRef.current(id, yaw);
+              if (typeof appliedRot === 'number') {
+                targetMesh.rotation.set(0, appliedRot, 0);
+              }
             }
           }
         }
@@ -1069,7 +1094,7 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
       // Always synchronize position and rotation if not currently being actively dragged
       if (!tControls?.dragging || tControls.object !== mesh) {
         mesh.position.set(obj.position.x, obj.position.y || 0, obj.position.z);
-        mesh.rotation.y = obj.rotation.y;
+        mesh.rotation.set(0, obj.rotation.y, 0);
       }
     });
 
@@ -1085,7 +1110,9 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
         selectionHelperRef.current.visible = true;
       }
       if (tControls) {
-        tControls.attach(selectedMesh);
+        if (tControls.object !== selectedMesh) {
+          tControls.attach(selectedMesh);
+        }
         tControls.size = 0.85;
         tControls.setMode(transformMode);
         if (transformMode === 'rotate') {
@@ -1253,18 +1280,53 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
     return { x, y };
   };
 
+  const startContinuousRotate = (id: string, pointerX: number, pointerY: number) => {
+    if (!cameraRef.current) return false;
+    const targetObj = objectsRef.current.find((o) => o.id === id);
+    if (!targetObj) return false;
+
+    const tControls = transformControlsRef.current;
+    if (tControls) {
+      (tControls as any).axis = null;
+      tControls.enabled = false;
+    }
+
+    onBeginInteractionRef.current?.();
+    isRotatingRef.current = true;
+    rotatedObjIdRef.current = id;
+    totalRotationRef.current = targetObj.rotation.y;
+    if (controlsRef.current) controlsRef.current.enabled = false;
+
+    mouseRef.current.set(pointerX, pointerY);
+    raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
+    const floorHit = new THREE.Vector3();
+    if (raycasterRef.current.ray.intersectPlane(dragPlaneRef.current, floorHit)) {
+      previousPointerAngleRef.current = computeFloorPlanePointerAngle(
+        floorHit.x,
+        floorHit.z,
+        targetObj.position.x,
+        targetObj.position.z
+      );
+    } else {
+      previousPointerAngleRef.current = null;
+    }
+    return true;
+  };
+
   const handlePointerDown = (e: React.PointerEvent) => {
     const tControls = transformControlsRef.current;
     if (tControls?.dragging) return;
     if (!cameraRef.current || !sceneRef.current || !mountRef.current) return;
 
-    // In rotate mode, if the user clicked the rotation gizmo circle, let TransformControls handle it
-    if (transformMode === 'rotate' && (tControls as any)?.axis) {
-      return;
-    }
-
     const { x, y } = getPointerPos(e);
     mouseRef.current.set(x, y);
+
+    // In rotate mode, clicking the rotation gizmo circle starts continuous 360+ degree floor-plane rotation
+    if (transformMode === 'rotate' && (tControls as any)?.axis && selectedObjectId) {
+      if (startContinuousRotate(selectedObjectId, x, y)) {
+        return;
+      }
+    }
 
     raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
 
@@ -1304,6 +1366,8 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
           const floorIntersection = new THREE.Vector3();
           raycasterRef.current.ray.intersectPlane(dragPlaneRef.current, floorIntersection);
           dragOffsetRef.current.copy(floorIntersection).sub(topGroup.position);
+        } else if (transformMode === 'rotate') {
+          startContinuousRotate(id, x, y);
         }
         return;
       }
@@ -1320,6 +1384,56 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!cameraRef.current || !sceneRef.current || !mountRef.current) return;
+
+    if (isRotatingRef.current && rotatedObjIdRef.current) {
+      mountRef.current.style.cursor = 'grabbing';
+      const targetObj = objectsRef.current.find((o) => o.id === rotatedObjIdRef.current);
+      if (!targetObj) return;
+
+      const { x, y } = getPointerPos(e);
+      mouseRef.current.set(x, y);
+      raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
+
+      const floorIntersection = new THREE.Vector3();
+      if (raycasterRef.current.ray.intersectPlane(dragPlaneRef.current, floorIntersection)) {
+        const currentAngle = computeFloorPlanePointerAngle(
+          floorIntersection.x,
+          floorIntersection.z,
+          targetObj.position.x,
+          targetObj.position.z
+        );
+        if (currentAngle !== null) {
+          if (previousPointerAngleRef.current === null) {
+            previousPointerAngleRef.current = currentAngle;
+          } else {
+            const delta = computeContinuousRotationDelta(
+              currentAngle,
+              previousPointerAngleRef.current
+            );
+            previousPointerAngleRef.current = currentAngle;
+            if (Math.abs(delta) > 1e-6) {
+              const nextRotation = totalRotationRef.current + delta;
+              const appliedRot = onSetObjectRotationRef.current?.(
+                rotatedObjIdRef.current,
+                nextRotation
+              );
+              const finalRot = typeof appliedRot === 'number' ? appliedRot : nextRotation;
+              totalRotationRef.current = finalRot;
+
+              const mesh = objectMeshesRef.current.get(rotatedObjIdRef.current);
+              if (mesh) {
+                mesh.rotation.set(0, finalRot, 0);
+                if (selectionHelperRef.current) {
+                  selectionHelperRef.current.setFromObject(mesh);
+                }
+              }
+              updateMenuPosition();
+            }
+          }
+        }
+      }
+      return;
+    }
 
     if (isDraggingRef.current && draggedObjIdRef.current) {
       mountRef.current.style.cursor = 'grabbing';
@@ -1369,6 +1483,9 @@ export const ThreeRoomCanvas: React.FC<ThreeRoomCanvasProps> = ({
   const handlePointerUp = () => {
     isDraggingRef.current = false;
     draggedObjIdRef.current = null;
+    isRotatingRef.current = false;
+    rotatedObjIdRef.current = null;
+    previousPointerAngleRef.current = null;
     if (mountRef.current) mountRef.current.style.cursor = 'default';
     if (controlsRef.current) controlsRef.current.enabled = true;
     if (transformControlsRef.current) {
