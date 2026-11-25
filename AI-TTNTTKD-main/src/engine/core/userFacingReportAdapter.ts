@@ -550,36 +550,64 @@ export function buildUserFacingReportViewModel(
   }
 
   // Điểm cần lưu ý
-  if (bedWallRule?.verdict === 'fail') {
+  const persBedRule = findRules((r) => r.ruleId.startsWith('PERS-BED'))[0];
+
+  if (bedWallRule?.verdict === 'fail' || bedWallRule?.verdict === 'warn') {
     concernPoints.push({
       title: 'Đầu giường chưa có điểm tựa vững',
-      priority: 'Cao',
+      priority: bedWallRule.verdict === 'fail' ? 'Cao' : 'Trung bình',
       impact: 'Dễ gây cảm giác trống trải, bất an, giấc ngủ chập chờn và khó thư giãn sâu.',
       evidence: 'Khoảng cách giữa đầu giường và bức tường phía sau vượt quá tiêu chuẩn tiếp xúc an toàn.',
     });
   }
-  if (bedDoorRule?.verdict === 'fail') {
+  if (bedDoorRule?.verdict === 'fail' || bedDoorRule?.verdict === 'warn') {
     concernPoints.push({
       title: 'Cửa phòng đâm thẳng vào giường ngủ',
-      priority: 'Cao',
+      priority: bedDoorRule.verdict === 'fail' ? 'Cao' : 'Trung bình',
       impact: 'Xung sát từ luồng khí cửa vào trực tiếp vùng nghỉ ngơi, dễ gây mệt mỏi và đau đầu.',
       evidence: 'Tọa độ giường nằm trực tiếp trên luồng hành lang mở của cánh cửa chính.',
     });
   }
-  if (mirrorBed?.verdict === 'fail') {
+  if (mirrorBed?.verdict === 'fail' || mirrorBed?.verdict === 'warn') {
     concernPoints.push({
       title: 'Gương chiếu trực diện vào giường ngủ',
-      priority: 'Trung bình',
+      priority: mirrorBed.verdict === 'fail' ? 'Cao' : 'Trung bình',
       impact: 'Phạm Quang Sát trong phong thủy, phản chiếu bóng chuyển động ban đêm gây giật mình.',
       evidence: 'Mặt gương hướng thẳng góc về phía thân hoặc đầu giường ngủ.',
     });
   }
-  if (deskBackRule?.verdict === 'fail' || deskDoorRule?.verdict === 'fail') {
+  if (deskBackRule?.verdict === 'fail' || deskBackRule?.verdict === 'warn' || deskDoorRule?.verdict === 'fail' || deskDoorRule?.verdict === 'warn') {
     concernPoints.push({
       title: 'Bàn làm việc ở vị trí chưa thuận lợi',
-      priority: 'Trung bình',
+      priority: (deskDoorRule?.verdict === 'fail' || deskBackRule?.verdict === 'fail') ? 'Trung bình' : 'Thấp',
       impact: 'Giảm khả năng tập trung hoặc cảm giác bị động khi người khác bước vào phòng.',
-      evidence: 'Lưng người ngồi quay ra cửa hoặc không quan sát được cửa phòng.',
+      evidence: 'Lưng người ngồi quay ra khoảng trống/cửa hoặc không quan sát được cửa phòng.',
+    });
+  }
+  if (bedWinRule?.verdict === 'fail' || bedWinRule?.verdict === 'warn') {
+    concernPoints.push({
+      title: 'Đầu giường bố trí gần cửa sổ',
+      priority: 'Trung bình',
+      impact: 'Dễ bị ảnh hưởng bởi ánh sáng gắt, tiếng ồn và gió lùa từ bên ngoài.',
+      evidence: 'Đầu giường kê quá sát hoặc ngay dưới khung cửa sổ.',
+    });
+  }
+  if (persBedRule?.verdict === 'fail' || persBedRule?.verdict === 'warn') {
+    concernPoints.push({
+      title: 'Hướng đầu giường chưa tối ưu theo Bát Trạch',
+      priority: persBedRule.verdict === 'fail' ? 'Cao' : 'Trung bình',
+      impact: 'Đầu giường quay về phương vị hung của gia chủ, làm giảm khả năng nạp sinh khí.',
+      evidence: 'Phương vị tọa và hướng đầu giường chưa trùng với 4 hướng Cát lành.',
+    });
+  }
+
+  // Fallback nếu không có điểm lưu ý nào
+  if (concernPoints.length === 0) {
+    concernPoints.push({
+      title: 'Không gian cơ bản an định, chưa có thế phạm nghiêm trọng',
+      priority: 'Thấp',
+      impact: 'Các vị trí cốt lõi (giường, cửa, bàn) đều đáp ứng an toàn, không có xung sát nguy hiểm.',
+      evidence: 'Tất cả các quy tắc kiểm tra Loan Đầu và Bát Trạch chính đều đạt ngưỡng tiêu chuẩn.',
     });
   }
 
@@ -589,29 +617,29 @@ export function buildUserFacingReportViewModel(
   const userRecommendations: UserFacingRecommendation[] = [];
 
   // Map from engine recommendation items or synthesize from concerns
-  if (bedWallRule?.verdict === 'fail') {
+  if (bedWallRule?.verdict === 'fail' || bedWallRule?.verdict === 'warn') {
     userRecommendations.push({
       targetArea: 'Vị trí giường ngủ',
       issue: 'Đầu giường hiện chưa kê sát tường, phía sau đầu nằm có khoảng hở lớn.',
       explanation: 'Theo nguyên lý phong thủy Loan Đầu cổ truyền, đầu giường là nơi tĩnh tọa cần tựa sơn vững chắc để nạp sinh khí an lành.',
       proposal: 'Đẩy giường ngủ về vị trí sát bức tường kiên cố gần nhất, đảm bảo đầu giường khít vách hoặc có tab đầu giường chặn vững.',
-      priority: 'Cao',
+      priority: bedWallRule.verdict === 'fail' ? 'Cao' : 'Trung bình',
       expectedBenefit: 'Tạo cảm giác vững tâm tuyệt đối, nâng cao chất lượng giấc ngủ và bồi đắp sinh lực mỗi sớm mai.',
     });
   }
 
-  if (bedDoorRule?.verdict === 'fail') {
+  if (bedDoorRule?.verdict === 'fail' || bedDoorRule?.verdict === 'warn') {
     userRecommendations.push({
       targetArea: 'Vị trí giường ngủ',
       issue: 'Cửa ra vào đang đâm thẳng vào thân giường nằm.',
       explanation: 'Luồng khí từ cửa xộc thẳng vào giường ngủ gọi là "Trực Xung Môn Sát", mang theo tạp khí và tiếng ồn bên ngoài.',
       proposal: 'Dời giường lệch sang một bên của bức tường, hoặc bố trí vách ngăn nhẹ/tủ đầu giường che chắn bớt luồng khí trực xung.',
-      priority: 'Cao',
+      priority: bedDoorRule.verdict === 'fail' ? 'Cao' : 'Trung bình',
       expectedBenefit: 'Khí trường quanh giường được êm dịu, bảo vệ sức khỏe và mang lại sự riêng tư tối đa.',
     });
   }
 
-  if (mirrorBed?.verdict === 'fail') {
+  if (mirrorBed?.verdict === 'fail' || mirrorBed?.verdict === 'warn') {
     userRecommendations.push({
       targetArea: 'Gương soi / Bàn trang điểm',
       issue: 'Mặt gương chiếu thẳng vào khu vực giường ngủ.',
@@ -622,7 +650,7 @@ export function buildUserFacingReportViewModel(
     });
   }
 
-  if (deskDoorRule?.verdict === 'fail' || deskBackRule?.verdict === 'fail') {
+  if (deskDoorRule?.verdict === 'fail' || deskDoorRule?.verdict === 'warn' || deskBackRule?.verdict === 'fail' || deskBackRule?.verdict === 'warn') {
     userRecommendations.push({
       targetArea: 'Bàn làm việc & Học tập',
       issue: 'Vị trí ngồi làm việc chưa tối ưu góc nhìn hoặc thiếu điểm tựa sau lưng.',
@@ -658,9 +686,9 @@ export function buildUserFacingReportViewModel(
   }
 
   const topPriorities: string[] = [];
-  if (bedWallRule?.verdict === 'fail') topPriorities.push('Ưu tiên số 1: Kê đầu giường áp sát vách tường vững chãi.');
-  if (bedDoorRule?.verdict === 'fail') topPriorities.push('Ưu tiên số 2: Điều chỉnh giường lệch khỏi luồng xung xộc của cửa đi.');
-  if (mirrorBed?.verdict === 'fail') topPriorities.push('Ưu tiên số 3: Đổi hướng gương soi tránh chiếu vào giường nằm.');
+  if (bedWallRule?.verdict === 'fail' || bedWallRule?.verdict === 'warn') topPriorities.push('Ưu tiên số 1: Kê đầu giường áp sát vách tường vững chãi.');
+  if (bedDoorRule?.verdict === 'fail' || bedDoorRule?.verdict === 'warn') topPriorities.push('Ưu tiên số 2: Điều chỉnh giường lệch khỏi luồng xung xộc của cửa đi.');
+  if (mirrorBed?.verdict === 'fail' || mirrorBed?.verdict === 'warn') topPriorities.push('Ưu tiên số 3: Đổi hướng gương soi tránh chiếu vào giường nằm.');
   if (topPriorities.length === 0) {
     topPriorities.push('Giữ nguyên trật tự sắp đặt hiện tại và duy trì sự thông thoáng định kỳ.');
   }

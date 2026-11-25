@@ -12,14 +12,14 @@
       "id": "B-01",
       "prompt": "Bát Trạch là gì?",
       "expectedIntent": "THEORY",
-      "actualResponse": "Đây là câu hỏi tư vấn phong thủy lý thuyết. Để đảm bảo an toàn, hệ thống giữ nguyên hiện trạng mô hình 3D:\n\n• Đầu giường ngủ cần kê tựa vào tường vững",
+      "actualResponse": "### 🏛️ Khái Niệm Bát Trạch Trong Phong Thủy\n\n**Bát Trạch** (Bát = 8, Trạch = Nhà / Phương vị cư trú, chữ Hán: 八宅) là một trong những trường phái phon",
       "toolsCalledInResponse": [],
       "sceneChangeAttempted": false,
-      "clarificationDetected": true,
-      "proposalDetected": false,
+      "clarificationDetected": false,
+      "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 111
+      "durationMs": 71
     },
     {
       "id": "B-02",
@@ -32,7 +32,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 9
+      "durationMs": 8
     },
     {
       "id": "B-03",
@@ -45,7 +45,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 5
+      "durationMs": 7
     },
     {
       "id": "B-04",
@@ -58,7 +58,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 6
+      "durationMs": 5
     },
     {
       "id": "B-05",
@@ -73,7 +73,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 8
+      "durationMs": 10
     },
     {
       "id": "B-06",
@@ -88,7 +88,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 4
+      "durationMs": 6
     },
     {
       "id": "B-07",
@@ -114,7 +114,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Clarification handled",
-      "durationMs": 3
+      "durationMs": 4
     },
     {
       "id": "B-09",
@@ -129,7 +129,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 38
+      "durationMs": 8
     },
     {
       "id": "B-10",
@@ -144,7 +144,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 5
+      "durationMs": 4
     },
     {
       "id": "B-11",
@@ -159,7 +159,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 2
+      "durationMs": 3
     },
     {
       "id": "B-12",
@@ -185,7 +185,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 1
+      "durationMs": 2
     },
     {
       "id": "B-14",
@@ -213,7 +213,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 85
+      "durationMs": 7
     },
     {
       "id": "B-16",
@@ -228,7 +228,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 4
+      "durationMs": 2
     },
     {
       "id": "B-17",
@@ -243,7 +243,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 4
+      "durationMs": 3
     },
     {
       "id": "B-18",
@@ -256,7 +256,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Clarification handled",
-      "durationMs": 4
+      "durationMs": 3
     },
     {
       "id": "B-19",
@@ -269,7 +269,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 4
+      "durationMs": 3
     },
     {
       "id": "B-20",
@@ -282,7 +282,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 4
+      "durationMs": 3
     },
     {
       "id": "B-21",
@@ -297,7 +297,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 5
+      "durationMs": 3
     },
     {
       "id": "B-22",
@@ -310,7 +310,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 3
+      "durationMs": 2
     },
     {
       "id": "B-23",
@@ -323,7 +323,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 3
+      "durationMs": 2
     },
     {
       "id": "B-24",
@@ -338,7 +338,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 4
+      "durationMs": 3
     },
     {
       "id": "B-25",
@@ -364,7 +364,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 3
+      "durationMs": 2
     },
     {
       "id": "B-27",
@@ -377,7 +377,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 3
+      "durationMs": 2
     },
     {
       "id": "B-28",
@@ -392,7 +392,7 @@
       "proposalDetected": true,
       "status": "PASS",
       "evidence": "OK: Scene guarded | OK: Proposal/Action created",
-      "durationMs": 3
+      "durationMs": 2
     },
     {
       "id": "B-29",
@@ -405,7 +405,7 @@
       "proposalDetected": false,
       "status": "PASS",
       "evidence": "OK: Scene guarded",
-      "durationMs": 4
+      "durationMs": 2
     },
     {
       "id": "B-30",

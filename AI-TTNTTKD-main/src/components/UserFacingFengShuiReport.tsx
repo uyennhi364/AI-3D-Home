@@ -351,20 +351,32 @@ export const UserFacingFengShuiReport: React.FC<UserFacingFengShuiReportProps> =
                   <span>B. Những Vấn Đề Cần Lưu Ý & Cải Thiện</span>
                 </h3>
                 <div className="space-y-3">
-                  {data.favorableAndConcerns.concernPoints.map((pt, idx) => (
-                    <div key={idx} className="p-2.5 rounded-lg bg-stone-900/60 print:bg-white border border-amber-900/30 print:border-amber-200 text-xs">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <p className="font-bold text-amber-300 print:text-amber-950">{pt.title}</p>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-900/50 text-amber-200 print:bg-amber-100 print:text-amber-900">
-                          Ưu tiên {pt.priority}
-                        </span>
-                      </div>
-                      <p className="text-stone-300 print:text-stone-700 leading-snug">{pt.impact}</p>
-                      <p className="text-[11px] text-stone-400 print:text-stone-600 mt-1.5">
-                        Căn cứ thực tế: {pt.evidence}
+                  {(!data.favorableAndConcerns.concernPoints || data.favorableAndConcerns.concernPoints.length === 0) ? (
+                    <div className="p-3 rounded-lg bg-stone-900/60 print:bg-white border border-emerald-900/30 print:border-emerald-200 text-xs">
+                      <p className="font-bold text-emerald-400 print:text-emerald-800 flex items-center gap-1.5">
+                        <span>✓</span>
+                        <span>Không ghi nhận thế phạm nghiêm trọng</span>
+                      </p>
+                      <p className="text-stone-300 print:text-stone-600 mt-1 leading-snug">
+                        Bố cục phòng ngủ hiện tại cơ bản đã đáp ứng các quy tắc phong thủy an toàn. Hãy tiếp tục duy trì trật tự và sự thông thoáng.
                       </p>
                     </div>
-                  ))}
+                  ) : (
+                    data.favorableAndConcerns.concernPoints.map((pt, idx) => (
+                      <div key={idx} className="p-2.5 rounded-lg bg-stone-900/60 print:bg-white border border-amber-900/30 print:border-amber-200 text-xs">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <p className="font-bold text-amber-300 print:text-amber-950">{pt.title}</p>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-900/50 text-amber-200 print:bg-amber-100 print:text-amber-900">
+                            Ưu tiên {pt.priority}
+                          </span>
+                        </div>
+                        <p className="text-stone-300 print:text-stone-700 leading-snug">{pt.impact}</p>
+                        <p className="text-[11px] text-stone-400 print:text-stone-600 mt-1.5">
+                          Căn cứ thực tế: {pt.evidence}
+                        </p>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
